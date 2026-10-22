@@ -54,7 +54,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - **CD-040: Fields confirmed as Street, Number, Neighborhood, City, State. CEP, country, complement, address type explicitly NOT included without new decision**
 
 **Open Questions (Q-004 — PARTIALLY_RESOLVED):**
-- Address/contact cardinality and checkout address snapshot semantics — PENDING
+- Checkout address snapshot semantics — PENDING
 - Validation rules for Brazilian addresses (CEP) — TECHNICAL_FUTURE
 
 ---
@@ -72,8 +72,8 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - **Email is not duplicated in Person, Main_Info, or Credential (CD-057)**
 
 **Open Questions (Q-004 — PARTIALLY_RESOLVED):**
-- "Value" format (phone? WhatsApp? email?) — PENDING
-- Address/contact cardinality and checkout address snapshot semantics — PENDING
+- Allowed contact types and validation rules for `Contact_Info.Value` (e.g., phone, WhatsApp, email) — PENDING
+- Checkout address snapshot semantics — PENDING
 - Email uniqueness constraint (for login) — PENDING (Q-029)
 - Identification of which Contact_Info is used for login — PENDING (Q-029)
 
@@ -83,24 +83,26 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Access credential for a Person (e.g., password hash)  
 **Attributes:** Person (ref), Hashed_Password, Status, Created_At, Updated_At  
 **Relationships:** Associated with Person (cardinality 1:1 or 1:N — not yet defined)  
-**Confirmed Rules (MP-02):**
+**Confirmed Concept (MP-02):**
 - **Credential represents the access credential and is associated with Person (CD-057)**
 - **Credential does not store a second email and does not require a direct reference to Contact_Info (CD-057)**
 - **Login/Authentication is not presumed to be a persisted entity solely because the authentication flow is represented conceptually (CD-009, CD-057)**
 
-**Conceptual Authentication Flow (CD-057):**
+**Conceptual Authentication Flow (CD-057 — confirmed):**
 1. Receive email and password provided by the user
 2. Locate the Contact_Info matching the email (Type = email)
 3. Find the Person associated with that Contact_Info
 4. Locate the Credential associated with that Person
 5. Verify the credential; authenticate access if valid
 
+**Technical Details (Deferred — not conceptually decided):**
+- Password hash algorithm and rotation policy
+- Credential status values (active, locked, expired)
+- Multi-factor authentication (MFA) credentials
+- Credential recovery/reset flow
+
 **Open Questions (Q-029 — PENDING):**
 - Cardinality of Person to Credential (1:1 or 1:N)?
-- Password hash algorithm and rotation policy — TECHNICAL_FUTURE
-- Credential status values (active, locked, expired)?
-- Multi-factor authentication (MFA) credentials?
-- Credential recovery/reset flow?
 
 ---
 
@@ -119,7 +121,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ### 7. Vendor (Person Specialization)
 **Responsibility:** Seller role — manages products, coupons, receives payouts  
-**Attributes (via child):** Person (ref), **Product_List (list, not entity)**, **Coupons (list, not entity)**, **Wallet (1:1)**  
+**Attributes (via child):** Person (ref), **Product_List (list, not entity)**, **Coupon_List (list, not entity)**, **Wallet (1:1)**  
 **Relationships:**
 - Offers Products (1:N) — CD-011
 - Owns Coupons (1:N) — CD-026
@@ -150,10 +152,12 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-003: Disjoint from Consumer and Vendor
 - CD-004: Role entity exists exclusively for Admin permissions
 - Role does NOT determine if Person is Admin/Consumer/Vendor
+- **CD-051: Vendor dashboard scope confirmed (order count, gross sales pre-commission, pending/completed orders, best-selling products); Admin dashboard scope NOT defined — only Vendor dashboard is confirmed**
 
 **Open Questions:**
 - Admin-specific attributes (department, permissions override) — not modeled
 - Super-admin vs regular admin — Q-003 PARTIALLY_RESOLVED (scope defined, levels open)
+- **Admin dashboard scope and metrics — not defined (only Vendor dashboard scope confirmed per CD-051)**
 
 ---
 
@@ -195,7 +199,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ### 12. Product
 **Responsibility:** Sellable item listed by a Vendor  
-**Attributes:** Vendor (ref), Category (ref), Reviews, Description, Price, **Quantity (current stock)**, Product_Pics  
+**Attributes:** Vendor (ref), Category (ref), Reviews, Description, Price, **Quantity (current stock)**, Product_Pic_List  
 **Relationships:**
 - N:1 → Vendor (CD-011)
 - N:1 → Category (CD-015)
@@ -227,16 +231,17 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-016: Images for Product and Review
 
 **Open Questions:**
-- "Pic_Product" meaning unclear — duplicate of Product ref?
+- "Pic_Product" meaning unclear — possibly duplicate of Product ref (already has Product ref attribute)
 - S3 key vs full URL in Pic_Path?
 - Primary image designation?
 - Order/sequence for gallery?
+- **Relationship with Review: Review references Product_Pics (plural) but cardinality and ownership (shared vs owned images) not defined**
 
 ---
 
 ### 14. Review
 **Responsibility:** Customer feedback on Product  
-**Attributes:** Product (ref), Comment, Rating, Product_Pics  
+**Attributes:** Product (ref), Comment, Rating, Product_Pic_List  
 **Relationships:** N:1 → Product; references Product_Pic  
 **Confirmed Rules (MP-02):**
 - CD-017: Review only by verified purchaser (must have purchased the product)
@@ -247,12 +252,13 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - Rating scale (1-5?)
 - Moderation status (pending/approved/rejected)?
 - Vendor response?
+- **Product_Pic_List attribute: plural form suggests list of images, but relationship to Product_Pic entity is ambiguous (single ref vs list of refs; shared vs owned images)**
 
 ---
 
 ### 15. Coupon
 **Responsibility:** Vendor-issued discount code  
-**Attributes:** Vendor (ref), Code, Discount_Type, Discount_Value, Starts_At, Ends_At, **Product_List (list)**, **Category_List (list)**  
+**Attributes:** Vendor (ref), Code, Discount_Type, Discount_Value, Starts_At, Ends_At  
 **Relationships:** N:1 → Vendor; 1:1 → Coupon_Target; referenced by Order_Vendor_Group  
 **Confirmed Rules (MP-02):**
 - CD-026: Coupon and Coupon_Target accepted as concepts
@@ -266,6 +272,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - Coupon stacking and priority rules?
 - Minimum order value?
 - Platform-wide coupons vs vendor-only?
+- **Coupon vs Coupon_Target attribute ownership: only Coupon_Target (section 16) currently declares Product_List and Category_List; Coupon (section 15) no longer declares these attributes. The final attribute allocation between Coupon and Coupon_Target requires a business decision**
 
 ---
 
@@ -279,12 +286,13 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Open Questions (Q-016 — PENDING):**
 - Product_List and Category_List as arrays of refs?
 - "All products" vs specific selection semantics?
+- **Coupon vs Coupon_Target attribute ownership: only Coupon_Target (section 16) currently declares Product_List and Category_List; Coupon (section 15) no longer declares these attributes. The final attribute allocation between Coupon and Coupon_Target requires a business decision**
 
 ---
 
 ### 17. Order
 **Responsibility:** Customer purchase aggregating multi-vendor items  
-**Attributes:** Consumer (ref), Status, Total, **Order_Vendor_Groups (list)**, Orders_Status_History, Payments  
+**Attributes:** Consumer (ref), Status, Total, **Order_Vendor_Group_List**, Orders_Status_History, Payments  
 **Relationships:**
 - N:1 → Consumer
 - 1:N → Order_Vendor_Group
@@ -350,12 +358,18 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ---
 
-### 20. Order_Status_History
+> **Nota sobre conceitos `*_History`:** Todos os conceitos `*_History` abaixo estão **provisórios e em aberto** nesta fase de modelagem conceitual. A única regra confirmada é CD-033 (append-only). Atributos, relacionamentos, necessidade de persistência, eventos que originam registros e estrutura de `Changed_By` **não estão decididos** e serão definidos em fase posterior conforme necessidades reais. **Não existe regra confirmada que obrigue todo `*_History` a referenciar uma entidade homônima** — o modelo atual serve como rascunho para discussão, não como especificação definitiva.
+
+---
+
+### 20. Order_Status_History ⚠️ PROVISÓRIO
 **Responsibility:** Audit trail for Order-level status changes  
 **Attributes:** Order (ref), Status, Changed_At, Changed_By  
 **Relationships:** N:1 → Order  
 **Confirmed Rules (MP-02):**
 - CD-033: Append-only, preserves records without overwrite
+
+**Status:** **PROVISÓRIO** — Atributos, relacionamentos, necessidade de persistência, eventos de trigger e estrutura de `Changed_By` **não estão decididos**. CD-033 (append-only) é a única regra confirmada. Não há regra confirmada que obrigue referência a entidade homônima.
 
 **Open Questions:**
 - Changed_By references Person/Admin?
@@ -363,12 +377,14 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ---
 
-### 21. Order_Vendor_Group_History
+### 21. Order_Vendor_Group_History ⚠️ PROVISÓRIO
 **Responsibility:** Audit trail for Vendor Group-level status changes  
 **Attributes:** Order_Vendor_Group (ref), Status, Changed_At, Changed_By  
 **Relationships:** N:1 → Order_Vendor_Group  
 **Confirmed Rules (MP-02):**
 - CD-033: Append-only, preserves records without overwrite
+
+**Status:** **PROVISÓRIO** — Atributos, relacionamentos, necessidade de persistência, eventos de trigger e estrutura de `Changed_By` **não estão decididos**. CD-033 (append-only) é a única regra confirmada. Não há regra confirmada que obrigue referência a entidade homônima.
 
 **Open Questions:**
 - Same as Order_Status_History
@@ -385,7 +401,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-028: Multiple Payment attempts preserved (Order.Payments is a list)
 - CD-031: Transaction represents generic financial movement
 
-**Open Questions (Q-011 PENDING; Q-012 PENDING):**
+**Open Questions (Q-011 PARTIALLY_RESOLVED; Q-012 PARTIALLY_RESOLVED):**
 - Status values (pending, authorized, captured, failed, refunded)?
 - Partial payment support?
 - Idempotency key for provider integration?
@@ -398,7 +414,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Payment gateway identifier  
 **Attributes:** (none shown in diagram)  
 **Relationships:** Referenced by Payment  
-**Open Questions (Q-011 — PENDING):**
+**Open Questions (Q-011 — PARTIALLY_RESOLVED):**
 - Stripe Connect vs Razorpay — single or both?
 - Provider-specific config (account IDs, keys)?
 
@@ -449,12 +465,14 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ---
 
-### 27. Transaction_History
+### 27. Transaction_History ⚠️ PROVISÓRIO
 **Responsibility:** Audit trail for Transaction changes  
 **Attributes:** Transaction, Payment, Description, Amount, Type, Changed_At, Changed_By  
 **Relationships:** References Transaction and Payment  
 **Confirmed Rules (MP-02):**
 - CD-033: Append-only
+
+**Status:** **PROVISÓRIO** — Atributos, relacionamentos, necessidade de persistência, eventos de trigger e estrutura de `Changed_By` **não estão decididos**. CD-033 (append-only) é a única regra confirmada. Não há regra confirmada que obrigue referência a entidade homônima.
 
 **Open Questions:**
 - What changes trigger history (status, amount, description)?
@@ -462,12 +480,14 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ---
 
-### 28. Refund_History
+### 28. Refund_History ⚠️ PROVISÓRIO
 **Responsibility:** Audit trail for Refund changes  
-**Attributes:** Transaction, Payment, Description, Amount, Type, Changed_At, Changed_By  
-**Relationships:** References Transaction and Payment  
+**Attributes:** Refund (ref), Transaction, Payment, Description, Amount, Type, Changed_At, Changed_By  
+**Relationships:** References Refund, Transaction and Payment  
 **Confirmed Rules (MP-02):**
 - CD-033: Append-only
+
+**Status:** **PROVISÓRIO** — Atributos, relacionamentos, necessidade de persistência, eventos de trigger e estrutura de `Changed_By` **não estão decididos**. CD-033 (append-only) é a única regra confirmada. A referência `Refund (ref)` foi adicionada recentemente, mas **não está confirmada como obrigatória** — sua necessidade será decidida posteriormente. Não há regra confirmada que obrigue todo `*_History` a referenciar entidade homônima.
 
 **Open Questions:**
 - Same as Transaction_History
@@ -507,12 +527,14 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ---
 
-### 31. Invoice_History (Placeholder)
+### 31. Invoice_History (Placeholder) ⚠️ PROVISÓRIO
 **Responsibility:** Audit trail for Invoice changes — **placeholder only, intentionally empty**  
 **Attributes:** (intentionally empty per MP-02)  
 **Relationships:** —  
 **Confirmed Rules (MP-02):**
 - CD-038: Intentionally empty; not an error; details for later discussion
+
+**Status:** **PROVISÓRIO** — Placeholder intencionalmente vazio (CD-038). Escopo, estrutura, necessidade de persistência e triggers **não decididos**. Detalhes para discussão posterior.
 
 **Open Questions:**
 - Scope and triggers to be defined when generation process is designed
@@ -571,7 +593,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 | Image Upload Session | Stage 3 | TECHNICAL_FUTURE |
 | Vendor Onboarding Request | Stage 3 | Q-005 RESOLVED (auto-publish confirmed) |
 | Notification/Event | Cross-cutting | Q-027 RESOLVED (manual refresh MVP) |
-| Audit Log (generic) | Cross-cutting | Covered by specific *_History entities |
+| Audit Log (generic) | Cross-cutting | Covered by specific *_History entities (**provisórios**, exceto Invoice_History placeholder vazio per CD-038) |
 | Credential | Stage 2 | **Added as Credential (CD-057)** |
 
 ---
@@ -598,7 +620,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 | Person abstraction & specializations | MongoDB collection strategy (CD-005) |
 | CPF XOR CNPJ rule | Validation implementation (format, check digits) |
 | Role only for Admin | PermissionENUM sufficiency for Admin (Q-003) |
-| Address/Contact_Info as concepts | Specific fields (CEP, type, primary, verified) — explicitly NOT decided |
+| Address/Contact_Info as concepts | Address: CEP, country, complement, address type — NOT decided | Contact_Info: Type, Value, Is_Primary confirmed (CD-040); Verified explicitly excluded (CD-040) |
 | Authentication via email/password; Credential associated with Person | JWT details, token lifecycle, storage (CD-010) |
 | Product.Quantity = stock | Reservation, variants, concurrency (Q-006) |
 | Product inactivation | Hard-delete referential integrity check (CD-042) |

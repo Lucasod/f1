@@ -327,7 +327,7 @@
 ### CD-040: Address and Contact_Info Field Definitions
 **Status:** Confirmed (MP-02)  
 **Subject:** Address and contact attribute scope  
-**Decision:** Address fields: `Street`, `Number`, `Neighborhood`, `City`, `State`. Do NOT add CEP, country, complement, or address type without a new decision. Contact fields: `Type`, `Value`, `Is_Primary`. Do NOT add `Verified` as an already-approved field. Historical order data must preserve the information needed to represent the original purchase. Address/contact cardinality and checkout address semantics remain unresolved.  
+**Decision:** Address fields: `Street`, `Number`, `Neighborhood`, `City`, `State`. Do NOT add CEP, country, complement, or address type without a new decision. Contact fields: `Type`, `Value`, `Is_Primary`. Do NOT add `Verified` as an already-approved field. Historical order data must preserve the information needed to represent the original purchase. **Cardinality confirmed: Person 1:N Address, Person 1:N Contact_Info (CD-008). Checkout address snapshot semantics remain unresolved.**  
 **Justification:** Explicit field scope prevents scope creep; historical preservation for audit  
 **Source:** MP-02 confirmed decisions (Q-004)  
 **Consequences:** CEP, country, complement, address type, and contact Verified are explicitly deferred; checkout address snapshot design open
@@ -587,7 +587,7 @@
 | D-022 | Multi-tenancy scope | Out of scope | Q-020: Single marketplace confirmed; multi-tenancy belongs to another project |
 | D-023 | API design style | Technical / Future | Stage 1 deliverable; not decided |
 | D-024 | Frontend state management | Technical / Future | Stage 2+; not decided |
-| D-025 | Address/Contact cardinality and checkout snapshots | Technical / Future | CD-040: Fields confirmed; cardinality and checkout semantics open |
+| D-025 | Checkout address snapshots | Technical / Future | CD-040: Fields and cardinality confirmed; checkout snapshot semantics open |
 | D-026 | Product inactivation state | Technical / Future | CD-042: Inactive state confirmed; hard-delete referential check needed |
 | D-027 | Category cycle prevention | Technical / Future | CD-043: Hierarchy rules confirmed; cycle detection implementation required |
 | D-028 | Coupon mixed-cart discount calculation | Technical / Future | CD-050: Inclusion/exclusion rules confirmed; mixed-cart discount open; stacking/priority open |
