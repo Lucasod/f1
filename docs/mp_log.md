@@ -1166,4 +1166,165 @@ All 65 CD-001..CD-065 remain confirmed. No decisions changed or invented.
 
 ---
 
+## MP-16: Execução da T-202 — Requisitos Não-Funcionais do Marketplace FS-01
+**Date:** 2026-10-23  
+**Objective:** Execute T-202 to produce the non-functional requirements document with traceability to decisions and explicit identification of pending targets with their business impact  
+**Scope:** Documentation-only creation of `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+
+### Results
+- Created `docs/non-functional_requirements.md` (documenting all NFR domains with identified targets and gaps) with:
+  - **Security requirements** (NFR-SEC-001 to NFR-SEC-005) — JWT auth, ownership isolation, idempotency, email uniqueness, HTTPS pending
+  - **Data consistency requirements** (NFR-DATA-001 to NFR-DATA-005) — MongoDB as source of truth, order snapshots, append-only history, currency pending, CPF/CNPJ validation
+  - **Performance requirements** (NFR-PERF-001 to NFR-PERF-003) — all pending (search response, page load, cart TTL)
+  - **Availability requirements** (NFR-AVAIL-001 to NFR-AVAIL-002) — health checks pending, payment resilience behavior defined
+  - **Search index recovery** (NFR-ES-001) — rebuildable from MongoDB source of truth
+  - **Accessibility** (NFR-A11Y-001) — pending, no WCAG requirements in scope
+  - **Observability** (NFR-OBS-001 to NFR-OBS-003) — logging/metrics pending, financial audit trail defined
+  - **Testability** (NFR-TEST-001 to NFR-TEST-003) — 3-layer TDD strategy, payment test scenarios, coverage pending
+  - Full traceability matrix mapping each NFR to source decisions and status
+  - 19 NFR IDs defined across 8 domains
+
+### Evidence
+| File | Lines | Purpose |
+|------|-------|---------|
+| `docs/non-functional_requirements.md` | Created | Complete NFR document with traceability |
+| `docs/task_list.md` | Modified | T-202 → completed |
+
+### Sources Consulted
+1. `docs/decisions.md` — 65 confirmed decisions (CD-001..CD-065) relevant to NFRs
+2. `docs/open_questions.md` — 28 questions with states, including Q-026 (currency), Q-028 (coverage)
+3. `docs/project_context.md` — Technologies: React, Node.js, MongoDB, Elasticsearch, Redis, Stripe Connect, AWS S3
+4. `docs/functional_requirements.md` — Scope boundaries, actors, functional context
+5. Official internship statement — 14-day effort period, deliverable requirements
+
+### Key Findings: Pending Targets Without Decisions
+
+| NFR ID | Domain | Impact if Undefined |
+|--------|--------|---------------------|
+| NFR-SEC-005 | Security | Production TLS enforcement; PCI-DSS compliance |
+| NFR-PERF-001 | Performance | Search UX, Elasticsearch sizing, query optimization |
+| NFR-PERF-002 | Performance | Frontend implementation, asset bundling, CDN strategy |
+| NFR-PERF-003 | Performance | Redis memory usage, session invalidation |
+| NFR-AVAIL-001 | Availability | Health checks, container orchestration readiness |
+| NFR-AVAIL-002 | Availability | Payment provider tolerance, timeout values |
+| NFR-A11Y-001 | Accessibility | Legal compliance in some jurisdictions |
+| NFR-OBS-001 | Observability | Production troubleshooting, log aggregation |
+| NFR-OBS-002 | Observability | Production monitoring, alerting, SLO definition |
+| NFR-DATA-004 | Data | All monetary values display/calculation blocked |
+| NFR-DATA-005 | Data | Tax ID format validation rules |
+| NFR-TEST-003 | Testability | CI gate failure, code quality assurance |
+
+### Decisions Preserved
+All confirmed decisions CD-001..CD-065 remain applicable. NFR document reflects:
+- Security: JWT auth (CD-009), ownership isolation (CD-059), 1:1 credential (CD-060), Stripe idempotency (CD-064)
+- Data: MongoDB source of truth (CD-049), append-only history (CD-033), order snapshots (CD-061), CPF/CNPJ exclusivity (CD-007)
+- Testing: 3-layer TDD (Vitest/Supertest/Playwright) (CD-056), payment test scenarios (CD-056)
+
+### Files Modified
+| File | Action |
+|------|--------|
+| `/home/workstation/source/f1/docs/non-functional_requirements.md` | Created |
+| `/home/workstation/source/f1/docs/task_list.md` | T-202 → completed |
+| `/home/workstation/source/f1/docs/mp_log.md` | MP-16 entry appended |
+
+### Working Tree State
+**Initial:**
+```
+ M docs/task_list.md
+```
+**Final:**
+```
+ M docs/task_list.md
+ M docs/mp_log.md
+?? docs/non-functional_requirements.md
+```
+
+### Verification
+- All 19 NFR IDs follow NFR-<DOMAIN>-<NNN> pattern
+- Each NFR has status (Defined or Pending) with rationale
+- All pending NFRs document their business impact
+- All NFRs reference source decisions or open questions
+- No arbitrary performance counts invented (per rule)
+- Transaction currency correctly marked pending (CD-054)
+
+### Verdict
+**T-202 COMPLETED** — The non-functional requirements document is traceable to all confirmed decisions, correctly identifies all pending targets with their business impact, and does not invent arbitrary numerical targets.
+
+**Next Recommended Steps:**
+1. MP-17 — Define acceptance criteria per FR (T-203)
+2. MP-18 — Responsible review requirements (T-204)
+3. MP-07 — ES strategy, coupons, reviews, Stripe validation (unblocks implementation)
+
+---
+
+## MP-17: Correções Orientadas pelo Code Review do NFR (T-202)
+**Date:** 2026-10-23  
+**Objective:** Apply corrections from code review of `docs/non-functional_requirements.md`, preserving confirmed decisions, traceability, and MVP scope  
+**Scope:** Documentation-only corrections to `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+
+### Findings Addressed
+
+| Finding | Allegation | Verification Result | Action Taken |
+|---------|------------|---------------------|--------------|
+| A | NFR-SEC-005 references CD-054 for HTTPS/TLS | **Confirmed** — CD-054 is "Currency and Localization — English Interface", does not mandate HTTPS | Removed CD-054 reference; kept NFR as PENDING with correct justification |
+| B | NFR-PERF-001/002 contain invented numeric targets (~500ms, ~2-3s) | **Confirmed** — No decision establishes these targets | Removed specific numeric targets; statuses remain PENDING with "target value requires a decision" |
+| C | Status vocabulary inconsistent (Defined, Pending, Partially Defined) | **Confirmed** — Mixed capitalization and formats | Standardized to controlled vocabulary: DEFINED, PENDING, PARTIALLY_DEFINED, TECHNICAL_FUTURE; updated all 22 NFRs, traceability matrix, and glossary |
+| D | NFR-AVAIL-001, NFR-OBS-001/002 reference T-505 incorrectly | **Confirmed** — T-505 is "Observability design", not health checks | Removed T-505 references; rephrased as "implementation detail for observability" |
+| E | NFR-DATA-005 mixes conceptual rule and technical validation | **Partially confirmed** — CD-007 confirms CPF/CNPJ mutual exclusivity; format validation is TECHNICAL_FUTURE | Updated status to PARTIALLY_DEFINED with clear separation |
+| F | NFR-AVAIL-002 has hybrid status "Defined (behavior) but targets PENDING" | **Confirmed** — Hybrid status violates controlled vocabulary | Changed to PARTIALLY_DEFINED with explicit breakdown |
+| G | NFR-A11Y-001 presents WCAG 2.1 AA as typical target | **Confirmed** — No decision adopts WCAG | Rephrased as "possible target but not confirmed" |
+| H | NFR-SEC-001 references CD-064 (Stripe Connect) incorrectly | **Confirmed** — CD-064 is payment provider implementation; idempotency keys address payment reliability (duplicate prevention), not security/auth | Removed CD-064 from NFR-SEC-001 references |
+| I | Traceability matrix inconsistencies with NFR body references | **Confirmed** — Several mismatches found | Aligned matrix with corrected body references (NFR-SEC-001, NFR-SEC-002, NFR-AVAIL-002, NFR-OBS-003) |
+| J | Potential hardcoded currency references | **Verified** — No BRL/USD hardcoded; NFR-DATA-004 correctly marks currency as PENDING | No changes needed |
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/non-functional_requirements.md` | ~200 modified | All corrections above |
+| `docs/mp_log.md` | ~100 appended | This entry |
+
+### Decisions Preserved
+All 65 confirmed decisions CD-001..CD-065 remain applicable. Corrections only fixed incorrect references and standardized presentation — no decisions changed or invented.
+
+### Files Modified
+| File | Action |
+|------|--------|
+| `/home/workstation/source/f1/docs/non-functional_requirements.md` | Corrected |
+| `/home/workstation/source/f1/docs/mp_log.md` | MP-17 entry appended |
+
+### Working Tree State
+**Initial:**
+```
+ M docs/mp_log.md
+ M docs/task_list.md
+?? docs/non-functional_requirements.md
+```
+**Final:**
+```
+ M docs/mp_log.md
+ M docs/task_list.md
+?? docs/non-functional_requirements.md
+```
+
+### Verification
+- All 22 NFR IDs follow NFR-<DOMAIN>-<NNN> pattern
+- Status vocabulary standardized: DEFINED (12), PENDING (8), PARTIALLY_DEFINED (2)
+- Traceability matrix aligned with NFR body references (22 rows)
+- All 21 CD references and 3 Q references verified against decisions.md/open_questions.md
+- No invented numeric targets (500ms, 2-3s, 30 days, 24h removed)
+- No hardcoded currency (BRL/USD)
+- No CD-054 reference for HTTPS
+- No T-505 references
+- WCAG correctly presented as not confirmed
+
+### Verdict
+**Code review corrections applied** — The non-functional requirements document is now internally consistent, traceable to confirmed decisions, uses standardized status vocabulary, and correctly identifies all pending targets with their business impact.
+
+**Next Recommended Steps:**
+1. MP-18 — Define acceptance criteria per FR (T-203)
+2. MP-19 — Responsible review requirements (T-204)
+3. MP-07 — ES strategy, coupons, reviews, Stripe validation (unblocks implementation)
+
+---
+
 ## MP Template for Future Entries

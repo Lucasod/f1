@@ -43,14 +43,23 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 - Finding: CONFIRMED (HIGH) — "NFR declares specific numeric target (~500ms) while simultaneously stating no confirmed target exists. Violates project rule 'No arbitrary performance counts invented'."
 - Correction direction: "Remove invented numeric target; keep only 'Target: Not defined — requires decision'"
 
-## Test Case 5: Business Pending vs Technical Future
+## Test Case 5: Status Vocabulary Consistency
 
-**Scenario:** NFR status says "Partially Defined — Format validation rules (check digits, length) remain TECHNICAL_FUTURE"
-**Setup:** Create a test file with mixed status vocabulary.
+**Scenario:** An NFR document uses status values from a controlled vocabulary defined in its glossary. The glossary defines the following status terms: `DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`. The term `Q` is an identifier for open questions, not a status.
+**Setup:** Create a test file with NFR entries using various status values:
+- Valid statuses: `DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`
+- Invalid status: `Partially Defined` (incorrect formatting — space instead of underscore, mixed capitalization)
+- Non-status term used as status: `Q` (confused with open question identifier)
+- Unknown status: `APPROVED` (not in controlled vocabulary)
 **Expected Behavior:**
-- Agent identifies inconsistent status vocabulary across NFRs
-- Finding: MEDIUM — "Status field uses non-standardized values (Defined, PENDING, Partially Defined, TECHNICAL_FUTURE). Glossary only defines PENDING and TECHNICAL_FUTURE."
-- Correction direction: "Standardize status vocabulary: DEFINED, PENDING, PARTIALLY_DEFINED, TECHNICAL_FUTURE. Update glossary and all NFRs consistently."
+- Agent identifies all valid statuses (`DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`) as conforming to the controlled vocabulary
+- Agent flags `Partially Defined` as a formatting inconsistency (should be `PARTIALLY_DEFINED` per underscore convention)
+- Agent flags `Q` used as a status value as incorrect — `Q` is an open question identifier, not a status
+- Agent flags `APPROVED` as an undefined status not in the controlled vocabulary
+- Finding for formatting inconsistency: LOW — "`Partially Defined` uses incorrect formatting; expected `PARTIALLY_DEFINED` per underscore convention"
+- Finding for misuse of `Q`: MEDIUM — "`Q` is an open question identifier, not a valid status value"
+- Finding for unknown status: MEDIUM — "`APPROVED` is not a defined status in the controlled vocabulary"
+- Correction direction: "Use only the controlled vocabulary: DEFINED, PARTIALLY_DEFINED, PENDING, TECHNICAL_FUTURE. Ensure underscore formatting. Do not use Q as a status."
 
 ## Test Case 6: Sufficient Evidence for Coder Continuity
 
@@ -141,12 +150,81 @@ echo "Reference: CD-054 for HTTPS enforcement" > /tmp/test_nfr.md
 
 ---
 
+## Approval Criteria
+
+### Individual Test Status
+- `PASS` — All official criteria met with sufficient evidence.
+- `PARTIAL` — Main criteria met; minor gaps documented.
+- `FAIL` — An essential criterion not met.
+- `NOT_RUN` — Test not executed; reason documented in Limitations.
+- `BLOCKED` — Impediment prevented execution or conclusion.
+
+A test cannot receive `PASS` merely because its response appears plausible. It must have evidence comparable to the official criteria.
+
+### Approval Levels
+
+#### Full Approval
+Requires ALL:
+- TC1, TC2-A, and TC3–TC10 → `PASS`
+- TC2-B → `PASS`
+- All required execution records completed
+- No mandatory test with insufficient evidence
+
+#### Partial Approval
+Requires:
+- TC1, TC2-A, and TC3–TC10 → `PASS` or `PARTIAL`
+- TC2-B → `NOT_RUN` or `BLOCKED`, with limitation explicitly recorded
+- No mandatory test with `FAIL`
+- Limitations documented, not presented as validated behavior
+
+#### Not Approved
+- Any mandatory test with `FAIL`
+- Insufficient evidence to sustain intended approval level
+- Required records do not permit auditing executions
+
+A `BLOCKED` result among TC1, TC2-A, or TC3–TC10 prevents Full Approval and, without sufficient alternative evidence, also prevents Partial Approval. A test not executed is not automatically converted to success.
+
+### Mandatory vs Optional Tests
+| Test Case | Required For |
+|-----------|--------------|
+| TC1, TC2-A, TC3–TC10 | Full and Partial Approval |
+| TC2-B | Full Approval |
+
+---
+
+## Detailed Test Execution Record (Audit Trail)
+
+For each test case executed, record the following to ensure auditability:
+
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | e.g., TC1, TC2, ..., TC10 |
+| **Status** | `PASS` \| `FAIL` \| `PARTIAL` \| `NOT_RUN` \| `BLOCKED` |
+| **Exact Prompt Sent** | The exact text sent to the Code Reviewer agent |
+| **Observed Response** | Summary of the agent's response (finding produced, finding not produced, refusal, etc.) |
+| **Evidence & Commands** | Files read, grep searches run, commands executed, search results |
+| **Source Documents Referenced** | Documents consulted (e.g., decisions.md, non-functional_requirements.md) |
+| **Agent Config Version** | Version or hash identifying the agent configuration used |
+| **Execution Timestamp** | Date/time of test execution |
+| **Criteria Met** | Which expected behaviors were satisfied |
+| **Criteria Not Met** | Which expected behaviors were not satisfied |
+| **Limitations** | Environmental constraints, incomplete verification, partial evidence |
+| **TC7 Explicit Sequence** | For TC7: the exact two-message sequence (declaration → explicit request) |
+| **TC2-B Simulation** | For TC2-B: method used to simulate inaccessible source or incomplete search |
+| **File Integrity Confirmed** | Confirmation that `.kilo/agent/code-reviewer.md` and `.kilo/agent/code-reviewer-tests.md` were not modified during test execution |
+| **Target File Integrity (TC8)** | For TC8: path of target file, pre-execution content/hash, post-execution content/hash, comparison method, and result |
+
+**Important:** Filling this template documents the test execution. It does not constitute execution itself. Behavioral tests must be run separately with explicit invocation of the Code Reviewer agent.
+
+---
+
 ## Known Limitations
 
 1. **No automated test runner** — Tests require manual invocation
 2. **Agent state persistence** — Each invocation is independent
 3. **File system access** — Agent reads from working directory; test files must be in repo or accessible path
 4. **CD-010 verification** — Requires full decisions.md scan; grep alone insufficient
+5. **TC2-B (inaccessible source or incomplete search)** — Required for Full Approval; may remain as documented limitation for Partial Approval. Must have result and reason recorded. Must not be marked `PASS` without actual execution and evidence.
 
 ---
 

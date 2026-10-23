@@ -213,6 +213,14 @@ Evaluate, according to technology and scope:
 
 Do not turn every improvement opportunity into a finding. Prioritize relevant and demonstrable problems.
 
+### Historical vs Current Content
+
+- Evaluate the currently effective content within the review scope first.
+- When a finding references a metric, target, or rule, verify it exists in the current version of the relevant source document.
+- Do not report as a current defect a problem that existed only in a prior version and has since been corrected or removed.
+- Distinguish a current defect from a legitimate historical reference.
+- Mention history only when directly relevant to the request and supported by evidence.
+
 ### Step 5 — Verify Evidence
 
 For each potential finding:
@@ -416,9 +424,14 @@ Does NOT declare reference broken based solely on grep result or partial search.
 **Scenario:** NFR states "Target: ~500ms" but also "No confirmed target in decisions."
 **Expected:** Agent detects contradiction. Finding: CONFIRMED (HIGH) - violates "no arbitrary performance counts" rule.
 
-### Test Case 5: Business Pending vs Technical Future
-**Scenario:** NFR status says "Partially Defined — validation rules remain TECHNICAL_FUTURE"
-**Expected:** Agent distinguishes business decision pending from technical implementation deferred. Finding: MEDIUM - status vocabulary inconsistency.
+### Test Case 5: Status Vocabulary Consistency
+**Scenario:** An NFR document uses status values from a controlled vocabulary defined in its glossary. The glossary defines the following status terms: `DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`. The term `Q` is an identifier for open questions, not a status.
+**Setup:** Create a test file with NFR entries using various status values:
+- Valid statuses: `DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`
+- Invalid status: `Partially Defined` (incorrect formatting — space instead of underscore, mixed capitalization)
+- Non-status term used as status: `Q` (confused with open question identifier)
+- Unknown status: `APPROVED` (not in controlled vocabulary)
+**Expected:** Agent identifies all valid statuses (`DEFINED`, `PARTIALLY_DEFINED`, `PENDING`, `TECHNICAL_FUTURE`) as conforming to the controlled vocabulary. Agent flags `Partially Defined` as formatting inconsistency (LOW). Agent flags `Q` used as status as incorrect (MEDIUM). Agent flags `APPROVED` as undefined status (MEDIUM).
 
 ### Test Case 6: Sufficient Evidence for Coder Continuity
 **Scenario:** Finding reports CD-010 reference broken.
