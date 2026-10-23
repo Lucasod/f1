@@ -862,19 +862,83 @@ None — this MP was documentation correction only.
 
 ## MP Template for Future Entries
 
-```
-## MP-XX: <Title>
-**Date:** YYYY-MM-DD
-**Objective:** <one sentence>
-**Scope:** <what is in/out>
-**Results:** <bullet summary>
-**Evidence:** <table of files/commands/outputs>
-**Sources Consulted:** <list>
-**Decisions Preserved:** <reference to decisions.md>
-**New Proposals (NOT APPROVED):** <clearly marked>
-**Pending Questions & Dependencies:** <references to open_questions.md>
-**Files Changed:** <list with status>
-**Divergences, Risks, Limitations:** <table>
-**Task State Update:** <phase table>
-**Recommended Next MPs:** <table>
-```
+> **Note:** MPs 07-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-115/T-116/T-117 → T-1001/T-1002.
+
+---
+
+## MP-09: Sign-off da T-126, Housekeeping da T-007 e Liberação da P2 — FS-01
+**Date:** 2026-10-23  
+**Objective:** Register human approval of conceptual model (T-126 sign-off), complete T-007 housekeeping, and initiate P2 (T-201)  
+**Scope:** Documentation updates to task_list.md (T-126, T-007, T-201) and mp_log.md; no conceptual model, decisions, or open questions changes  
+
+### Results
+- **task_list.md**: 
+  - T-126 → covered_by_decision (human sign-off recorded for conceptual model approval)
+  - T-007 → covered_by_decision (MP-02 reconciliation complete via MPs 01-07I)
+  - T-201 → in_progress (P2 initiated)
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| task_list.md | ~3 modified | T-126 covered, T-007 covered, T-201 in_progress |
+| mp_log.md | ~60 appended | This entry |
+
+### Sources Consulted
+1. Explicit human approval of conceptual model (T-126 sign-off)
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. MP-08 review confirming model readiness for human approval
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No decisions changed.
+
+### New Proposals (NOT APPROVED)
+None — this MP registers sign-off and initiates P2 only.
+
+### Validation
+- T-126: Explicit human approval recorded for conceptual model (65 CDs, 28 questions classified, T-125 covered)
+- T-007: MP-02 reconciliation complete via MPs 01-07I (65 CDs, 28 questions reclassified)
+- T-125: Covered (conceptual_model.md updated and versioned via MP process)
+- T-201: Prerequisites satisfied (T-125 covered, T-126 signed off)
+
+### Files Modified
+- `/home/workstation/source/f1/docs/task_list.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| PENDING questions (Q-015, Q-016 mixed-cart, Q-017, Q-026, etc.) | Affect subsequent implementation phases | Track in respective tasks; do not block conceptual model approval |
+| Diagram conflicts (CD-007, CD-004, CD-040, CD-043) | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-09)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 7 | 0 | 0 | 0 |
+| P1: Conceptual Completion | 26 | 0 | 22 | 0 | 4 |
+| P2: Requirements | 4 | 0 | 0 | 1 (T-201) | 3 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **7** | **22** | **1** | **98** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-10** | Functional requirements (T-201), NFR (T-202), AC (T-203) | MP-09 complete | P2 (T-201..T-204) | FR/NFR/AC docs with traceability approved |
+| **MP-11** | Logical/Physical data models (T-301..T-306) | MP-10 | P3a | Collection schemas, ES mappings, Redis schemas approved |
+| **MP-12** | API spec (T-401..T-405) | MP-10 | P3b | OpenAPI spec, auth matrix, versioning policy approved |
+| **MP-13+** | Architecture, implementation, deploy... | MP-11/12 | P3c-P5 | Per phase approval criteria |
+
+---
+
+## MP Template for Future Entries

@@ -22,7 +22,7 @@
 | T-004 | Create open_questions.md | Identify all gaps, unknowns, pending decisions | T-002, T-003 | File exists with 28 questions covering all domains | ✅ completed |
 | T-005 | Create task_list.md | This file — ordered backlog | T-001..T-004 | File exists with phases P0-P5 populated | ✅ completed |
 | T-006 | Create mp_log.md | MP execution tracker | — | File exists with MP-01 entry | ✅ completed |
-| T-007 | MP-02: Reconcile decisions & correct baseline | Responsible reviews MP-01 artifacts; MP-02 executes reconciliation | T-001..T-006 | All 4 docs updated with 38 confirmed decisions; questions reclassified; task list adjusted | 🔄 in_progress |
+| T-007 | **COVERED** MP-02: Reconcile decisions & correct baseline | Responsible reviews MP-01 artifacts; MP-02 executes reconciliation | T-001..T-006 | All 4 docs updated with 38 confirmed decisions; questions reclassified; task list adjusted; reconciliation complete via MPs 01-07I | ✅ covered_by_decision |
 
 ---
 
@@ -60,7 +60,7 @@
 | T-123 | **COVERED** Notification infrastructure | CD-055 confirmed: manual Refresh/Update button for MVP; WebSocket/event bus deferred | T-007 | — | ✅ covered_by_decision |
 | T-124 | **COVERED** Testing strategy | CD-056 confirmed: three-layer TDD (Vitest/Supertest/Playwright); RED→GREEN→REFACTOR at all layers; payment test scenarios specified; CI/coverage deferred | T-007 | — | ✅ covered_by_decision |
 | T-125 | **COVERED** Update conceptual_model.md | Incorporate all resolved decisions (T-103..T-123) | T-103..T-123 | File updated and versioned via MP process (MP-01..MP-07I) | ✅ covered_by_decision |
-| T-126 | Responsible review conceptual model | Sign-off on complete conceptual model | T-125 | Explicit approval recorded | ⏳ pending |
+| T-126 | **COVERED** Responsible review conceptual model | Sign-off on complete conceptual model | T-125 | Explicit approval recorded | ✅ covered_by_decision |
 
 ---
 
@@ -68,7 +68,7 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-201 | Write functional requirements (FR) | User stories/use cases per feature, traceability to concepts | T-125 | FR doc with traceability | ⏳ pending |
+| T-201 | Write functional requirements (FR) | User stories/use cases per feature, traceability to concepts | T-125 | FR doc with traceability | 🔄 in_progress |
 | T-202 | Write non-functional requirements (NFR) | Performance, security, scalability, availability with measurable targets | T-125 | NFR doc with targets | ⏳ pending |
 | T-203 | Define acceptance criteria per FR | Testable conditions for each story | T-201 | AC documented per FR | ⏳ pending |
 | T-204 | Responsible review requirements | Sign-off on FR/NFR/AC | T-201..T-203 | Explicit approval | ⏳ pending |
