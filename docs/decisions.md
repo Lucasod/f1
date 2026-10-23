@@ -405,12 +405,12 @@
 **Consequences:** ES sync mechanism required; Atlas Search prohibited; mapping/analyzer decisions deferred
 
 ### CD-050: Coupon Inclusion/Exclusion Rules
-**Status:** Confirmed (MP-02)  
+**Status:** Confirmed (MP-02, MP-07E)  
 **Subject:** Coupon targeting semantics  
-**Decision:** Inclusion lists can target products and categories. Including a category includes its descendants. Exclusion lists can target products and categories. Excluding a category excludes its descendants. Exclusions override inclusions. The discount calculation for mixed eligible/ineligible cart contents remains unresolved. Coupon stacking and priority rules remain unresolved.  
-**Justification:** Clear targeting semantics; hierarchy awareness; exclusion precedence  
-**Source:** MP-02 confirmed decisions (Q-016)  
-**Consequences:** Category descendant inclusion/exclusion implemented; mixed-cart discount calculation open; stacking/priority open
+**Decision:** Inclusion lists can target products and categories. Including a category includes its descendants. Exclusion lists can target products and categories. Excluding a category excludes its descendants. Exclusions override inclusions. The discount calculation for mixed eligible/ineligible cart contents remains unresolved. **Coupon stacking and priority rules are resolved: no stacking of coupons from the same vendor (maximum one coupon per vendor per purchase); no automatic priority between eligible coupons; the consumer chooses which eligible coupon to apply for each vendor.**  
+**Justification:** Clear targeting semantics; hierarchy awareness; exclusion precedence; consumer choice for coupon selection  
+**Source:** MP-02 confirmed decisions (Q-016); MP-07E formalization of rules 5 and 6  
+**Consequences:** Category descendant inclusion/exclusion implemented; mixed-cart discount calculation open; stacking prohibited; priority not applicable (single coupon per vendor); consumer selects coupon per vendor
 
 ### CD-051: Vendor Dashboard Scope
 **Status:** Confirmed (MP-02)  

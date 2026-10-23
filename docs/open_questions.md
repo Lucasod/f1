@@ -217,7 +217,7 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Multiple with stacking rules (category first, then cart total)  
 - Platform-wide + vendor-specific, non-stacking  
 **Resolution:** Coupon application algorithm with precedence rules approved  
-**State:** **PARTIALLY_RESOLVED** — Inclusion/exclusion rules confirmed (CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions). Mixed-cart discount calculation, coupon stacking, and priority rules remain PENDING.
+**State:** **PARTIALLY_RESOLVED** — Inclusion/exclusion rules confirmed (CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions). **Coupon stacking and priority rules resolved (CD-050/MP-07E): no stacking (max one coupon per vendor per purchase); no automatic priority; consumer selects eligible coupon per vendor.** Mixed-cart discount calculation remains PENDING.
 
 ---
 

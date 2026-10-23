@@ -778,6 +778,88 @@ Decisions validated against confirmed requirements:
 
 ---
 
+## MP-07E: Formalização Mínima das Regras de Cupons (Q-016)
+**Date:** 2026-10-23  
+**Objective:** Formalize the six confirmed coupon business rules in documentation, correcting CD-050 and Q-016 to reflect that stacking/priority rules are resolved (no stacking, no priority, consumer choice) while keeping mixed-cart discount calculation as pending  
+**Scope:** Documentation-only updates to decisions.md (CD-050), open_questions.md (Q-016), task_list.md (T-116), and mp_log.md; no ES, MongoDB, reviews, notifications, or currency changes  
+
+### Results
+- **decisions.md**: Updated CD-050 to reflect that coupon stacking and priority rules are resolved (no stacking, max one coupon per vendor per purchase; no automatic priority; consumer selects eligible coupon per vendor). Mixed-cart discount calculation remains unresolved.
+- **open_questions.md**: Updated Q-016 state to PARTIALLY_RESOLVED with stacking/priority resolved (no stacking, no priority, consumer choice per vendor); mixed-cart discount calculation remains PENDING.
+- **task_list.md**: T-116 → covered_by_decision (22 total covered). Stacking/priority rules documented; mixed-cart discount remains pending for T-902 checkout implementation.
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| decisions.md | ~5 modified | CD-050 updated: stacking/priority resolved, mixed-cart still open |
+| open_questions.md | ~3 modified | Q-016 updated: stacking/priority resolved, mixed-cart pending |
+| task_list.md | ~1 modified | T-116 → covered_by_decision (22 total) |
+| mp_log.md | ~45 appended | This entry |
+
+### Sources Consulted
+1. User confirmation: six coupon rules decided (MP-07D/MP-07E instructions)
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. Previously confirmed CD-050 (MP-02) and conceptual_model.md sections 15, 16, 18
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No decisions reverted. CD-050 updated in place.
+
+### New Proposals (NOT APPROVED)
+None — this MP was documentation correction only.
+
+### Validation
+- Six coupon rules now documented without contradiction in CD-050 and Q-016
+- Mixed-cart discount calculation correctly remains PENDING (not decided)
+- Conceptual model (sections 15, 16, 18) already supports all six rules: OVG has single Coupon ref (rule 3), Coupon_Target defines eligibility (rule 4), multiple OVGs per Order (rule 2)
+- ES, MongoDB, reviews, notifications, currency unchanged
+
+### Files Modified
+- `/home/workstation/source/f1/docs/decisions.md`
+- `/home/workstation/source/f1/docs/open_questions.md`
+- `/home/workstation/source/f1/docs/task_list.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| Mixed-cart discount formula still pending | Affects checkout implementation (T-902) | Decide during checkout rules detailing; does not block conceptual model |
+| Diagram conflicts with CD-007, CD-004, CD-040, CD-043 | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 12 active P1 business decisions remain | High approval burden | Batch related questions; prioritize critical path |
+| ES strategy (T-115) open | Blocks Stage 4 implementation | Define mapping/sync in future MP |
+| Review moderation (T-117) open | Blocks Stage 7 implementation | Confirm out of scope per CD-055 |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-07E)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 6 | 0 | 1 (T-007) | 0 |
+| P1: Conceptual Completion | 26 | 0 | 22 | 0 | 4 |
+| P2: Requirements | 4 | 0 | 0 | 0 | 4 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **6** | **22** | **1** | **99** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-07** | Elasticsearch strategy (T-115), Stripe Connect test mode validation | MP-07E complete | Q-015, Q-011/012 validation | ES mapping; Stripe E2E test mode flow working |
+| **MP-08** | Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126) | MP-07 | Q-026, All P1 | Currency scope; versioned conceptual model signed off |
+| **MP-09+** | Requirements, data models, API, architecture, implementation... | MP-08 | P2-P5 | Per phase approval criteria |
+
+> **Note:** MPs 07-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-115/T-111/T-112 → T-1001/T-1002.
+
+---
+
 ## MP Template for Future Entries
 
 ```
