@@ -866,6 +866,135 @@ None — this MP was documentation correction only.
 
 ---
 
+## MP-13: Execução da T-201 — Requisitos Funcionais do Marketplace FS-01
+**Date:** 2026-10-23  
+**Objective:** Execute T-201 to produce the functional requirements document with traceability, acceptance criteria, and explicit separation between confirmed decisions, derived requirements, and pending questions  
+**Scope:** Documentation-only creation of `docs/functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+
+### Results
+- Created `docs/functional_requirements.md` (1,797 lines) with:
+  - **49 functional requirements** across 17 domains
+  - Categories: 46 Obrigatório, 5 Derivado, 6 Pendente (6 pending items explicitly linked to open questions)
+  - Full traceability matrix mapping each FR to source decisions (CD-IDs) and open questions (Q-IDs)
+  - Acceptance criteria in Given/When/Then format for all defined behaviors
+  - 21-term glossary
+  - Appendix with domain summary and acceptance criteria overview
+
+### Evidence
+| File | Lines | Purpose |
+|------|-------|---------|
+| `docs/functional_requirements.md` | 1,797 | Complete FR document with traceability |
+| `docs/task_list.md` | ~1 modified | T-201 → completed |
+
+### Sources Consulted
+1. `docs/decisions.md` — 65 confirmed decisions (CD-001..CD-065)
+2. `docs/open_questions.md` — 28 questions with states
+3. `docs/conceptual_model.md` — 31 concepts with confirmed rules
+4. `docs/task_list.md` — project roadmap
+5. `docs/project_context.md` — official requirements
+6. `README.md` — project description, features, technologies
+
+### Requirements Coverage
+All mandatory requirements from the official statement (Stages 1-7) are documented or have explicit gaps:
+
+| Stage | Requirement | Coverage |
+|-------|-------------|----------|
+| Stage 2 | JWT auth, RBAC | FR-AUTH-001..003, FR-ADMIN-001 |
+| Stage 3 | Vendor registration, product CRUD, S3 images | FR-VEND-001..003, FR-PROD-001..006 |
+| Stage 4 | Elasticsearch search, filters, sorting | FR-SRCH-001..002 |
+| Stage 5 | Cart, checkout, order lifecycle, Redis | FR-CART-001..003, FR-ORDER-001..007 |
+| Stage 6 | Payments, commissions, Stripe Connect | FR-PAY-001..004, FR-REFUND-001..003, FR-WALLET-001, FR-TRANS-001 |
+| Stage 7 | Reviews, coupons, PDF invoices, admin dashboard | FR-RW-001, FR-COUPON-001..006, FR-INV-001..002, FR-ADMIN-001 |
+
+### Safeguards Applied (per MP-12)
+- **CD-033 (append-only history):** Documented as FR-HIST-001 (Obrigatório)
+- **Evaluations & moderation (CD-017, Q-017):** FR-RW-001 defined (verified purchase); moderation policy as FR-PEND-003 (Pendente)
+- **Currency (CD-054, Q-026):** Interface language English confirmed; transaction currency as FR-PEND-001/006 (Pendente)
+- **Search (CD-049, Q-015):** ES confirmed as search engine; mapping/sync as FR-PEND-002 (Pendente)
+- **Coupons (MP-07E rules):** All 6 rules reflected in FR-COUPON-001..006; mixed-cart discount as FR-PEND-004 (Pendente)
+- **Notifications (CD-055):** FR-NOTIF-001 (Manual Refresh MVP) — no WebSocket/event bus
+
+### Decisions and Concepts Evaluated
+All 65 confirmed decisions (CD-001..CD-065) assessed for functional requirement coverage. Key decisions mapped:
+- CD-001..CD-003 (Person roles) → Actors & Permissions
+- CD-007 (CPF XOR CNPJ) → FR-USER-001
+- CD-008, CD-040, CD-061 (Address/Contact) → FR-USER-002..004, FR-ORDER-002
+- CD-011, CD-013, CD-014, CD-062 (Product/Inventory) → FR-PROD-001..006
+- CD-015, CD-043 (Category hierarchy) → FR-PROD-004
+- CD-017 (Verified purchase reviews) → FR-RW-001
+- CD-018, CD-019 (Cart) → FR-CART-001..002
+- CD-020, CD-021 (Order structure) → FR-ORDER-001
+- CD-022, CD-025, CD-044 (State separation) → FR-ORDER-006, FR-REFUND-003
+- CD-023 (Historical pricing) → FR-ORDER-005, FR-HIST-002
+- CD-024 (Order persistence on failure) → FR-ORDER-003
+- CD-026, CD-027, CD-050 (Coupons) → FR-COUPON-001..006
+- CD-028 (Multiple payments) → FR-PAY-004
+- CD-029, CD-045 (Commission) → FR-PAY-002
+- CD-030, CD-031 (Wallet/Transaction) → FR-WALLET-001, FR-TRANS-001
+- CD-032, CD-048 (Refunds) → FR-REFUND-001..002
+- CD-033 (Append-only history) → FR-HIST-001
+- CD-035..CD-038 (Invoices) → FR-INV-001..002
+- CD-041 (Vendor auto-publish) → FR-VEND-001
+- CD-042 (Product inactivation) → FR-PROD-002
+- CD-049 (Elasticsearch) → FR-SRCH-001
+- CD-051 (Vendor dashboard) → FR-VEND-003
+- CD-054 (English interface) → Documented in scope
+- CD-055 (Manual refresh) → FR-NOTIF-001
+- CD-057, CD-060 (Authentication flow) → FR-AUTH-001..003, FR-USER-004, FR-DATA-001
+- CD-058 (Financial status) → FR-ORDER-007
+- CD-059 (Ownership authorization) → Actors & Permissions
+- CD-061 (Checkout address snapshot) → FR-ORDER-002
+- CD-062 (No variants) → FR-PROD-006
+- CD-063 (Minimal state machines) → FR-ORDER-004, FR-ORDER-006, FR-PAY-003
+- CD-064, CD-065 (Stripe Connect) → FR-PAY-001
+
+### Pending Questions and Affected Behaviors
+
+| Open Question | Affected FRs | Independent Parts Documented |
+|---------------|--------------|------------------------------|
+| Q-015 (ES mapping/sync) | FR-SRCH-001..002 | Search architecture, filtering, sorting |
+| Q-016 (Mixed-cart discount) | FR-COUPON-006 | Coupon creation, targeting, stacking rules, validation |
+| Q-017 (Review moderation) | FR-RW-001 | Verified purchase requirement |
+| Q-018 (Invoice generation) | FR-INV-001..002 | Invoice scope (commercial receipt), immutability |
+| Q-026 (Transaction currency) | FR-PEND-001, FR-PEND-006, FR-WALLET-001 | Wallet/Transaction structure, commission calculation |
+
+### Files Created/Modified
+| File | Action |
+|------|--------|
+| `/home/workstation/source/f1/docs/functional_requirements.md` | Created (1,797 lines) |
+| `/home/workstation/source/f1/docs/task_list.md` | T-201 → completed |
+
+### Working Tree State
+**Initial:** Clean (no uncommitted changes to tracked files; functional_requirements.md did not exist)  
+**Final:** New file `docs/functional_requirements.md` (untracked)
+
+### Verification
+- All 49 FRs have unique IDs (FR-<DOMAIN>-<NNN>)
+- All FRs categorized as Obrigatório, Derivado, or Pendente
+- All Derivado FRs have explicit justification
+- All Pendente FRs describe affected behavior and required decision
+- Traceability matrix covers all 49 FRs with source decisions and open questions
+- Acceptance criteria in Given/When/Then for all defined behaviors
+- No duplicated requirements or sections
+- Coupon rules 1-6 correctly reflected (no stacking, max 1 per vendor, consumer choice)
+- Currency not assumed as BRL; English interface confirmed
+- Elasticsearch not replaced with Atlas Search
+- Notifications limited to manual refresh
+- No implementation details, architecture, or technical design included
+
+### Verdict
+**T-201 COMPLETED** — The functional requirements document is ready for responsible review (T-204). 
+
+**Next Recommended Step:** MP-10 — Non-functional requirements (T-202), acceptance criteria refinement (T-203), and responsible review (T-204).
+
+---
+
+## MP Template for Future Entries
+
+> **Note:** MPs 07-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-115/T-116/T-117 → T-1001/T-1002.
+
+---
+
 ## MP-09: Sign-off da T-126, Housekeeping da T-007 e Liberação da P2 — FS-01
 **Date:** 2026-10-23  
 **Objective:** Register human approval of conceptual model (T-126 sign-off), complete T-007 housekeeping, and initiate P2 (T-201)  
@@ -938,6 +1067,102 @@ None — this MP registers sign-off and initiates P2 only.
 | **MP-11** | Logical/Physical data models (T-301..T-306) | MP-10 | P3a | Collection schemas, ES mappings, Redis schemas approved |
 | **MP-12** | API spec (T-401..T-405) | MP-10 | P3b | OpenAPI spec, auth matrix, versioning policy approved |
 | **MP-13+** | Architecture, implementation, deploy... | MP-11/12 | P3c-P5 | Per phase approval criteria |
+
+---
+
+## MP-15: Correção e Fechamento da T-201 | P2 — Especificação de Requisitos FS-01
+**Date:** 2026-10-23  
+**Objective:** Correct all issues identified in MP-14 audit and close T-201 with a functionally complete, traceable, and internally consistent requirements document  
+**Scope:** Corrections to `docs/functional_requirements.md` only; no implementation, no conceptual model changes, no business decision resolution  
+
+### Results
+Corrected `docs/functional_requirements.md` (now 1,935 lines, version 2.0) addressing all MP-14 findings:
+
+**Count & Traceability Fixed:**
+- Established explicit counting convention: 53 main FRs (Sections 3.1–3.17) + 6 pending FRs (Section 4) = 59 unique IDs
+- Fixed Appendix A table: mathematical totals now correct (Subtotal 53, Pending 6, Grand Total 59)
+- Updated traceability matrix: now includes all 59 FRs (53 main + 6 FR-PEND) with source decisions and open questions
+- Removed "Author" from glossary (unused term)
+
+**Separated Confirmed from Pending:**
+- FR-PROD-005: Product image association confirmed; S3 path/thumbnail details moved to Note referencing Q-018 TECHNICAL_FUTURE
+- FR-SRCH-002: Filtering/sorting behaviors confirmed; ES mapping/analyzers/sync moved to Note referencing Q-015 TECHNICAL_FUTURE
+- FR-COUPON-006: Eligibility validation confirmed; mixed-cart discount formula moved to Note referencing FR-PEND-004/Q-016
+- FR-USER-003: Contact fields/cardinality confirmed; allowed types/validation moved to Note referencing Q-004
+- FR-PAY-001/002: Removed hardcoded "BRL" and "$" from acceptance criteria; added Notes referencing FR-PEND-001/Q-026
+- FR-ORDER-004/006: CANCELLED explicitly marked as unconfirmed proposal per CD-058/CD-063; VOIDED noted as not used in MVP
+- FR-RW-001: Verified purchase defined as Order_Item with Order in PAID state (minimum per CD-063); DELIVERED not required; Note references Q-017
+- FR-INV-001: "Order completed" replaced with explicit reference to pending trigger (FR-PEND-005/Q-018)
+
+**Coupon Rules (MP-07E) Preserved:**
+All 6 rules fully covered across FR-COUPON-001..006 with no stacking, max 1 per vendor, consumer choice, no automatic priority
+
+**Payment/Refund/Financial Integrity Enhanced:**
+Added 4 new requirements covering CD-064/065 confirmed behaviors:
+- FR-PAY-005: Vendor fulfillment trigger = explicit Vendor confirmation (not Transfer completion)
+- FR-PAY-006: Commission adjustment on refund (proportional for partial, full reversal for full)
+- FR-PAY-007: Idempotency keys for PaymentIntent (Stripe native) and Transfers (application-level)
+- FR-PAY-008: Async payment handling (PIX/Boleto) waits for charge.succeeded before Transfers
+
+**Language Consistency:**
+All justifications translated to English (FR-COUPON-005, FR-VEND-002, FR-DATA-001, FR-SRCH-002)
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/functional_requirements.md` | ~140 modified | All corrections above |
+| `docs/mp_log.md` | ~80 appended | This entry |
+
+### Sources Consulted
+1. MP-14 audit report (complete)
+2. `docs/decisions.md` (65 confirmed decisions CD-001..CD-065)
+3. `docs/open_questions.md` (28 questions with current states)
+4. `docs/conceptual_model.md` (31 concepts)
+5. `docs/project_context.md` (official requirements)
+6. `README.md` (project description)
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No decisions changed or invented.
+
+### Validation
+- ✅ 59 unique requirement IDs (FR-<DOMAIN>-<NNN> + FR-PEND-<NNN>)
+- ✅ Each FR has exactly one classification (48 Obrigatório, 5 Derivado, 6 Pendente)
+- ✅ Appendix A totals mathematically correct (53+6=59)
+- ✅ Traceability matrix covers all 59 FRs with CD-IDs and Q-IDs
+- ✅ All Derivado FRs have explicit English justifications
+- ✅ All Pendente FRs describe affected behavior and required decision
+- ✅ Given/When/Then acceptance criteria for all defined behaviors
+- ✅ Coupon rules 1-6 correctly reflected throughout FR-COUPON-001..006
+- ✅ Currency not hardcoded; English interface confirmed; ES not replaced; notifications manual-only
+- ✅ CANCELLED/VOIDED correctly labeled as unconfirmed proposals
+- ✅ Fulfillment trigger, commission adjustment, idempotency, async payments covered per CD-064/065
+
+### Files Modified
+| File | Action |
+|------|--------|
+| `/home/workstation/source/f1/docs/functional_requirements.md` | Corrected (version 2.0) |
+| `/home/workstation/source/f1/docs/mp_log.md` | MP-15 entry appended |
+
+### Working Tree State
+**Initial:**  
+```
+ M docs/mp_log.md
+ M docs/task_list.md
+?? docs/functional_requirements.md
+```
+
+**Final:** Same (functional_requirements.md corrected in place, no new files)
+
+### Verification
+- `git diff docs/functional_requirements.md` shows targeted corrections only
+- No duplicated requirements, no orphaned references
+- All 65 CDs evaluated for coverage (see MP-13 and MP-14 reports)
+- Pending questions Q-003, Q-004, Q-009, Q-011, Q-012, Q-015, Q-016, Q-017, Q-018, Q-026 correctly reflected with affected FRs and independent parts documented
+
+### Verdict
+**T-201 COMPLETED** — The functional requirements document is internally consistent, traceable to all confirmed decisions, correctly separates confirmed vs pending behavior, and ready for responsible review (T-204).
+
+**Next Recommended Step:** MP-16 — Non-functional requirements (T-202), acceptance criteria refinement (T-203), and responsible review (T-204).
 
 ---
 
