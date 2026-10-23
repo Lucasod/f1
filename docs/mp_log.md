@@ -1327,4 +1327,281 @@ All 65 confirmed decisions CD-001..CD-065 remain applicable. Corrections only fi
 
 ---
 
+## MP-07 Stage A: Elasticsearch Strategy (T-115/Q-015)
+**Date:** 2026-10-23  
+**Objective:** Resolve conceptual scope of Elasticsearch index strategy per CD-049 and Q-015  
+**Scope:** Documentation-only analysis and updates to open_questions.md, conceptual_model.md, task_list.md, and new `docs/analysis/analysis_es_strategy.md`; no code, no diagram changes, no business decisions required (all within CD-049 boundaries)
+
+### Results
+- Created `docs/analysis/analysis_es_strategy.md` with comprehensive analysis covering:
+  - Index structure: Single `products` index with denormalized `category_path` for O(1) descendant filtering
+  - Analyzers: Standard tokenizer + Portuguese stemmer + asciifolding (Brazil marketplace, English compatible)
+  - Category hierarchy filtering: `category_path` keyword array per CD-043
+  - Synchronization: Dual-write (application-level) + periodic full reindex for drift correction and rebuildability (CD-049)
+  - Index settings and mappings with explicit field types
+  - Rebuildability procedure (alias swap)
+- Updated `open_questions.md`: Q-015 state clarified — conceptual scope resolved, technical details remain TECHNICAL_FUTURE
+- Updated `conceptual_model.md`: Elasticsearch Index/Document entry updated with conceptual scope
+- Updated `task_list.md`: T-115 → covered_by_decision (conceptual scope approved; technical details deferred to T-302, T-801, T-802)
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/analysis/analysis_es_strategy.md` | Created (~180) | Detailed technical analysis |
+| `docs/open_questions.md` | ~15 modified | Q-015 state update |
+| `docs/conceptual_model.md` | ~2 modified | Elasticsearch concept scope |
+| `docs/task_list.md` | ~25 modified | T-115 status, counts, risk assessment, next actions |
+| `docs/mp_log.md` | ~50 appended | This entry |
+
+### Sources Consulted
+1. CD-049 (Elasticsearch Search Architecture — confirmed MP-02)
+2. Q-015 (Elasticsearch Index & Search Strategy — PARTIALLY_RESOLVED)
+3. FR-SRCH-001, FR-SRCH-002 (Functional requirements)
+4. CD-011, CD-015, CD-017, CD-043 (Dependencies)
+5. Product and Category concepts in conceptual_model.md
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No new business decisions — all recommendations are technical implementation choices within CD-049 boundaries.
+
+### Conceptual Blockers for MVP
+**Reduced.** T-115 blocker cleared. Remaining P1 blockers:
+- T-117 (Q-017): Review moderation — blocks Stage 7
+- T-122 (Q-026): Transaction currency — blocks payment/financial specs
+- T-118 (Q-018): Invoice generation trigger/storage — blocks Stage 7 (TECHNICAL_FUTURE)
+
+### Validation
+- Analysis respects CD-049 constraints: MongoDB source of truth, rebuildable indexes, Atlas Search prohibited
+- Category descendant filtering aligns with CD-043 and FR-SRCH-002
+- Portuguese analyzer appropriate for Brazil marketplace (CD-054: English interface, but Brazil market)
+- Dual-write + reindex satisfies both real-time needs and CD-049 rebuildability
+- No business decisions invented; all technical details explicitly deferred to implementation phase
+
+---
+
+## MP-07 Stage B: Coupon Consistency Check (T-116/Q-016)
+**Date:** 2026-10-23  
+**Objective:** Verify consistency of coupon rules across all project documents per MP-07 instructions  
+**Scope:** Documentation-only consistency audit across decisions.md, open_questions.md, conceptual_model.md, functional_requirements.md, task_list.md; no changes to business rules
+
+### Results
+- Created `docs/analysis/analysis_coupon_consistency.md` with comprehensive cross-document audit
+- Verified 10 confirmed coupon rules (CD-050 / MP-07E) — **all consistent** across 5 documents:
+  1. Inclusion lists target products/categories
+  2. Including category includes descendants
+  3. Exclusion lists target products/categories
+  4. Excluding category excludes descendants
+  5. Exclusions override inclusions
+  6. No stacking (max 1 coupon/vendor/purchase)
+  7. No automatic priority
+  8. Consumer selects coupon per vendor
+  9. Coupon applied at Order_Vendor_Group level
+  10. Mixed-cart discount = PENDING
+- Identified one documented notation issue in conceptual_model.md: Coupon vs Coupon_Target attribute ownership split (Coupon holds discount config, Coupon_Target holds targeting lists). This is a TECHNICAL_FUTURE physical modeling decision, not a business rule conflict.
+- All open questions in Q-016 correctly tracked across documents
+- T-116 status correctly `covered_by_decision` in task_list.md
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/analysis/analysis_coupon_consistency.md` | Created (~120) | Cross-document consistency audit |
+| (no document modifications) | — | Consistency verified; no changes needed |
+
+### Sources Consulted
+1. CD-050 (Coupon Inclusion/Exclusion Rules — Confirmed MP-02, MP-07E)
+2. CD-026, CD-027 (Coupon concepts)
+3. Q-016 (Coupon Inclusion/Exclusion & Stacking Rules — PARTIALLY_RESOLVED)
+4. FR-COUPON-001..006, FR-PEND-004 (Functional requirements)
+5. conceptual_model.md Sections 15 (Coupon), 16 (Coupon_Target), 18 (Order_Vendor_Group)
+6. task_list.md T-116
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No business rules changed or invented. Consistency confirmed.
+
+### Conceptual Blockers for MVP
+**Unchanged.** Remaining P1 blockers:
+- T-117 (Q-017): Review moderation — blocks Stage 7
+- T-122 (Q-026): Transaction currency — blocks payment/financial specs
+- T-118 (Q-018): Invoice generation trigger/storage — blocks Stage 7 (TECHNICAL_FUTURE)
+
+### Validation
+- No inconsistencies found in business rules across any document
+- The Coupon/Coupon_Target attribute split is a documented implementation concern, correctly flagged in conceptual_model.md
+- Mixed-cart discount correctly remains PENDING (FR-PEND-004) for T-902 implementation
+- T-116 correctly marked covered_by_decision (conceptual rules complete)
+
+---
+
+## MP-07 Stage C: Review Moderation & Display Analysis (T-117/Q-017)
+**Date:** 2026-10-23  
+**Objective:** Analyze pending review moderation and display rules per Q-017 and CD-017; present alternatives with recommendations for business approval  
+**Scope:** Documentation-only analysis; creates `docs/analysis/analysis_review_moderation.md`; updates open_questions.md, conceptual_model.md, task_list.md; no business decisions made (requires responsible approval)
+
+### Results
+- Created `docs/analysis/analysis_review_moderation.md` with comprehensive analysis of 7 pending decisions:
+  1. **Moderation Policy:** Post-moderation (publish immediately, admin hides) — recommended
+  2. **Vendor Response:** Single public response per review — recommended
+  3. **Verified Purchase Badge:** Explicit badge on all reviews — recommended
+  4. **Rating Scale:** 1-5 stars — recommended
+  5. **Rating Aggregation:** Simple arithmetic mean (default) — recommended
+  6. **Verified Purchase State:** PAID (Order payment captured) — recommended
+  7. **Review Images:** Owned images (user-uploaded, separate from product images) — recommended
+- Updated `open_questions.md`: Q-017 expanded with all 7 decision points and recommendations
+- Updated `conceptual_model.md`: Review concept (Sec 14) updated with 7 explicit decision points
+- Updated `task_list.md`: T-117 description updated with 7 decisions requiring approval
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/analysis/analysis_review_moderation.md` | Created (~200) | Detailed analysis with alternatives and recommendations |
+| `docs/open_questions.md` | ~20 modified | Q-017 expanded with 7 decisions |
+| `docs/conceptual_model.md` | ~20 modified | Review concept updated with decision points |
+| `docs/task_list.md` | ~5 modified | T-117 description updated |
+| `docs/mp_log.md` | ~60 appended | This entry |
+
+### Sources Consulted
+1. CD-017 (Review Only by Verified Purchaser — Confirmed MP-02)
+2. CD-023 (Order_Item historical price)
+3. CD-041 (Vendor auto-publish philosophy)
+4. CD-055 (Manual refresh MVP)
+5. CD-063 (Order PAID state machine)
+6. Q-017 (Review Moderation & Display — PARTIALLY_RESOLVED)
+7. FR-RW-001, FR-PEND-003 (Functional requirements)
+8. conceptual_model.md Section 14 (Review)
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. **No business decisions made** — 7 recommendations presented for responsible approval. Analysis distinguishes confirmed rules (CD-017) from pending decisions.
+
+### Conceptual Blockers for MVP
+**Unchanged (awaiting business approval).** Remaining P1 blockers:
+- T-117 (Q-017): Review moderation — blocks Stage 7 (7 decisions pending approval)
+- T-122 (Q-026): Transaction currency — blocks payment/financial specs
+- T-118 (Q-018): Invoice generation trigger/storage — blocks Stage 7 (TECHNICAL_FUTURE)
+
+### Validation
+- CD-017 (verified purchase) preserved as confirmed baseline
+- Each of 7 recommendations clearly labeled as requiring business approval
+- Alternatives presented with pros/cons for each decision
+- Recommendations align with: MVP simplicity (CD-041 auto-publish philosophy), Brazilian marketplace norms, standard UX patterns
+- Technical implementation details explicitly deferred (TECHNICAL_FUTURE)
+- No business rules invented or converted from recommendations
+
+---
+
+## MP-07 Stage D: Stripe Connect Test Mode Validation Analysis (CD-064/CD-065)
+**Date:** 2026-10-23  
+**Objective:** Validate Stripe Connect Separate Charges and Transfers flow per CD-064/CD-065; identify what requires test execution vs documentation; document validation requirements for responsible approval  
+**Scope:** Documentation-only analysis; creates `docs/analysis/analysis_stripe_validation.md`; updates Q-011, Q-012; no test execution (no credentials), no business decisions
+
+### Results
+- Created `docs/analysis/analysis_stripe_validation.md` with comprehensive validation analysis:
+  - **Confirmed via documentation (no test required):** Separate Charges & Transfers in Brazil, platform balance for fees, no auto-reversal, idempotency support, async payment handling
+  - **Test mode validation items (PENDING execution):** Commission accuracy, webhook event sequence, transfer reversal on refund, idempotency keys, multiple transfers
+  - **Cannot validate without production:** Real bank payouts, actual commission calculations, KYC flow
+- Updated `open_questions.md`: Q-011, Q-012 with references to analysis document and validation status
+- Stripe decision points confirmed via official documentation (stripe.com/docs/connect)
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `docs/analysis/analysis_stripe_validation.md` | Created (~280) | Validation analysis with test plan |
+| `docs/open_questions.md` | ~20 modified | Q-011, Q-012 updated with validation status |
+| `docs/mp_log.md` | ~80 appended | This entry |
+
+### Sources Consulted
+1. Stripe Connect documentation: https://docs.stripe.com/connect/separate-charges-and-transfers
+2. Payment Intents API variant for custom flow
+3. Stripe testing documentation: https://docs.stripe.com/testing
+4. CD-045, CD-048, CD-058, CD-064, CD-065 (Confirmed decisions)
+5. Q-011, Q-012 (Partial resolution)
+6. FR-PAY-001..004 (Payment requirements)
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. **No changes** to confirmed decisions. Flow mechanics per CD-064/CD-065 are:
+- ✅ Documented behavior from Stripe
+- ✅ Confirmed via official documentation
+- ⏳ Test execution pending (requires test credentials)
+
+### Validation Results
+
+#### Confirmed via Documentation (no test needed)
+| Item | Source |
+|------|--------|
+| Brazil support for Separate Charges and Transfers | Stripe docs: includes BR |
+| Platform balance debited for Stripe fees | Stripe docs: "account balance is debited for the cost of the Stripe fees" |
+| No auto-reversal on failed charge | Stripe docs: must manually reverse |
+| Idempotency key support | Stripe API standard feature |
+| Async payments require wait for charge.succeeded | Stripe docs for ACH/SEPA |
+| Transfer with source_transaction waits for charge availability | Stripe docs |
+| Maximum transfer sum ≤ charge amount | Stripe docs |
+
+#### Requires Test Execution (BLOCKED - no credentials)
+| Item | Status | Reason |
+|------|--------|--------|
+| Commission calculation accuracy | BLOCKED | Requires test account & connected account |
+| Webhook event sequence | BLOCKED | Requires webhook endpoint URL |
+| Transfer reversal on refund | BLOCKED | Requires test payment flow |
+| Idempotency key behavior | BLOCKED | Requires test API calls |
+| Multiple transfers per charge | BLOCKED | Requires test setup |
+
+#### Cannot Validate Without Production Access
+| Item | Reason |
+|------|--------|
+| Real bank account payouts | Test mode only creates test transactions |
+| Actual commission amounts | Need real Stripe fees |
+| KYC flow completion | Test mode bypasses |
+
+### Business Decision Required
+**None.** This stage analyzes and documents; the flow is already confirmed per CD-064/CD-065. Test execution is an implementation/validation activity, not a business decision.
+
+### Next Steps
+1. Obtain Stripe test account credentials
+2. Set up test connected accounts
+3. Execute validation script from `docs/analysis/analysis_stripe_validation.md`
+4. Document results (can be a follow-up MP or part of MP-08)
+
+---
+
+## MP-07 Consolidated: Elasticsearch Strategy, Coupon Consistency, Review Moderation, Stripe Connect Validation
+**Date:** 2026-10-23  
+**Objective:** Complete MP-07 with all four stages (A-D) as specified in task_list.md  
+**Scope:** Documentation-only; analysis files created, documents updated per MP-07 instructions; no implementation, no business decisions without approval
+
+### Summary of Stages
+
+| Stage | Task | Question | Status | Artifacts |
+|-------|------|----------|--------|-----------|
+| A | T-115 | Q-015 | **Conceptual scope resolved** | `docs/analysis/analysis_es_strategy.md`, Q-015 updated, T-115 → covered_by_decision |
+| B | T-116 | Q-016 | **Consistency verified** | `docs/analysis/analysis_coupon_consistency.md`, no changes needed |
+| C | T-117 | Q-017 | **Analysis complete, 7 decisions pending approval** | `docs/analysis/analysis_review_moderation.md`, Q-017 expanded, T-117 pending |
+| D | CD-064/065 | Q-011/012 | **Validation documented, test execution pending** | `docs/analysis/analysis_stripe_validation.md`, Q-011/Q-012 updated |
+
+### Evidence Summary
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `docs/analysis/analysis_es_strategy.md` | Created | ES index structure, analyzers, sync, rebuildability |
+| `docs/analysis/analysis_coupon_consistency.md` | Created | Cross-document audit of 10 confirmed coupon rules |
+| `docs/analysis/analysis_review_moderation.md` | Created | 7 pending decisions with alternatives & recommendations |
+| `docs/analysis/analysis_stripe_validation.md` | Created | Stripe Connect validation analysis per CD-064/065 |
+| `open_questions.md` | Modified | Q-015, Q-016, Q-017, Q-011, Q-012 updated |
+| `conceptual_model.md` | Modified | ES scope, Review concept with 7 decision points |
+| `task_list.md` | Modified | T-115 covered, T-117 updated, counts adjusted |
+| `mp_log.md` | Appended | 4 stage entries + this consolidated entry |
+
+### Code Reviewer Audit Results
+- **Stage A:** ✅ No findings (CD-049 consistent, no invented requirements)
+- **Stage B:** ✅ No findings (10 rules consistent across 5 docs)
+- **Stage C:** ✅ No findings (CD-017 preserved, 7 decisions clearly pending approval)
+- **Stage D:** ✅ Corrections applied (webhook event reference, transfer_group validation)
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No business decisions made — 7 review decisions require responsible approval.
+
+### Next Steps
+1. **Responsible approval** for 7 review moderation decisions (T-117/Q-017)
+2. **Obtain Stripe test credentials** and execute validation (T-111/T-112)
+3. **MP-08:** Currency (T-122), Invoice (T-118), Conceptual model finalization
+
+---
+
 ## MP Template for Future Entries

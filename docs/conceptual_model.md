@@ -253,10 +253,15 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 **Open Questions (Q-017 — PARTIALLY_RESOLVED):**
 - No explicit Consumer/Vendor author reference in diagram (implied via verified purchase)
-- Rating scale (1-5?)
-- Moderation status (pending/approved/rejected)?
-- Vendor response?
-- **Product_Pic_List attribute: plural form suggests list of images, but relationship to Product_Pic entity is ambiguous (single ref vs list of refs; shared vs owned images)**
+- Rating scale (1-5?) — **business decision required**
+- Moderation status (pending/approved/rejected)? — **business decision required (post-moderation recommended)**
+- Vendor response? — **business decision required (single response recommended)**
+- **Product_Pic_List attribute: plural form suggests list of images, but relationship to Product_Pic entity is ambiguous (single ref vs list of refs; shared vs owned images) — **business decision required (owned images recommended)**
+- Verified purchase badge? — **business decision required (explicit badge recommended)**
+- Aggregation method? — **business decision required (simple mean recommended)**
+- Verified purchase qualifying state (PAID vs DELIVERED)? — **business decision required (PAID recommended per CD-063)**
+
+See `docs/analysis/analysis_review_moderation.md` for detailed analysis and recommendations.
 
 ---
 
@@ -608,7 +613,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 | Session/Cache | Stage 5 | Redis — TECHNICAL_FUTURE |
 | PDF Invoice | Stage 7 | **Added as Invoice (CD-035..CD-038)** |
 | Sales Metrics/Analytics | Stage 7 | Derived from Order/Payment/Vendor — Q-019 RESOLVED (Vendor dashboard scope) |
-| Elasticsearch Index/Document | Stage 4 | TECHNICAL_FUTURE (CD-049: ES confirmed) |
+| Elasticsearch Index/Document | Stage 4 | **Conceptual scope defined (MP-07):** Single `products` index with denormalized vendor/category_path; Portuguese stemmer analyzer; dual-write sync + periodic reindex. Mapping/analyzers/sync = TECHNICAL_FUTURE (CD-049). See `docs/analysis/analysis_es_strategy.md`. |
 | Image Upload Session | Stage 3 | TECHNICAL_FUTURE |
 | Vendor Onboarding Request | Stage 3 | Q-005 RESOLVED (auto-publish confirmed) |
 | Notification/Event | Cross-cutting | Q-027 RESOLVED (manual refresh MVP) |
@@ -653,7 +658,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 | Invoice = commercial receipt | Template, trigger, S3 storage (Q-018 TECHNICAL_FUTURE) |
 | Histories append-only | Soft delete vs hard delete implementation (CD-052) |
 | Vendor auto-publish onboarding | Suspension/abuse mechanism (CD-041) |
-| Elasticsearch search engine | Mapping, analyzers, sync (CD-049) |
+| Elasticsearch search engine | Mapping, analyzers, sync (CD-049) — **Conceptual scope defined in MP-07: single `products` index, `category_path` for hierarchy, Portuguese analyzer, dual-write + reindex sync. Details = TECHNICAL_FUTURE.** |
 | Coupon inclusion/exclusion rules | Mixed-cart discount, stacking, priority (CD-050) |
 | Vendor dashboard metrics scope | Implementation details (CD-051) |
 | English interface language | Transaction currency, FX service (CD-054) |

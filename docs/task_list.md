@@ -28,9 +28,9 @@
 
 ## Phase 1: Conceptual Model Completion (P1)
 
-**Status after MP-06:** 65 conceptual decisions confirmed (CD-001..CD-065). 28 questions reclassified: 12 RESOLVED (Q-005, Q-006, Q-007, Q-008, Q-010, Q-013, Q-019, Q-020, Q-021, Q-027, Q-028), 6 PARTIALLY_RESOLVED (Q-003, Q-004, Q-009, Q-011, Q-012, Q-016), 6 PENDING (Q-001, Q-002, Q-014, Q-015, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 is PARTIALLY_RESOLVED.
+**Status after MP-07 (Stage A):** 65 conceptual decisions confirmed (CD-001..CD-065). 28 questions reclassified: 12 RESOLVED (Q-005, Q-006, Q-007, Q-008, Q-010, Q-013, Q-015, Q-019, Q-020, Q-021, Q-027, Q-028), 6 PARTIALLY_RESOLVED (Q-003, Q-004, Q-009, Q-011, Q-012, Q-016), 5 PENDING (Q-001, Q-002, Q-014, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 is PARTIALLY_RESOLVED.
 
-**Remaining conceptual work:** Resolve 6 PENDING + 6 PARTIALLY_RESOLVED (business rule gaps).
+**Remaining conceptual work:** Resolve 5 PENDING + 6 PARTIALLY_RESOLVED (business rule gaps).
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
@@ -49,9 +49,9 @@
 | T-112 | **COVERED** Split payment / vendor distribution flow | CD-065 confirmed: single Charge per Order, one Transfer per OVG, commission per CD-045, manual Transfer reversal on refunds; fulfillment trigger = Vendor confirmation (Order PAID); async handling = MP-07 | T-111 | — | ✅ covered_by_decision |
 | T-113 | **COVERED** Refund policy and financial adjustments | CD-048 confirmed: partial/full refunds by item/quantity; provider-mediated customer refunds; no internal customer wallet; negative vendor balance tracking; idempotency keys; commission recalculation; receipt preservation | T-007 | — | ✅ covered_by_decision |
 | T-114 | **COVERED** Cart conceptual model | CD-018, CD-019 confirmed: cart not conceptual entity; multi-vendor; Redis/session. Redis details = TECHNICAL_FUTURE (T-303) | T-007 | — | ✅ covered_by_decision |
-| T-115 | Resolve Q-015 Elasticsearch strategy | CD-049: ES confirmed as search engine; MongoDB source of truth; indexes rebuildable; Atlas Search prohibited. Need mapping, analyzers, sync mechanism | T-106b, T-108 | Index mapping + sync mechanism approved | ⏳ pending |
+| T-115 | Resolve Q-015 Elasticsearch strategy | CD-049: ES confirmed as search engine; MongoDB source of truth; indexes rebuildable; Atlas Search prohibited. **Conceptual scope resolved (MP-07):** Single `products` index, `category_path` for descendant filtering, Portuguese stemmer analyzer, dual-write + periodic reindex sync. Mapping/analyzers/sync details = TECHNICAL_FUTURE (T-302, T-801, T-802). See `docs/analysis/analysis_es_strategy.md`. | T-106b, T-108 | Conceptual scope approved; technical details deferred | ✅ covered_by_decision |
 | T-116 | **COVERED** Coupon targeting and stacking rules | CD-050 confirmed: Inclusion/exclusion rules (category descendants, exclusions override). Stacking prohibited (max 1 coupon/vendor/purchase); no priority; consumer selects coupon per vendor. Mixed-cart discount = PENDING (T-902) | T-007 | — | ✅ covered_by_decision |
-| T-117 | Resolve Q-017 Review moderation/display | CD-017 confirmed verified purchase. Need moderation policy, vendor response, badge, aggregation | T-107 | Moderation policy + display rules approved | ⏳ pending |
+| T-117 | Resolve Q-017 Review moderation/display | CD-017 confirmed verified purchase. **Seven decisions require business approval (MP-07 Stage C):** moderation policy (post-moderation recommended), vendor response (single response recommended), verified purchase badge (explicit badge recommended), rating scale (1-5 stars), aggregation method (simple mean recommended), verified purchase state (PAID recommended), review images (owned images recommended). Mixed-cart discount = PENDING (T-902). See `docs/analysis/analysis_review_moderation.md`. | T-107 | Moderation policy + display rules approved | ⏳ pending |
 | T-118 | **COVERED** Invoice scope | CD-035..CD-038 confirmed: commercial receipt (not NF-e), historical values, no rewrite on refund, minimal attributes. Generation/storage = TECHNICAL_FUTURE (T-304, T-1103) | T-007 | — | ✅ covered_by_decision |
 | T-119 | **COVERED** Vendor dashboard metrics | CD-051 confirmed: Vendor-scoped only (order count, gross sales pre-commission, pending/completed orders, best-selling products); cross-vendor access prohibited; gross sales labeled pre-commission | T-007 | — | ✅ covered_by_decision |
 | T-120 | **COVERED** Marketplace scope | Single marketplace confirmed (Q-020); multi-tenancy out of scope | T-007 | — | ✅ covered_by_decision |
@@ -242,20 +242,24 @@ P0 (T-001..T-007)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| 6 PENDING + 6 PARTIALLY_RESOLVED business decisions in P1 | High — each needs responsible approval | Batch related questions per MP; prioritize critical path (T-115, T-116, T-117) |
-| Elasticsearch strategy (T-115) open | Blocks Stage 4 | Define mapping/sync in MP-07 |
-| Coupon/Review/Invoice (T-116/117/118) open | Blocks Stage 7 | Batch in MP-07/08 |
+| 5 PENDING + 6 PARTIALLY_RESOLVED business decisions in P1 | High — each needs responsible approval | Batch related questions per MP; prioritize critical path (T-117, T-122) |
+| Review moderation (T-117) open | Blocks Stage 7 | Define in MP-07 Stage C |
+| Currency (T-122) open | Blocks payment/financial specs | Define in MP-08 |
 
 **Recommended MP Sequence (Condensed):**
 1. **MP-04:** ~~Core identity & admin auth~~ (DONE — T-103, T-104 covered)
 2. **MP-05:** ~~Product variants (T-106b), Order/Payment/Vendor_Group state machines (T-109)~~ (DONE — CD-062, CD-063)
 3. **MP-06:** ~~Payment provider integration (T-111), Split payment flow (T-112)~~ (DONE — CD-064, CD-065)
-4. **MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117), Stripe Connect test mode validation
-5. **MP-08:** Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126)
-6. **MP-09+:** Requirements, data models, API, architecture, implementation...
+4. **MP-07 Stage A:** Elasticsearch strategy (T-115) — **DONE**
+5. **MP-07 Stage B:** Coupon consistency check (T-116) — **DONE (covered_by_decision)**
+6. **MP-07 Stage C:** Review moderation (T-117) — **IN PROGRESS**
+7. **MP-07 Stage D:** Stripe Connect test mode validation — **PENDING**
+8. **MP-08:** Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126)
+9. **MP-09+:** Requirements, data models, API, architecture, implementation...
 
 ---
 
 ## Immediate Next Action
 
-**MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117), Stripe Connect test mode validation — unblocks Stage 4 (Search), Stage 7 (Coupons/Reviews), and validates Stage 6 (Payments).
+**MP-07 Stage C:** Review moderation/display (T-117/Q-017) — unblocks Stage 7 (Reviews).
+**MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).

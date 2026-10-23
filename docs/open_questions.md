@@ -145,27 +145,27 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-011: Payment Provider Selection
-**What:** Payment provider integration details; provider abstraction; fallback strategy  
+**What:** Payment provider integration details; provider abstraction; fallback strategy; Stripe Connect test mode validation  
 **Why:** Stage 6 implementation; affects API, webhooks, split payment flow, payouts  
 **Dependencies:** Stage 6, Wallet/Transaction model, compliance (Brazil), CD-064  
 **Alternatives:**  
-- Stripe Connect (Separate Charges and Transfers) — confirmed for MVP  
-- Provider abstraction layer for future changes  
+- Stripe Connect (Separate Charges and Transfers) — **confirmed for MVP**
+- Provider abstraction layer for future changes
 **Resolution:** Provider integration verified with test credentials; abstraction layer implemented  
-**State:** **PARTIALLY_RESOLVED** — **Stripe Connect with Separate Charges and Transfers confirmed (CD-064)**. Razorpay discarded (Route INR-only, RBI blockers). Exact Stripe fees, onboarding flow, and test mode validation remain for MP-07.
+**State:** **PARTIALLY_RESOLVED** — **Stripe Connect with Separate Charges and Transfers confirmed (CD-064)**. Razorpay discarded (Route INR-only, RBI blockers). **Exact Stripe fees, onboarding flow, and test mode validation documented in `docs/analysis/analysis_stripe_validation.md`.** Provider flow mechanics confirmed via Stripe documentation. Test mode validation items (commission accuracy, webhook sequence, transfer reversal, idempotency) require execution with test credentials.
 
 ---
 
 ## Q-012: Split Payment Flow Design
-**What:** Precise split-payment, transfer, and payout flow given provider constraints  
-**Why:** UX, compliance, fee structure, implementation complexity  
+**What:** Precise split-payment, transfer, and payout flow given provider constraints; webhook correlation; idempotency; async payment handling  
+**Why:** UX, compliance, fee structure, implementation complexity, Stripe Connect test mode validation  
 **Dependencies:** CD-064, CD-065, CD-047, CD-021, CD-028, CD-030, CD-031  
 **Alternatives:**  
-- Single charge + provider transfers (Stripe Connect Separate Charges and Transfers) — confirmed for MVP  
+- Single charge + provider transfers (Stripe Connect Separate Charges and Transfers) — **confirmed for MVP**
 - Single charge + manual/vendor-initiated payouts (if provider lacks split)  
-- Platform collects all, batch payouts later (escrow model)  
+- Platform collects all, batch payouts later (escrow model)
 **Resolution:** Flow diagram with provider-specific steps approved  
-**State:** **PARTIALLY_RESOLVED** — **Separate Charges and Transfers flow confirmed (CD-065)**: single Charge per Order, one Transfer per OVG, commission per CD-045, manual Transfer reversal on refunds. Payment confirmation (charge.succeeded) triggers Order PAID and OVG PENDING; Vendor fulfillment starts on Vendor confirmation (not Transfer completion). Exact fees, onboarding, webhook correlation, idempotency, and async payment handling remain for MP-07 implementation.
+**State:** **PARTIALLY_RESOLVED** — **Separate Charges and Transfers flow confirmed (CD-065)**: single Charge per Order, one Transfer per OVG, commission per CD-045, manual Transfer reversal on refunds. Payment confirmation (charge.succeeded) triggers Order PAID and OVG PENDING; Vendor fulfillment starts on Vendor confirmation (not Transfer completion). **Exact fees, onboarding, webhook correlation, idempotency, and async payment handling documented in `docs/analysis/analysis_stripe_validation.md`.** Detailed flow mechanics confirmed via Stripe documentation (docs.stripe.com/connect/separate-charges-and-transfers). Test mode elements (idempotency, webhook sequence, transfer reversal) require execution with test credentials.
 
 ---
 
@@ -200,11 +200,11 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 **Why:** Stage 4 explicit requirement  
 **Dependencies:** CD-011, CD-015, CD-017, CD-049  
 **Alternatives:**  
-- Single `products` index with nested categories/vendor  
+- Single `products` index with denormalized vendor/category paths (recommended)  
 - Separate indices per entity type  
-- MongoDB Atlas Search instead of separate Elasticsearch  
+- MongoDB Atlas Search instead of separate Elasticsearch (prohibited by CD-049)  
 **Resolution:** Index mapping + sync mechanism + query DSL examples approved  
-**State:** **PARTIALLY_RESOLVED** — ES confirmed as search engine (CD-049: Elasticsearch provides product search, filtering, sorting; MongoDB remains source of truth; indexes rebuildable from authoritative data; Atlas Search prohibited). Mapping, analyzers, synchronization mechanisms remain TECHNICAL_FUTURE.
+**State:** **PARTIALLY_RESOLVED** — ES confirmed as search engine (CD-049). **Conceptual scope resolved:** Single `products` index with denormalized `category_path` for descendant filtering; Portuguese stemmer analyzer; dual-write sync + periodic full reindex for rebuildability. Mapping, analyzers, synchronization mechanisms remain TECHNICAL_FUTURE for implementation phase (T-302, T-801, T-802). See `docs/analysis/analysis_es_strategy.md` for detailed analysis.
 
 ---
 
@@ -222,15 +222,19 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-017: Review Moderation & Display
-**What:** Pre-moderation vs post-moderation? Vendor response? Verified purchase badge? Rating aggregation method?  
+**What:** Pre-moderation vs post-moderation? Vendor response? Verified purchase badge? Rating aggregation method? Review eligibility state? Review images?  
 **Why:** Stage 7 (reviews), Product rating display, trust signals  
 **Dependencies:** CD-017, CD-023  
 **Alternatives:**  
-- Post-moderation (publish immediately, admin can hide)  
+- Post-moderation (publish immediately, admin can hide) — recommended  
 - Pre-moderation (admin approves before publish)  
-- Verified purchase only (linked to delivered Order_Item)  
+- Verified purchase state: PAID vs DELIVERED vs CONFIRMED  
+- Vendor response: single response / none / threaded  
+- Badge: explicit "Verified Purchase" indicator / none (implicit)  
+- Aggregation: simple mean / Bayesian / time-weighted  
+- Images: owned (user-uploaded) / shared (product images) / both  
 **Resolution:** Moderation policy + display rules approved  
-**State:** **PARTIALLY_RESOLVED** — Verified purchase requirement confirmed (CD-017). Moderation policy, vendor response, badge, aggregation method remain PENDING.
+**State:** **PARTIALLY_RESOLVED** — Verified purchase requirement confirmed (CD-017). **Seven decisions require business approval:** (1) Moderation policy (post-moderation recommended), (2) Vendor response (single response recommended), (3) Verified purchase badge (explicit badge recommended), (4) Rating scale (1-5 stars), (5) Aggregation method (simple mean recommended), (6) Verified purchase qualifying state (PAID recommended), (7) Review images (owned images recommended). See `docs/analysis/analysis_review_moderation.md` for detailed analysis and recommendations.
 
 ---
 
