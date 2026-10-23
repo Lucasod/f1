@@ -210,17 +210,18 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - 1:N → Product_Pic
 - Referenced by Order_Item (with historical price snapshot)
 
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-05):**
 - CD-011: Vendor offers Product
 - CD-013: Product.Quantity = current stock; display: in-stock first, out-of-stock last
 - CD-014: No separate Inventory entity
 - CD-016: Images for Product (via Product_Pic)
 - CD-023: Order_Item keeps historical unit price (Product.Price changes don't affect past orders)
 - **CD-042: Products can be inactivated to prevent new sales while retaining historical records; hard deletion permitted only when safe and historical references not compromised**
+- **CD-062: No product variants in MVP. Each distinct variation (color, size) is a separate Product with its own Price, Quantity, Description. No ProductVariant entity, no SKU hierarchy.**
 
 **Open Questions:**
 - Price type (decimal precision, currency) — Q-026 PARTIALLY_RESOLVED
-- Variants/SKUs — Q-006 PARTIALLY_RESOLVED (not modeled)
+- Reservations, backorder, concurrency control — TECHNICAL_FUTURE
 - SEO fields (slug, meta) — not modeled
 - Weight/dimensions for shipping — not modeled
 
@@ -302,7 +303,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - 1:N → Order_Status_History
 - 1:N → Payment
 
-**Confirmed Rules (MP-02, MP-04):**
+**Confirmed Rules (MP-02, MP-04, MP-05, MP-06):**
 - CD-020: Checkout creates Order, initiates payment
 - CD-021: Order = complete purchase; contains Order_Vendor_Groups
 - CD-024: Order persists even if payment fails/abandoned; history preserved
@@ -312,13 +313,15 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - **CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns; Order may exist before Payment; failed/abandoned payment does not erase Order; three independent state machines (Order, Payment, Order_Vendor_Group)**
 - **CD-058: Aggregate financial status is a derived dimension separate from lifecycle state machine. Mutual exclusion precedence: (1) FULLY_REFUNDED — all Order_Vendor_Groups fully refunded; (2) PARTIALLY_REFUNDED — at least one group refunded (partial or full), not all fully refunded; (3) PAID — captured payment exists, no refunds initiated, lifecycle not terminal. CANCELLED/VOIDED are unconfirmed lifecycle proposals, not financial status values.**
 - **CD-061: Shipping address snapshot copied from chosen Address at checkout using CD-040 fields; immutable; subsequent Person Address changes do not affect Order**
+- **CD-063: Minimal Order lifecycle states: PENDING_PAYMENT → PAID → PROCESSING → SHIPPED → DELIVERED. Terminal: CANCELLED (before SHIPPED), FAILED_PAYMENT. Transitions defined. Reconciled terminology: placed = PENDING_PAYMENT, packed = PREPARING (OVG), shipped/delivered mapped.**
+- **CD-064: Single Charge per Order on platform account (Stripe Connect).**
+- **CD-065: On charge.succeeded → Order = PAID → all OVGs = PENDING. Vendor fulfillment starts on Vendor confirmation (OVG PENDING → CONFIRMED), not Transfer completion. Transfers are financial distribution (platform → vendor connected account).**
 
 **Open Questions (Q-009 — PARTIALLY_RESOLVED):**
-- Status values for Order lifecycle? (pending, paid, processing, shipped, delivered, cancelled, refunded, failed_payment?)
 - Total calculation (sum of vendor groups + shipping - discounts)?
 - Guest checkout support?
-- Reconcile existing terminology (placed, packed, shipped, delivered) with final state machines
-- CANCELLED and VOIDED lifecycle statuses — unconfirmed proposals
+- CANCELLED and VOIDED lifecycle statuses — unconfirmed proposals (VOIDED not used in MVP)
+- Retry logic, timeout values, webhook correlation — TECHNICAL_FUTURE
 
 ---
 
@@ -332,7 +335,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - 1:N → Order_Item
 - 1:N → Order_Vendor_Group_History
 
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-05, MP-06):**
 - CD-021: Order_Vendor_Group = per-vendor portion
 - CD-022: Vendor independently updates fulfillment state of their Order_Vendor_Group
 - CD-025: Fulfillment state separate from payment state
@@ -342,11 +345,13 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-033: Order_Vendor_Group_History append-only
 - **CD-044: Each Vendor's portion fulfilled independently; payment confirmation permits Vendor processing; financial distribution separate from Order lifecycle**
 - **CD-045: Commission calculated at this level from global percentage; commission adjustment on refund**
+- **CD-063: Minimal OVG fulfillment states: PENDING → CONFIRMED → PREPARING → SHIPPED → DELIVERED. Terminal: CANCELLED (before SHIPPED), RETURNED (post-DELIVERED). Transitions defined. Vendor autonomy preserved per CD-022.**
+- **CD-064: One Transfer per OVG from platform to vendor connected account (Stripe Connect).**
+- **CD-065: OVG = PENDING when Order = PAID (charge.succeeded). Vendor fulfillment trigger = Vendor confirms (PENDING → CONFIRMED). Transfer completion (`transfer.paid`) is financial distribution, not fulfillment gate. Commission = `ovg_total × commission_pct/100`; vendor receives `vendor_net = ovg_total × (1 - commission_pct/100)`. Stripe fees are platform operational cost. Refunds: manual Transfer reversal per affected vendor; commission adjusted.**
 
 **Open Questions (Q-009 — PARTIALLY_RESOLVED; Q-013 — RESOLVED):**
-- Status values for Order_Vendor_Group? (independent of Order status)
 - Shipping tracking per group?
-- Specific state machine transitions for fulfillment
+- Retry logic, timeout values — TECHNICAL_FUTURE
 
 ---
 
@@ -400,18 +405,22 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Payment transaction for an Order  
 **Attributes:** Order (ref), Amount, Currency, Status, Provider, Changed_At, Changed_By  
 **Relationships:** N:1 → Order; 1:N → Transaction; 1:N → Refund  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-05, MP-06):**
 - CD-024: Order can have multiple Payment attempts (including failed)
 - CD-025: Payment state distinct from fulfillment state
 - CD-028: Multiple Payment attempts preserved (Order.Payments is a list)
 - CD-031: Transaction represents generic financial movement
+- **CD-063: Minimal Payment states: PENDING → AUTHORIZED → CAPTURED. Terminal: FAILED, REFUNDED (partial/full). Transitions defined. Only one CAPTURED per Order at a time. REFUNDED maps to CD-058 financial status.**
+- **CD-064: Provider = Stripe Connect (Separate Charges and Transfers). Single Charge per Order; one Transfer per OVG to vendor connected account.**
+- **CD-065: Commission per CD-045 deducted before Transfer; `vendor_net = ovg_total × (1 - commission_pct/100)`; platform operational costs (Stripe fees) not deducted from vendor. Refunds: Refund on Charge + manual Transfer reversal; commission adjusted consistently.**
 
-**Open Questions (Q-011 PARTIALLY_RESOLVED; Q-012 PARTIALLY_RESOLVED):**
-- Status values (pending, authorized, captured, failed, refunded)?
+**Open Questions (Q-011, Q-012 — PARTIALLY_RESOLVED):**
 - Partial payment support?
-- Idempotency key for provider integration?
-- Webhook/event correlation?
-- Provider selection (Stripe Connect vs Razorpay)?
+- Idempotency key for provider integration (PaymentIntent: native; Transfers: application-level)?
+- Webhook/event correlation (charge.succeeded → Transfers; transfer.paid notifications)?
+- Exact Stripe fees (payment processing + Transfer fees per pricing model) — validate in MP-07 test mode
+- Async payment handling (PIX/Boleto): wait `charge.succeeded` before Transfers
+- Provider onboarding flow for vendor (CPF/CNPJ, bank account, KYC) — validate in MP-07
 
 ---
 
@@ -419,8 +428,12 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Payment gateway identifier  
 **Attributes:** (none shown in diagram)  
 **Relationships:** Referenced by Payment  
+**Confirmed Rules (MP-06):**
+- **CD-064: Provider = Stripe Connect (Separate Charges and Transfers). Brazil available; platform and vendors in same region.**
+
 **Open Questions (Q-011 — PARTIALLY_RESOLVED):**
-- Stripe Connect vs Razorpay — single or both?
+- Exact Stripe Connect pricing model selection ("Stripe handles pricing" vs "You handle pricing") — validate in MP-07
+- Vendor onboarding flow details (Express Dashboard, embedded, CPF/CNPJ, bank account) — validate in MP-07
 - Provider-specific config (account IDs, keys)?
 
 ---

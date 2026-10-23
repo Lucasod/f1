@@ -584,6 +584,200 @@ Decisions validated against confirmed requirements:
 
 ---
 
+## MP-05: Variantes de Produto e Estados Mínimos das Máquinas de Estado
+**Date:** 2026-10-23  
+**Objective:** Resolve product variants decision and define minimal state machines for Order, Payment, and Order_Vendor_Group to unblock Stage 3 (Product CRUD) and Stages 5-7 (Order, Payment, Refund flows)  
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+
+### Results
+- **decisions.md**: Added CD-062 (Product Variants — Not in MVP: each variation is separate Product) and CD-063 (Minimal State Machines for Order, Payment, Order_Vendor_Group with 7+5+7 states, transitions, cross-machine rules). Technical/Future table unchanged.
+- **open_questions.md**: Q-006 → PARTIALLY_RESOLVED (variants excluded via CD-062; reservations/backorder/concurrency remain TECHNICAL_FUTURE). Q-009 → PARTIALLY_RESOLVED (minimal states/transitions confirmed via CD-063; cross-machine rules defined; retry/timeouts deferred).
+- **conceptual_model.md**: Updated Product (CD-062: no variants), Order (CD-063: minimal lifecycle states), Order_Vendor_Group (CD-063: minimal fulfillment states), Payment (CD-063: minimal payment states).
+- **task_list.md**: T-106b, T-109 → covered_by_decision (19 total). Phase 1 status updated: 63 CD, 12 active tasks. MP sequence advanced: MP-06 next (payment provider + split flow).
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| decisions.md | ~120 added | 2 new CDs (62-63) with full state machine definitions |
+| open_questions.md | ~20 modified | Q-006, Q-009 state updates with CD references |
+| conceptual_model.md | ~30 modified | 4 concept sections updated with new confirmed rules |
+| task_list.md | ~40 modified | T-106b/T-109 covered, counts updated, MP sequence advanced |
+| mp_log.md | ~80 appended | This entry |
+
+### Sources Consulted
+1. User confirmation: no product variants in MVP; each variation = separate Product
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. Previously confirmed CDs (CD-001..CD-061), especially CD-013, CD-014, CD-021, CD-022, CD-024, CD-025, CD-028, CD-032, CD-033, CD-044, CD-047, CD-048, CD-058
+
+### Decisions Preserved
+All 63 CD-001..CD-063 remain confirmed. No decisions reverted.
+
+### New Proposals (NOT APPROVED)
+None — this MP was consolidation only.
+
+### Validation
+Decisions validated against confirmed requirements:
+- CD-062 satisfies CD-013/CD-014: flat product model, one stock per product, no Inventory entity
+- CD-063 satisfies CD-044: three independent state machines with minimal states
+- CD-063 respects CD-025: payment ≠ fulfillment; CD-028: multiple payments preserved; CD-032: refund groups by vendor; CD-048: partial/full refunds; CD-058: financial status separate
+- Cross-machine consistency: Order PAID requires Payment CAPTURED; Order PROCESSING requires OVG CONFIRMED; Order SHIPPED/DELIVERED requires all OVG SHIPPED/DELIVERED
+- CANCELLED/VOIDED: CANCELLED retained as lifecycle terminal; VOIDED not used in MVP
+
+### Conceptual Blockers for MVP
+**Further reduced.** T-106b/T-109 blockers cleared. Remaining P1 blockers:
+- T-111 (Q-011): Razorpay USD/Route — blocks Stage 6
+- T-112 (Q-012): Split payment flow — blocks Stage 6
+- T-115 (Q-015): ES mapping/sync — blocks Stage 4
+- T-116 (Q-016): Coupon algorithm — blocks Stage 7
+- T-117 (Q-017): Review moderation — blocks Stage 7
+- T-118 (Q-018): Invoice trigger/storage — blocks Stage 7
+
+### Files Modified
+- `/home/workstation/source/f1/docs/decisions.md`
+- `/home/workstation/source/f1/docs/open_questions.md`
+- `/home/workstation/source/f1/docs/conceptual_model.md`
+- `/home/workstation/source/f1/docs/task_list.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| Diagram conflicts with CD-007, CD-004, CD-040, CD-043 | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 12 active P1 business decisions remain | High approval burden on responsible | Batch related questions; prioritize critical path |
+| Razorpay USD/Route compatibility unknown (T-111) | Blocks Stage 6 design & split payment flow | Validate early (MP-06); Stripe Connect fallback ready |
+| Elasticsearch strategy (T-115) open | Blocks Stage 4 | Define mapping/sync in MP-07 |
+| Coupon/Review/Invoice (T-116/117/118) open | Blocks Stage 7 | Batch in MP-07/08 |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-05)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 6 | 0 | 1 (T-007) | 0 |
+| P1: Conceptual Completion | 26 | 0 | 19 | 0 | 7 |
+| P2: Requirements | 4 | 0 | 0 | 0 | 4 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **6** | **19** | **1** | **102** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-06** | Payment provider integration (T-111), Split flow (T-112) | MP-05 complete | Q-011, Q-012 | Provider abstraction verified; USD/Route validated; distribution flow diagram |
+| **MP-07** | Search, coupons, reviews, invoices (T-115, T-116, T-117, T-118) | MP-06 | Q-015, Q-016, Q-017, Q-018 | ES mapping; coupon algorithm; review policy; invoice generation |
+| **MP-08** | Currency, Conceptual model finalization (T-122, T-125, T-126) | MP-07 | Q-026, All P1 | Currency scope; versioned conceptual model signed off |
+| **MP-09+** | Requirements, data models, API, architecture, implementation... | MP-08 | P2-P5 | Per phase approval criteria |
+
+> **Note:** MPs 06-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-111/T-112 → T-1001/T-1002.
+
+---
+
+## MP-06-R4: Consolidação Final do Stripe Connect (Separate Charges and Transfers)
+**Date:** 2026-10-23  
+**Objective:** Finalize and consolidate CD-064 (Payment Provider) and CD-065 (Distribution Flow) with corrected financial separation, fulfillment trigger alignment, and async payment handling  
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+
+### Results
+- **decisions.md**: Added CD-064 (Stripe Connect Separate Charges and Transfers) and CD-065 (split-payment flow with commission per CD-045, manual Transfer reversal on refunds, fulfillment trigger = Vendor confirmation). Updated Technical/Future table: D-017 resolved (CD-064). CD-046 (Razorpay) preserved as historical.
+- **open_questions.md**: Q-011 → PARTIALLY_RESOLVED (Stripe Connect confirmed, Razorpay discarded); Q-012 → PARTIALLY_RESOLVED (Separate Charges and Transfers flow confirmed, implementation details for MP-07).
+- **conceptual_model.md**: Updated Payment (CD-064/065 rules), Provider (CD-064), Order (CD-064/065: charge.succeeded → Order PAID → OVG PENDING; Vendor fulfillment = Vendor confirmation), Order_Vendor_Group (CD-064/065: Transfer per OVG, commission, vendor_net, refunds).
+- **task_list.md**: T-111, T-112 → covered_by_decision (21 total). Phase 1 status: 65 CD, 12 active tasks. MP sequence advanced: MP-07 next (ES, coupons, reviews, Stripe test validation).
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| decisions.md | ~110 added, ~5 modified | 2 new CDs (64-65), Technical/Future table updated (D-017) |
+| open_questions.md | ~25 modified | Q-011, Q-012 state updates with CD references |
+| conceptual_model.md | ~60 modified | Payment, Provider, Order, OVG updated with new confirmed rules |
+| task_list.md | ~40 modified | T-111/T-112 covered, counts updated, MP sequence advanced |
+| mp_log.md | ~90 appended | This entry |
+
+### Sources Consulted
+1. User confirmation: Stripe Connect (Separate Charges and Transfers) for MVP
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. Previously confirmed CDs (CD-001..CD-063), especially CD-021, CD-025, CD-028, CD-031, CD-045, CD-047, CD-048, CD-058, CD-063
+3. Stripe Connect official documentation (Separate Charges and Transfers, pricing, Brazil availability)
+
+### Decisions Preserved
+All 65 CD-001..CD-065 remain confirmed. No decisions reverted. CD-046 (Razorpay) preserved as historical record.
+
+### New Proposals (NOT APPROVED)
+None — this MP was consolidation only.
+
+### Validation
+Decisions validated against confirmed requirements:
+- CD-064 satisfies CD-046 (provider change boundary), CD-047 (payment confirmation triggers vendor processing)
+- CD-065 satisfies CD-021 (multi-vendor Order), CD-028 (multiple payments), CD-031 (Transaction ledger), CD-045 (commission), CD-048 (refunds), CD-058 (financial status), CD-063 (state machines)
+- Financial separation: commission (revenue) vs Stripe fees (operational cost) vs vendor_net (transfer amount)
+- Fulfillment trigger: Order PAID → OVG PENDING → Vendor confirms → CONFIRMED (not Transfer completion)
+- Refunds: Charge Refund + manual Transfer reversal; commission adjusted (CD-048)
+- Async payments: wait charge.succeeded before Transfers
+- Brazil: platform + vendors same region; Separate Charges and Transfers available
+
+### Conceptual Blockers for MVP
+**Further reduced.** T-111/T-112 blockers cleared. Remaining P1 blockers:
+- T-115 (Q-015): ES mapping/sync — blocks Stage 4
+- T-116 (Q-016): Coupon algorithm — blocks Stage 7
+- T-117 (Q-017): Review moderation — blocks Stage 7
+- T-118 (Q-018): Invoice trigger/storage — blocks Stage 7
+
+### Files Modified
+- `/home/workstation/source/f1/docs/decisions.md`
+- `/home/workstation/source/f1/docs/open_questions.md`
+- `/home/workstation/source/f1/docs/conceptual_model.md`
+- `/home/workstation/source/f1/docs/task_list.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| Diagram conflicts with CD-007, CD-004, CD-040, CD-043 | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 12 active P1 business decisions remain | High approval burden on responsible | Batch related questions; prioritize critical path |
+| Stripe Connect exact fees/onboarding | Operational cost accuracy | Validate in MP-07 test mode |
+| Elasticsearch strategy (T-115) open | Blocks Stage 4 | Define mapping/sync in MP-07 |
+| Coupon/Review/Invoice (T-116/117/118) open | Blocks Stage 7 | Batch in MP-07/08 |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-06-R4)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 6 | 0 | 1 (T-007) | 0 |
+| P1: Conceptual Completion | 26 | 0 | 21 | 0 | 5 |
+| P2: Requirements | 4 | 0 | 0 | 0 | 4 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **6** | **21** | **1** | **100** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-07** | Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117), Stripe Connect test mode validation | MP-06-R4 complete | Q-015, Q-016, Q-017, Q-011/012 validation | ES mapping; coupon algorithm; review policy; Stripe E2E test mode flow working |
+| **MP-08** | Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126) | MP-07 | Q-026, All P1 | Currency scope; versioned conceptual model signed off |
+| **MP-09+** | Requirements, data models, API, architecture, implementation... | MP-08 | P2-P5 | Per phase approval criteria |
+
+> **Note:** MPs 07-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-115/T-116/T-117 → T-1001/T-1002.
+
+---
+
 ## MP Template for Future Entries
 
 ```

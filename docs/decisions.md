@@ -518,7 +518,147 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Source:** MP-04 consolidation for T-104/Q-004  
 **Consequences:** Checkout snapshot semantics resolved; Address/Contact_Info field scope unchanged (CD-040); CEP, country, complement, address type remain deferred; Order now carries address snapshot (conceptual attribute).
 
+### CD-062: Product Variants — Not in MVP
+**Status:** Confirmed (MP-05)  
+**Subject:** Product variant/SKU modeling  
+**Decision:** The MVP **does not include product variants** as a separate entity or structure. Each distinct product variation (e.g., different color, size) is registered as an independent `Product` with its own `Price`, `Quantity` (stock), `Description`, and `Category`. There is no `ProductVariant` entity, no SKU hierarchy under a parent product, and no configurable attribute system.  
+**Justification:** CD-013 confirms `Product.Quantity` = current stock; CD-014 confirms no separate Inventory entity. Adding variants would require new entities (Variant, SKU), reservation logic, and concurrency control — all deferred per Q-006. The MVP keeps one product = one stock unit.  
+**Source:** MP-05 consolidation for T-106b/Q-006  
+**Consequences:** Q-006 variant aspect RESOLVED (no variants). Reservations, backorder, and concurrency control remain PENDING (technical implementation). Product CRUD operates on flat product list.
+
+### CD-063: Minimal State Machines — Order, Payment, Order_Vendor_Group
+**Status:** Confirmed (MP-05)  
+**Subject:** Minimal status values and transitions for the three independent state machines  
+**Decision:** The following states and transitions are confirmed for MVP. Each machine is independent per CD-044. The aggregate financial status (CD-058) remains a derived dimension separate from lifecycle.
+
 ---
+
+#### 1. Order Lifecycle State Machine
+**States:** `PENDING_PAYMENT` → `PAID` → `PROCESSING` → `SHIPPED` → `DELIVERED`  
+**Terminal states:** `CANCELLED` (allowed before `SHIPPED`), `FAILED_PAYMENT` (payment attempts exhausted)
+
+| State | Meaning | Entry Event |
+|-------|---------|-------------|
+| `PENDING_PAYMENT` | Order created, awaiting payment | Checkout completed (CD-020) |
+| `PAID` | Payment captured (at least one Payment = `CAPTURED`) | Payment webhook confirmed capture |
+| `PROCESSING` | At least one Order_Vendor_Group = `CONFIRMED` | Vendor confirms their group |
+| `SHIPPED` | All Order_Vendor_Groups = `SHIPPED` | All vendors mark shipped |
+| `DELIVERED` | All Order_Vendor_Groups = `DELIVERED` | All vendors mark delivered |
+| `CANCELLED` | Order cancelled before any group ships | Consumer/Admin request (allowed only if no group `SHIPPED`/`DELIVERED`) |
+| `FAILED_PAYMENT` | All Payment attempts failed/expired | Payment provider final failure |
+
+**Transitions:**  
+`PENDING_PAYMENT` → `PAID` | `FAILED_PAYMENT`  
+`PAID` → `PROCESSING` | `CANCELLED`  
+`PROCESSING` → `SHIPPED`  
+`SHIPPED` → `DELIVERED`  
+`CANCELLED` / `FAILED_PAYMENT` / `DELIVERED` are terminal (no outgoing transitions)
+
+---
+
+#### 2. Payment State Machine
+**States:** `PENDING` → `AUTHORIZED` → `CAPTURED`  
+**Terminal states:** `FAILED`, `REFUNDED` (partial or full)
+
+| State | Meaning | Entry Event |
+|-------|---------|-------------|
+| `PENDING` | Payment initiated, awaiting provider | Checkout / retry |
+| `AUTHORIZED` | Provider authorized amount (not yet captured) | Provider webhook authorization |
+| `CAPTURED` | Funds captured, money received | Provider webhook capture |
+| `FAILED` | Provider declined or error | Provider webhook failure |
+| `REFUNDED` | Refund processed (partial or full) | Refund confirmed by provider |
+
+**Transitions:**  
+`PENDING` → `AUTHORIZED` | `FAILED`  
+`AUTHORIZED` → `CAPTURED` | `FAILED` (capture failed)  
+`CAPTURED` → `REFUNDED`  
+`FAILED` / `REFUNDED` are terminal
+
+**Notes:** Multiple Payment attempts per Order preserved (CD-028). Only one Payment can be `CAPTURED` at a time for a given Order. `REFUNDED` maps to financial status via CD-058.
+
+---
+
+#### 3. Order_Vendor_Group (Fulfillment) State Machine
+**States:** `PENDING` → `CONFIRMED` → `PREPARING` → `SHIPPED` → `DELIVERED`  
+**Terminal states:** `CANCELLED` (vendor or admin), `RETURNED` (post-delivery return)
+
+| State | Meaning | Entry Event |
+|-------|---------|-------------|
+| `PENDING` | Group created, awaiting vendor action | Order = `PAID` (CD-047) |
+| `CONFIRMED` | Vendor accepted the order | Vendor confirms |
+| `PREPARING` | Vendor preparing package | Vendor starts prep |
+| `SHIPPED` | Package handed to carrier | Vendor marks shipped |
+| `DELIVERED` | Package delivered to customer | Carrier confirmation / vendor marks delivered |
+| `CANCELLED` | Vendor cancelled before `SHIPPED` | Vendor/Admin request |
+| `RETURNED` | Customer returned after `DELIVERED` | Return processed (CD-032, CD-048) |
+
+**Transitions:**  
+`PENDING` → `CONFIRMED` | `CANCELLED`  
+`CONFIRMED` → `PREPARING` | `CANCELLED`  
+`PREPARING` → `SHIPPED` | `CANCELLED`  
+`SHIPPED` → `DELIVERED` | `RETURNED`  
+`DELIVERED` → `RETURNED`  
+`CANCELLED` / `RETURNED` are terminal
+
+---
+
+#### Cross-Machine Consistency Rules
+- **Order → Payment:** Order `PENDING_PAYMENT` requires at least one Payment `PENDING`/`AUTHORIZED`. Order `PAID` requires exactly one Payment `CAPTURED`.
+- **Order → Order_Vendor_Group:** Order `PROCESSING` requires ≥1 OVG `CONFIRMED`. Order `SHIPPED` requires all OVG `SHIPPED`. Order `DELIVERED` requires all OVG `DELIVERED`.
+- **Payment → Financial Status (CD-058):** Payment `CAPTURED` + no refunds → `PAID`. Any Refund `sent` → `PARTIALLY_REFUNDED` or `FULLY_REFUNDED` per CD-058 precedence.
+- **Refunds:** Only allowed on `CAPTURED` payments (CD-048). Refund `sent` does not auto-cancel OVG (fulfillment independent per CD-025).
+- **Cancellation:** Order `CANCELLED` only if no OVG `SHIPPED`/`DELIVERED`. OVG `CANCELLED` only before `SHIPPED`.
+- **CANCELLED/VOIDED:** Remain unconfirmed proposals for lifecycle (per CD-058). `VOIDED` not used in MVP.
+
+**Justification:** Minimal states cover all required MVP flows (checkout → payment → fulfillment → delivery, with cancellation and refund). Each machine has clear entry events. Separation of payment/fulfillment/order per CD-025/CD-044. CD-058 financial status kept separate. Failed payments preserved (CD-028). Partial/full refunds supported (CD-032, CD-048). Multi-vendor independence (CD-022, CD-044).
+
+**Source:** MP-05 consolidation for T-109/Q-009  
+**Consequences:** Three state machines defined with minimal states. Transitions documented for essential flows. Terminology reconciliation: `placed` = `PENDING_PAYMENT`, `packed` = `PREPARING`, `shipped`/`delivered` mapped. `CANCELLED` retained as lifecycle terminal; `VOIDED` not used. Remaining open: retry logic, timeout values, webhook correlation (TECHNICAL_FUTURE).
+
+### CD-064: Payment Provider — Stripe Connect (Separate Charges and Transfers)
+**Status:** Confirmed (MP-06-R4)  
+**Subject:** Payment provider selection and split-flow for multi-vendor orders  
+**Decision:** Stripe Connect using **Separate Charges and Transfers** charge type.  
+- Single Charge on platform account per Order (amount = order_total, currency = BRL, capture = true)  
+- One Transfer per Order_Vendor_Group to vendor's connected account  
+- **Commission (CD-045)**: Global percentage applied per OVG; `vendor_net = ovg_total × (1 - commission_pct/100)`; platform retains commission as revenue  
+- **Stripe fees**: Payment processing fee on Charge (platform operational cost); Transfer fees per pricing model (0.25% of payout volume if "You handle pricing"; included if "Stripe handles pricing") — **exact rate to be validated in test mode (MP-07)**  
+- **Transfer execution**: `source_transaction = charge_id` queues transfer until charge funds settle (synchronous payments only); `transfer_group = order_id` for correlation  
+- **Refunds (CD-048)**: Partial/full Refund on Charge + **manual Transfer reversal** per affected vendor (proportional); platform adjusts commission consistently  
+- **Failed charge after Transfer created**: Platform must manually reverse Transfer (no auto-reversal)  
+- **Idempotency**: PaymentIntent uses `idempotency_key`; Transfers use application-level key (`order_id:ovg_id:attempt`) + pre-check  
+- **Async payments (PIX/Boleto)**: Wait `charge.succeeded` before creating Transfers; do not use `source_transaction`  
+- Supports multi-vendor cart (CD-019), partial refunds (CD-048), cross-machine consistency (CD-063)  
+- Brazil available; platform and vendors in same region (Brazil)  
+**Justification:** Only Separate Charges and Transfers supports single payment → multiple vendors (Destination Charges limited to 1 connected account). Available in Brazil.  
+**Source:** MP-06-R4 consolidation for T-111/Q-011
+
+### CD-065: Payment and Vendor Distribution Flow — Separate Charges and Transfers
+**Status:** Confirmed (MP-06-R4)  
+**Subject:** Minimal split-payment flow for multi-vendor marketplace  
+**Decision:** 
+1. Checkout creates Order with OVGs → calculates per-vendor `vendor_net = ovg_total × (1 - commission_pct/100)` (CD-045)  
+2. Creates single Charge on platform (amount = order_total, currency = BRL, capture = true)  
+3. On `charge.succeeded` webhook: 
+   - Payment = CAPTURED → Order = PAID (CD-063)  
+   - Order = PAID → all OVGs = PENDING (CD-063 cross-machine rule)  
+4. Platform creates one Transfer per OVG to vendor connected_account (background):  
+   - `source_transaction = charge_id` (transfer queued until charge funds settle; synchronous payments only)  
+   - `transfer_group = order_id` (correlation)  
+   - Transfer amount = `vendor_net`  
+5. **Vendor fulfillment trigger**: OVG = PENDING → Vendor confirms → OVG = CONFIRMED (CD-063). **Not gated by Transfer completion.**  
+6. On `transfer.paid` webhook: optional notification to vendor; funds available in vendor Stripe balance  
+7. **Financial breakdown per OVG**:  
+   - Gross commission (revenue) = `ovg_total × commission_pct/100`  
+   - Platform operational costs = Stripe payment fee + Transfer fees  
+   - Platform net = Gross commission - operational costs  
+   - Vendor receives `vendor_net` (commission already deducted; Transfer fees are platform cost)  
+8. **Refunds (CD-048)**: Partial/full Refund on Charge + **manual Transfer reversal** per affected vendor (proportional). Platform adjusts commission consistently.  
+9. **Failed charge after Transfer created**: Platform must manually reverse Transfer (no auto-reversal)  
+10. Ledger: Transaction (CD-031) per SALE/COMMISSION/TRANSFER/REFUND/REVERSAL  
+11. Financial status derived per CD-058 from Refunds + Transfer reversals  
+**Justification:** Separate Charges and Transfers is the only Stripe charge type supporting 1 checkout → 1 payment → N vendors. Aligns with CD-021, CD-028, CD-031, CD-045, CD-047, CD-048, CD-058, CD-063.  
+**Source:** MP-06-R4
 
 ## Diagram Inferences (Preserved as Inferred — Not Confirmed)
 
@@ -629,7 +769,7 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-014 | MongoDB collection design | Technical / Future | CD-005: Conceptual ≠ physical |
 | D-015 | Elasticsearch index strategy | Technical / Future | CD-049: ES confirmed; mapping/analyzers/sync deferred |
 | D-016 | Redis cache keys/TTL for cart/session | Technical / Future | CD-018: Cart in Redis; schema deferred |
-| D-017 | Payment provider integration details | Technical / Future | CD-046: Razorpay selected; Route/USD validation pending; provider abstraction required |
+| D-017 | Payment provider integration details | **Resolved (CD-064)** | CD-064: Stripe Connect (Separate Charges and Transfers) confirmed; exact fees, onboarding, test mode validation in MP-07 |
 | D-018 | Commission calculation implementation | Technical / Future | CD-045: Global % confirmed; per-vendor calculation at Order_Vendor_Group; refund adjustment |
 | D-019 | Order/Payment/Vendor_Group state machine values/transitions | Technical / Future | CD-044: Three independent state machines confirmed; exact values/transitions open; terminology reconciliation needed |
 | D-020 | Vendor suspension/abuse mechanism | Technical / Future | CD-041: Auto-publish confirmed; suspension mechanism needed |

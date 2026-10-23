@@ -81,13 +81,13 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ## Q-006: Product Inventory & Variants
 **What:** Stock quantity, reservation, variants/SKUs (size, color), backorder policy  
 **Why:** Stage 3 (product CRUD), Stage 5 (checkout stock validation), concurrency control  
-**Dependencies:** CD-013, CD-014  
+**Dependencies:** CD-013, CD-014, CD-062  
 **Alternatives:**  
 - Simple `stock_quantity` on Product (no variants)  
 - Product + Variant (SKU) with separate stock  
 - Inventory service with reservation (optimistic locking)  
 **Resolution:** Inventory model decided; concurrency strategy documented  
-**State:** **PARTIALLY_RESOLVED** — Product.Quantity confirmed as current stock (CD-013); display ordering by stock confirmed. No separate Inventory entity (CD-014). Variants, reservations, backorder, concurrency control remain PENDING.
+**State:** **PARTIALLY_RESOLVED** — Product.Quantity confirmed as current stock (CD-013); display ordering by stock confirmed. No separate Inventory entity (CD-014). **Variants excluded from MVP (CD-062): each product variation is a separate Product.** Reservations, backorder, concurrency control remain PENDING (TECHNICAL_FUTURE).
 
 ---
 
@@ -120,13 +120,13 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ## Q-009: Order Status State Machine
 **What:** Complete status values and allowed transitions for Order, Payment, and Order_Vendor_Group (fulfillment)  
 **Why:** Stage 5 (order lifecycle), Stage 6 (payment → fulfillment), Stage 7 (refunds)  
-**Dependencies:** CD-021, CD-022, CD-025, CD-044, CD-058  
+**Dependencies:** CD-021, CD-022, CD-025, CD-044, CD-058, CD-063  
 **Alternatives:**  
 - Order: pending → paid → processing → shipped → delivered / cancelled → refunded  
 - Vendor Group: pending → confirmed → preparing → shipped → delivered / cancelled → refunded  
 - Event-sourced vs state-field  
 **Resolution:** Three independent state machines (Order + Payment + Vendor Group) with transitions approved  
-**State:** **PARTIALLY_RESOLVED** — Structure confirmed (CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns. Each Vendor's portion fulfilled independently. Payment confirmation permits Vendor processing. Financial distribution separate from Order lifecycle. Order may exist before Payment. Failed/abandoned payment does not erase Order). **Aggregate financial status dimension confirmed (CD-058): mutually exclusive precedence FULLY_REFUNDED → PARTIALLY_REFUNDED → PAID, derived from Order_Vendor_Group refund states. Separate from lifecycle state machine.** Specific status values and transitions for all three lifecycle levels remain PENDING. Existing terminology (placed, packed, shipped, delivered) must be reconciled. CANCELLED and VOIDED are unconfirmed proposals for lifecycle, not attributed to CD-024/CD-028.
+**State:** **PARTIALLY_RESOLVED** — Structure confirmed (CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns. Each Vendor's portion fulfilled independently. Payment confirmation permits Vendor processing. Financial distribution separate from Order lifecycle. Order may exist before Payment. Failed/abandoned payment does not erase Order). **Aggregate financial status dimension confirmed (CD-058): mutually exclusive precedence FULLY_REFUNDED → PARTIALLY_REFUNDED → PAID, derived from Order_Vendor_Group refund states. Separate from lifecycle state machine.** **Minimal states and transitions for all three machines confirmed (CD-063): Order (7 states), Payment (5 states), Order_Vendor_Group (7 states). Cross-machine consistency rules defined. CANCELLED and VOIDED are unconfirmed proposals for lifecycle, not attributed to CD-024/CD-028. VOIDED not used in MVP. Retry logic, timeouts, webhook correlation remain TECHNICAL_FUTURE.**
 
 ---
 
@@ -145,28 +145,27 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-011: Payment Provider Selection
-**What:** Razorpay integration details; USD/Route compatibility verification; provider abstraction; fallback to Stripe Connect  
+**What:** Payment provider integration details; provider abstraction; fallback strategy  
 **Why:** Stage 6 implementation; affects API, webhooks, split payment flow, payouts  
-**Dependencies:** Stage 6, Wallet/Transaction model, compliance (Brazil), CD-046  
+**Dependencies:** Stage 6, Wallet/Transaction model, compliance (Brazil), CD-064  
 **Alternatives:**  
-- Razorpay with test mode, provider abstraction, Route/USD validation  
-- Stripe Connect (if Razorpay cannot meet requirements)  
-- Both with adapter pattern  
+- Stripe Connect (Separate Charges and Transfers) — confirmed for MVP  
+- Provider abstraction layer for future changes  
 **Resolution:** Provider integration verified with test credentials; abstraction layer implemented  
-**State:** **PARTIALLY_RESOLVED** — Razorpay initially selected (CD-046: test mode during development; provider boundary for future change; USD and Razorpay Route compatibility remains technical validation item — Route transfers restricted to INR per available docs; some international products may support USD; Stripe Connect remains alternative). Complete provider/currency/marketplace/vendor-remittance verification required before finalizing.
+**State:** **PARTIALLY_RESOLVED** — **Stripe Connect with Separate Charges and Transfers confirmed (CD-064)**. Razorpay discarded (Route INR-only, RBI blockers). Exact Stripe fees, onboarding flow, and test mode validation remain for MP-07.
 
 ---
 
 ## Q-012: Split Payment Flow Design
 **What:** Precise split-payment, transfer, and payout flow given provider constraints  
 **Why:** UX, compliance, fee structure, implementation complexity  
-**Dependencies:** CD-046, CD-047, CD-021, CD-028, CD-030, CD-031  
+**Dependencies:** CD-064, CD-065, CD-047, CD-021, CD-028, CD-030, CD-031  
 **Alternatives:**  
-- Single charge + provider transfers (Stripe Connect)  
+- Single charge + provider transfers (Stripe Connect Separate Charges and Transfers) — confirmed for MVP  
 - Single charge + manual/vendor-initiated payouts (if provider lacks split)  
 - Platform collects all, batch payouts later (escrow model)  
 **Resolution:** Flow diagram with provider-specific steps approved  
-**State:** **PARTIALLY_RESOLVED** — Payment confirmation triggers vendor processing (CD-047: Customer payment received/confirmed through provider; confirmed payment marks Order paid and allows Vendor processing; financial distribution separate from Order lifecycle; precise flow depends on verified provider compatibility; do not assume Razorpay automatically solves Vendor remittance).
+**State:** **PARTIALLY_RESOLVED** — **Separate Charges and Transfers flow confirmed (CD-065)**: single Charge per Order, one Transfer per OVG, commission per CD-045, manual Transfer reversal on refunds. Payment confirmation (charge.succeeded) triggers Order PAID and OVG PENDING; Vendor fulfillment starts on Vendor confirmation (not Transfer completion). Exact fees, onboarding, webhook correlation, idempotency, and async payment handling remain for MP-07 implementation.
 
 ---
 

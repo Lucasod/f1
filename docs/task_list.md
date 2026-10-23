@@ -28,9 +28,9 @@
 
 ## Phase 1: Conceptual Model Completion (P1)
 
-**Status after MP-04:** 61 conceptual decisions confirmed (CD-001..CD-061). 28 questions reclassified: 10 RESOLVED (Q-005, Q-007, Q-008, Q-010, Q-013, Q-019, Q-020, Q-021, Q-027, Q-028), 7 PARTIALLY_RESOLVED (Q-003, Q-004, Q-006, Q-009, Q-011, Q-012, Q-016), 6 PENDING (Q-001, Q-002, Q-014, Q-015, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 moved to PARTIALLY_RESOLVED.
+**Status after MP-06:** 65 conceptual decisions confirmed (CD-001..CD-065). 28 questions reclassified: 12 RESOLVED (Q-005, Q-006, Q-007, Q-008, Q-010, Q-013, Q-019, Q-020, Q-021, Q-027, Q-028), 6 PARTIALLY_RESOLVED (Q-003, Q-004, Q-009, Q-011, Q-012, Q-016), 6 PENDING (Q-001, Q-002, Q-014, Q-015, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 is PARTIALLY_RESOLVED.
 
-**Remaining conceptual work:** Resolve 6 PENDING + 7 PARTIALLY_RESOLVED (business rule gaps).
+**Remaining conceptual work:** Resolve 6 PENDING + 6 PARTIALLY_RESOLVED (business rule gaps).
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
@@ -40,13 +40,13 @@
 | T-104 | **COVERED** Address/Contact attributes & checkout snapshot | CD-040, CD-061 confirmed: Address fields (Street, Number, Neighborhood, City, State); Contact fields (Type, Value, Is_Primary); cardinality 1:N; checkout snapshot semantics (primary default, Consumer choice, immutable copy to Order) | T-007 | — | ✅ covered_by_decision |
 | T-105 | **COVERED** Vendor onboarding workflow | CD-041 confirmed: auto-publish after registration; suspension for abuse possible | T-007 | — | ✅ covered_by_decision |
 | T-106 | **COVERED** Product.Quantity as stock | CD-013 confirmed: Quantity = current stock; display ordering. Variants/reservations = PENDING (T-106b) | T-007 | — | ✅ covered_by_decision |
-| T-106b | Resolve Q-006 Variants, reservations, concurrency | Product variants/SKUs, stock reservation, backorder, optimistic locking | T-007 | Inventory model decided; concurrency strategy | ⏳ pending |
+| T-106b | **COVERED** Product variants decision | CD-062 confirmed: no variants in MVP; each variation is separate Product; reservations/backorder/concurrency = TECHNICAL_FUTURE | T-007 | — | ✅ covered_by_decision |
 | T-107 | **COVERED** Product status lifecycle | CD-042 confirmed: inactivation to prevent new sales while retaining history; hard delete only when safe | T-007 | — | ✅ covered_by_decision |
 | T-108 | **COVERED** Category hierarchy limits | CD-043 confirmed: optional parent_id; root = no parent; many children, max one parent; multilevel supported; cycle prevention required | T-007 | — | ✅ covered_by_decision |
-| T-109 | Resolve Q-009 Order/Payment/Order_Vendor_Group state machines | CD-044 confirmed: three independent state machines (Order, Payment, Vendor Group). Need status values & transitions for all three levels | T-007 | Three-level state machine with transitions approved | ⏳ pending |
+| T-109 | **COVERED** Order/Payment/Order_Vendor_Group state machines | CD-044, CD-063 confirmed: three independent state machines with minimal states and transitions (Order: 7 states, Payment: 5 states, OVG: 7 states); cross-machine consistency rules; financial status separate per CD-058 | T-007 | — | ✅ covered_by_decision |
 | T-110 | **COVERED** Commission formula | CD-045 confirmed: one configurable global %; per-vendor calculation at Order_Vendor_Group; commission adjustment on refund | T-007 | — | ✅ covered_by_decision |
-| T-111 | Resolve Q-011 Payment provider integration | CD-046: Razorpay initially selected; test mode; provider abstraction required; USD/Route compatibility validation; Stripe Connect fallback | T-007 | Provider integration verified; abstraction layer implemented | ⏳ pending |
-| T-112 | Resolve Q-012 Split payment / vendor distribution flow | CD-047: Payment confirmation triggers vendor processing; financial distribution separate from Order lifecycle; precise flow depends on verified provider compatibility | T-111 | Flow diagram with provider-specific steps approved | ⏳ pending |
+| T-111 | **COVERED** Payment provider integration | CD-064 confirmed: Stripe Connect (Separate Charges and Transfers) for MVP; exact fees/onboarding/test validation = MP-07 | T-007 | — | ✅ covered_by_decision |
+| T-112 | **COVERED** Split payment / vendor distribution flow | CD-065 confirmed: single Charge per Order, one Transfer per OVG, commission per CD-045, manual Transfer reversal on refunds; fulfillment trigger = Vendor confirmation (Order PAID); async handling = MP-07 | T-111 | — | ✅ covered_by_decision |
 | T-113 | **COVERED** Refund policy and financial adjustments | CD-048 confirmed: partial/full refunds by item/quantity; provider-mediated customer refunds; no internal customer wallet; negative vendor balance tracking; idempotency keys; commission recalculation; receipt preservation | T-007 | — | ✅ covered_by_decision |
 | T-114 | **COVERED** Cart conceptual model | CD-018, CD-019 confirmed: cart not conceptual entity; multi-vendor; Redis/session. Redis details = TECHNICAL_FUTURE (T-303) | T-007 | — | ✅ covered_by_decision |
 | T-115 | Resolve Q-015 Elasticsearch strategy | CD-049: ES confirmed as search engine; MongoDB source of truth; indexes rebuildable; Atlas Search prohibited. Need mapping, analyzers, sync mechanism | T-106b, T-108 | Index mapping + sync mechanism approved | ⏳ pending |
@@ -227,11 +227,14 @@ P0 (T-001..T-007)
 **Parallelizable after P3c:** P4b, P4c can run in parallel; P4d depends on P4b; P4e depends on P4d; P4f depends on P4d+P4e
 
 **Key Changes from MP-01:**
-- 17 P1 tasks now **covered_by_decision** (T-101, T-102, T-103, T-104, T-105, T-106, T-107, T-108, T-110, T-113, T-114, T-118, T-119, T-120, T-121, T-123, T-124)
-- Remaining P1: 6 PENDING + 7 PARTIALLY_RESOLVED = 13 active tasks
+- 21 P1 tasks now **covered_by_decision** (T-101, T-102, T-103, T-104, T-105, T-106, T-106b, T-107, T-108, T-109, T-110, T-111, T-112, T-113, T-114, T-118, T-119, T-120, T-121, T-123, T-124)
+- Remaining P1: 6 PENDING + 6 PARTIALLY_RESOLVED = 12 active tasks
 - Technical decisions (MongoDB, Redis, ES, S3, API style, frontend state, deploy, testing) correctly placed in P3a/P3b/P3c
-- Vendor onboarding (T-105) and Product variants (T-106b) are critical path blockers for Stage 3
-- T-103/T-104 (Auth, Address) now covered — unblocks Stage 2 (Auth) and Stage 5 (Checkout)
+- Vendor onboarding (T-105) covered — Stage 3 unblocked
+- Product variants (T-106b) resolved: no variants in MVP
+- State machines (T-109) resolved: minimal states defined
+- Payment provider (T-111) and split flow (T-112) covered — unblocks Stage 6
+- T-103/T-104 (Auth, Address) covered — unblocks Stage 2 (Auth) and Stage 5 (Checkout)
 
 ---
 
@@ -239,16 +242,15 @@ P0 (T-001..T-007)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| 8 PENDING + 7 PARTIALLY_RESOLVED business decisions in P1 | High — each needs responsible approval | Batch related questions per MP; prioritize critical path (T-109, T-111, T-112) |
-| Payment provider (T-111) USD/Route compatibility unknown | Blocks Stage 6 design | Validate early (MP-03/04); Stripe Connect fallback if needed |
-| Order/Payment/Vendor_Group state machines (T-109) incomplete | Blocks Order, Payment, Refund flows | Define minimal viable states first (5-6 per level) |
-| Product variants (T-106b) open | Blocks Stage 3 product CRUD | Simple MVP: no variants; add later |
+| 6 PENDING + 6 PARTIALLY_RESOLVED business decisions in P1 | High — each needs responsible approval | Batch related questions per MP; prioritize critical path (T-115, T-116, T-117) |
+| Elasticsearch strategy (T-115) open | Blocks Stage 4 | Define mapping/sync in MP-07 |
+| Coupon/Review/Invoice (T-116/117/118) open | Blocks Stage 7 | Batch in MP-07/08 |
 
 **Recommended MP Sequence (Condensed):**
 1. **MP-04:** ~~Core identity & admin auth~~ (DONE — T-103, T-104 covered)
-2. **MP-05:** Product variants (T-106b), Order/Payment/Vendor_Group state machines (T-109)
-3. **MP-06:** Payment provider integration (T-111), Split payment flow (T-112)
-4. **MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117)
+2. **MP-05:** ~~Product variants (T-106b), Order/Payment/Vendor_Group state machines (T-109)~~ (DONE — CD-062, CD-063)
+3. **MP-06:** ~~Payment provider integration (T-111), Split payment flow (T-112)~~ (DONE — CD-064, CD-065)
+4. **MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117), Stripe Connect test mode validation
 5. **MP-08:** Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126)
 6. **MP-09+:** Requirements, data models, API, architecture, implementation...
 
@@ -256,4 +258,4 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**MP-05:** Resolve T-106b (Product variants) and T-109 (Order/Payment/Order_Vendor_Group state machines) — unblocks Stage 3 (Product CRUD) and Stage 5/6/7 (Order, Payment, Refund flows).
+**MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117), Stripe Connect test mode validation — unblocks Stage 4 (Search), Stage 7 (Coupons/Reviews), and validates Stage 6 (Payments).
