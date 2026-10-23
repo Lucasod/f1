@@ -468,6 +468,27 @@
 **Source:** MP-02 confirmed decisions (authentication approach)  
 **Consequences:** Credential concept added; authentication flow documented; Credential cardinality deferred (Q-029); email uniqueness for login deferred (Q-029); login contact deletion protection established
 
+### CD-058: Order Aggregate Financial Status — Derived Dimension with Mutual Exclusion
+**Status:** Confirmed (MP-03 correction)  
+**Subject:** Order financial status computation from Order_Vendor_Group refund states  
+**Decision:** The `Order` aggregate financial status is a **derived/computed dimension** separate from the `Order` lifecycle state machine. It reflects the consolidated refund state across all `Order_Vendor_Group` instances. The status values and mutual exclusion precedence are:
+1. **`FULLY_REFUNDED`** — ALL `Order_Vendor_Group` are in `FULLY_REFUNDED`
+2. **`PARTIALLY_REFUNDED`** — At least one `Order_Vendor_Group` has a refund (partial or full), AND NOT all groups are `FULLY_REFUNDED`
+3. **`PAID`** — A captured payment exists AND no refund has been initiated on any group AND the Order lifecycle has not advanced to a terminal state (e.g., delivered, cancelled)
+
+These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing mutual exclusivity. `CANCELLED` and `VOIDED` remain unconfirmed proposals for the lifecycle state machine (not the financial status dimension) and are not attributed to CD-024 or CD-028.  
+**Justification:** Resolves the overlap where PARTIALLY_REFUNDED and FULLY_REFUNDED could both be true when all groups are fully refunded; establishes clear separation between lifecycle state and financial aggregation  
+**Source:** MP-03 final correction for T-004  
+**Consequences:** Financial status is computed on-read or cached; two independent dimensions (lifecycle + financial); CANCELLED/VOIDED approval deferred to state machine definition (Q-009)
+
+### CD-057: Credential and Authentication Flow
+**Status:** Confirmed (MP-02)  
+**Subject:** Access credential modeling and conceptual authentication flow  
+**Decision:** `Credential` represents the access credential (e.g., password hash) and is associated with `Person`. Cardinality (1:1 or 1:N) is not yet defined. `Credential` does not store a second email and does not require a direct reference to `Contact_Info`. Login is performed by email; the email resides in `Contact_Info.Value` with `Type = email`. `Is_Primary` represents the primary contact for communication and does NOT automatically indicate which email is used for login. The `Contact_Info` record used for login must not be deleted while it is required for authentication. No `Purpose`, `Is_Login`, or similar attribute is added to `Contact_Info` solely to identify the login email. Email is not duplicated in `Person`, `Main_Info`, or `Credential`. The conceptual authentication flow is: (1) receive email and password; (2) locate `Contact_Info` matching the email (`Type = email`); (3) find the `Person` associated with that contact; (4) locate the `Credential` associated with that `Person`; (5) verify the credential and authenticate access if valid. `Login`/`Authentication` is not presumed to be a persisted entity solely because the authentication flow is represented conceptually.  
+**Justification:** Separates authentication credentials from contact information; avoids email duplication; protects login contact from deletion; keeps conceptual flow explicit without mandating persistence strategy  
+**Source:** MP-02 confirmed decisions (authentication approach)  
+**Consequences:** Credential concept added; authentication flow documented; Credential cardinality deferred (Q-029); email uniqueness for login deferred (Q-029); login contact deletion protection established
+
 ---
 
 ## Diagram Inferences (Preserved as Inferred — Not Confirmed)

@@ -120,13 +120,13 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ## Q-009: Order Status State Machine
 **What:** Complete status values and allowed transitions for Order, Payment, and Order_Vendor_Group (fulfillment)  
 **Why:** Stage 5 (order lifecycle), Stage 6 (payment → fulfillment), Stage 7 (refunds)  
-**Dependencies:** CD-021, CD-022, CD-025, CD-044  
+**Dependencies:** CD-021, CD-022, CD-025, CD-044, CD-058  
 **Alternatives:**  
 - Order: pending → paid → processing → shipped → delivered / cancelled → refunded  
 - Vendor Group: pending → confirmed → preparing → shipped → delivered / cancelled → refunded  
 - Event-sourced vs state-field  
 **Resolution:** Three independent state machines (Order + Payment + Vendor Group) with transitions approved  
-**State:** **PARTIALLY_RESOLVED** — Structure confirmed (CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns. Each Vendor's portion fulfilled independently. Payment confirmation permits Vendor processing. Financial distribution separate from Order lifecycle. Order may exist before Payment. Failed/abandoned payment does not erase Order). Specific status values and transitions for all three levels remain PENDING. Existing terminology (placed, packed, shipped, delivered) must be reconciled.
+**State:** **PARTIALLY_RESOLVED** — Structure confirmed (CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns. Each Vendor's portion fulfilled independently. Payment confirmation permits Vendor processing. Financial distribution separate from Order lifecycle. Order may exist before Payment. Failed/abandoned payment does not erase Order). **Aggregate financial status dimension confirmed (CD-058): mutually exclusive precedence FULLY_REFUNDED → PARTIALLY_REFUNDED → PAID, derived from Order_Vendor_Group refund states. Separate from lifecycle state machine.** Specific status values and transitions for all three lifecycle levels remain PENDING. Existing terminology (placed, packed, shipped, delivered) must be reconciled. CANCELLED and VOIDED are unconfirmed proposals for lifecycle, not attributed to CD-024/CD-028.
 
 ---
 

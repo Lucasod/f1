@@ -307,13 +307,15 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-033: Histories append-only (Order_Status_History)
 - CD-036: Invoice uses historical Order values
 - **CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns; Order may exist before Payment; failed/abandoned payment does not erase Order; three independent state machines (Order, Payment, Order_Vendor_Group)**
+- **CD-058: Aggregate financial status is a derived dimension separate from lifecycle state machine. Mutual exclusion precedence: (1) FULLY_REFUNDED — all Order_Vendor_Groups fully refunded; (2) PARTIALLY_REFUNDED — at least one group refunded (partial or full), not all fully refunded; (3) PAID — captured payment exists, no refunds initiated, lifecycle not terminal. CANCELLED/VOIDED are unconfirmed lifecycle proposals, not financial status values.**
 
 **Open Questions (Q-009 — PARTIALLY_RESOLVED):**
-- Status values for Order? (pending, paid, processing, shipped, delivered, cancelled, refunded, failed_payment?)
+- Status values for Order lifecycle? (pending, paid, processing, shipped, delivered, cancelled, refunded, failed_payment?)
 - Total calculation (sum of vendor groups + shipping - discounts)?
 - Shipping address snapshot?
 - Guest checkout support?
 - Reconcile existing terminology (placed, packed, shipped, delivered) with final state machines
+- CANCELLED and VOIDED lifecycle statuses — unconfirmed proposals
 
 ---
 

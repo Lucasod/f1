@@ -397,6 +397,95 @@ Technical tasks correctly deferred to P3a/P3b/P3c: MongoDB collections (T-301), 
 
 ---
 
+## MP-03-S1: Correção Final e Encerramento da T-004
+**Date:** 2026-10-23  
+**Objective:** Apply final correction to Order aggregate financial status precedence (T-004 closure); validate mutual exclusion; preserve pending decisions; no scope expansion  
+**Scope:** Documentation-only correction across decisions.md, open_questions.md, conceptual_model.md; no code, no diagram changes, no new tasks  
+
+### Results
+- **decisions.md**: Added CD-058 confirming Order aggregate financial status as derived dimension with mutual exclusion precedence: FULLY_REFUNDED (all groups fully refunded) → PARTIALLY_REFUNDED (at least one group refunded, not all fully) → PAID (captured payment, no refunds, lifecycle not terminal). CANCELLED/VOIDED kept as unconfirmed lifecycle proposals.
+- **open_questions.md**: Updated Q-009 to PARTIALLY_RESOLVED with CD-058 reference; aggregate financial status dimension now confirmed; lifecycle status values/transitions remain PENDING.
+- **conceptual_model.md**: Updated Order concept (section 17) with CD-058 rule and two-dimension clarification.
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| decisions.md | ~30 added | CD-058 confirmed decision for Order aggregate financial status |
+| open_questions.md | ~15 modified | Q-009 updated with CD-058 reference, CANCELLED/VOIDED clarification |
+| conceptual_model.md | ~20 modified | Order concept updated with derived financial status dimension |
+| mp_log.md | ~40 appended | This entry |
+
+### Sources Consulted
+1. User final correction request for T-004
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. Previously confirmed CD-044 (three independent state machines)
+
+### Decisions Preserved
+All 57 CD-001..CD-058 remain confirmed. No decisions reverted.
+
+### New Proposals (NOT APPROVED)
+None — this MP was final correction only.
+
+### Validation
+Test cases verified:
+- Single group partially refunded → PARTIALLY_REFUNDED ✓
+- All groups fully refunded → FULLY_REFUNDED ✓ (mutual exclusion holds)
+- Mixed refund states → PARTIALLY_REFUNDED ✓
+- No refunds, payment captured → PAID ✓
+
+### Conceptual Blockers for MVP
+**None.** The aggregate financial status is a derived computation. Remaining work for Q-009 is lifecycle state machine values/transitions (scope-bounded for MP-05).
+
+### Files Modified
+- `/home/workstation/source/f1/docs/decisions.md`
+- `/home/workstation/source/f1/docs/open_questions.md`
+- `/home/workstation/source/f1/docs/conceptual_model.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| Diagram conflicts with CD-007, CD-004, CD-040, CD-043 | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 15 active P1 business decisions remain | High approval burden on responsible | Batch related questions; prioritize critical path |
+| Razorpay USD/Route compatibility unknown (T-111) | Blocks Stage 6 design & split payment flow | Validate early (MP-04/05); Stripe Connect fallback ready |
+| State machines (T-109) incomplete | Blocks Order, Payment, Refund flows | Define minimal viable states first (5-6 per level) |
+| Product variants (T-106b) open | Blocks Stage 3 product CRUD | Simple MVP: no variants; add later |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-03-S1)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 6 | 0 | 1 (T-007) | 0 |
+| P1: Conceptual Completion | 26 | 0 | 15 | 0 | 11 |
+| P2: Requirements | 4 | 0 | 0 | 0 | 4 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **6** | **15** | **1** | **106** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-04** | Core identity & admin auth (T-103, T-104) | MP-03-S1 complete | Q-003, Q-004 | Admin permission matrix; Consumer/Vendor auth model; Address/Contact cardinality |
+| **MP-05** | Product variants (T-106b), State machines (T-109) | MP-04 | Q-006, Q-009 | Variant decision; three-level state machine with transitions |
+| **MP-06** | Payment provider integration (T-111), Split flow (T-112) | MP-05 | Q-011, Q-012 | Provider abstraction verified; USD/Route validated; distribution flow diagram |
+| **MP-07** | Search, coupons, reviews, invoices (T-115, T-116, T-117, T-118) | MP-06 | Q-015, Q-016, Q-017, Q-018 | ES mapping; coupon algorithm; review policy; invoice generation |
+| **MP-08** | Currency, Conceptual model finalization (T-122, T-125, T-126) | MP-07 | Q-026, All P1 | Currency scope; versioned conceptual model signed off |
+| **MP-09+** | Requirements, data models, API, architecture, implementation... | MP-08 | P2-P5 | Per phase approval criteria |
+
+> **Note:** MPs 04-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-109 → T-111/T-112 → T-1001/T-1002. T-004 is now closed.
+
+---
+
 ## MP Template for Future Entries
 
 ```
