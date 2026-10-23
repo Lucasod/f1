@@ -15,23 +15,23 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Relationships:**
 - Has multiple Addresses (1:N)
 - Has multiple Contact_Infos (1:N)
-- Has Credential (1:1 or 1:N — cardinality not yet defined)
+- Has Credential (1:1 — **exactly one Credential per Person**)
 - Specialized by: Consumer, Vendor, Admin
 
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - Person is the common abstraction for Admin, Consumer, Vendor (CD-001)
 - A Person may be Consumer and Vendor simultaneously (CD-002)
 - A Person who is Admin cannot be Consumer or Vendor (CD-003)
 - Persistence strategy (single vs multiple collections) is NOT decided at conceptual level (CD-005)
 - **Admin manages platform; Vendor manages own store/products/orders; Consumer manages own account/cart/orders; strict ownership isolation required (CD-039)**
-- **Credential represents the access credential and is associated with Person (CD-057)**
+- **Credential represents the access credential and is associated with Person (CD-057); cardinality 1:1 confirmed (CD-060)**
+- **Consumer/Vendor authorization is ownership-based (CD-059): each operation validates resource ownership; no generic RBAC for Consumer/Vendor**
 
 **Open Questions:**
 - Password/hash, email verification, status (active/suspended) — TECHNICAL_FUTURE
 - Main_Info 1:1 composition vs inline — kept as separate concept per diagram
-- Admin permission matrix sufficiency — Q-003 PARTIALLY_RESOLVED
-- Consumer/Vendor permission model — Q-003 PARTIALLY_RESOLVED
-- Credential cardinality (1:1 or 1:N per Person) — Q-029 PENDING
+- Admin permission matrix sufficiency — Q-003 PARTIALLY_RESOLVED (2-level PermissionENUM retained for MVP)
+- Credential status values, MFA, recovery — TECHNICAL_FUTURE
 
 ---
 
@@ -49,12 +49,12 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Physical location for a Person  
 **Attributes:** Person (ref), **Street, Number, Neighborhood, City, State**  
 **Relationships:** N:1 → Person  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - CD-008: Address related to Person (1:N confirmed)
 - **CD-040: Fields confirmed as Street, Number, Neighborhood, City, State. CEP, country, complement, address type explicitly NOT included without new decision**
+- **CD-061: Checkout address snapshot semantics confirmed. Person may have multiple addresses; first registered becomes primary by default; Consumer may choose any registered address at checkout; chosen address fields copied as immutable snapshot to Order; subsequent Address changes do not affect existing Orders**
 
 **Open Questions (Q-004 — PARTIALLY_RESOLVED):**
-- Checkout address snapshot semantics — PENDING
 - Validation rules for Brazilian addresses (CEP) — TECHNICAL_FUTURE
 
 ---
@@ -63,36 +63,36 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Electronic contact for a Person  
 **Attributes:** Person (ref), **Type, Value, Is_Primary**  
 **Relationships:** N:1 → Person  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - CD-008: Contact_Info related to Person (1:N confirmed)
 - **CD-040: Fields confirmed as Type, Value, Is_Primary. Verified explicitly NOT included without new decision**
 - **Login is performed by email. The email resides in Contact_Info.Value with Type = email. Is_Primary represents the primary contact for communication; it does NOT automatically indicate which email is used for login (CD-057)**
 - **The Contact_Info record used for login (email) must not be deleted while it is required for authentication (CD-057)**
 - **No Purpose, Is_Login, or similar attribute is added to Contact_Info solely to identify the login email (CD-057)**
 - **Email is not duplicated in Person, Main_Info, or Credential (CD-057)**
+- **Login email is globally unique (CD-060): the Contact_Info with Type=email used for login has a uniqueness constraint**
 
 **Open Questions (Q-004 — PARTIALLY_RESOLVED):**
 - Allowed contact types and validation rules for `Contact_Info.Value` (e.g., phone, WhatsApp, email) — PENDING
-- Checkout address snapshot semantics — PENDING
-- Email uniqueness constraint (for login) — PENDING (Q-029)
-- Identification of which Contact_Info is used for login — PENDING (Q-029)
 
 ---
 
 ### 5. Credential
 **Responsibility:** Access credential for a Person (e.g., password hash)  
 **Attributes:** Person (ref), Hashed_Password, Status, Created_At, Updated_At  
-**Relationships:** Associated with Person (cardinality 1:1 or 1:N — not yet defined)  
-**Confirmed Concept (MP-02):**
+**Relationships:** 1:1 → Person (**exactly one Credential per Person**, CD-060)  
+**Confirmed Concept (MP-02, MP-04):**
 - **Credential represents the access credential and is associated with Person (CD-057)**
+- **Credential cardinality is 1:1 (CD-060): exactly one Credential per Person**
+- **Login email is globally unique (CD-060): the Contact_Info with Type=email used for login has a uniqueness constraint**
 - **Credential does not store a second email and does not require a direct reference to Contact_Info (CD-057)**
 - **Login/Authentication is not presumed to be a persisted entity solely because the authentication flow is represented conceptually (CD-009, CD-057)**
 
 **Conceptual Authentication Flow (CD-057 — confirmed):**
 1. Receive email and password provided by the user
-2. Locate the Contact_Info matching the email (Type = email)
+2. Locate the Contact_Info matching the email (Type = email) — **unique match guaranteed by CD-060**
 3. Find the Person associated with that Contact_Info
-4. Locate the Credential associated with that Person
+4. Locate the Credential associated with that Person — **exactly one (CD-060)**
 5. Verify the credential; authenticate access if valid
 
 **Technical Details (Deferred — not conceptually decided):**
@@ -101,8 +101,9 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - Multi-factor authentication (MFA) credentials
 - Credential recovery/reset flow
 
-**Open Questions (Q-029 — PENDING):**
-- Cardinality of Person to Credential (1:1 or 1:N)?
+**Open Questions (Q-029 — PARTIALLY_RESOLVED):**
+- Credential status values, MFA, recovery — TECHNICAL_FUTURE
+- Policy for changing/removing login email while protecting auth integrity — PENDING
 
 ---
 
@@ -110,9 +111,10 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Buyer role  
 **Attributes:** Inherits Person  
 **Relationships:** Places Orders (1:N)  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - Can coexist with Vendor on same Person (CD-002)
 - Disjoint from Admin (CD-003)
+- **Authorization is ownership-based (CD-059): Consumer may only access/manage their own account, cart, and orders; backend validates ownership on each operation**
 
 **Open Questions:**
 - Consumer-specific attributes (preferences, wishlist) — not modeled
@@ -128,7 +130,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - Has Wallet (1:1) — CD-030
 - Linked to Order_Vendor_Group (1:N)
 
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - CD-011: Vendor offers Product
 - CD-012: No separate Catalog concept (catalog = vendor's products)
 - CD-026: Coupon and Coupon_Target accepted; plural attributes are lists (CD-027)
@@ -137,6 +139,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - Disjoint from Admin (CD-003)
 - **CD-041: Auto-publish after registration; no prior Admin approval required; suspension for abuse possible**
 - **CD-045: Commission from global percentage; calculated per Vendor at Order_Vendor_Group; commission adjustment on refund**
+- **Authorization is ownership-based (CD-059): Vendor may only manage their own store, products, coupons, and Order_Vendor_Groups belonging to their store; cross-vendor access strictly prohibited**
 
 **Open Questions:**
 - Company name, bank account for payouts, tax info — not modeled
@@ -165,13 +168,13 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Authorization role definition for Admin only  
 **Attributes:** Description, PermissionENUM  
 **Relationships:** 1:N → Admin; has PermissionENUM  
-**Confirmed Rules (MP-02):**
-- CD-004: Role only for Admin; Consumer/Vendor authorization separate
+**Confirmed Rules (MP-02, MP-04):**
+- CD-004: Role only for Admin; Consumer/Vendor authorization separate (CD-059)
+- **PermissionENUM (Read, Read/Write) retained for MVP; sufficiency for Admin needs not confirmed (Q-003 PARTIALLY_RESOLVED)**
 
 **Open Questions (Q-003 — PARTIALLY_RESOLVED):**
-- Only two permission levels (Read, Read/Write)? Sufficiency for Admin needs evaluation
 - Resource-level permissions for Admin?
-- Consumer/Vendor authorization model not defined
+- Admin dashboard scope and metrics — not defined (only Vendor dashboard scope confirmed per CD-051)
 
 ---
 
@@ -179,7 +182,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Permission level enumeration for Admin roles  
 **Values:** Read, Read/Write  
 **Open Questions (Q-003 — PARTIALLY_RESOLVED):**
-- Sufficient for Admin RBAC?
+- Sufficiency for Admin RBAC? (retained for MVP, evaluation deferred)
 - Extensibility?
 
 ---
@@ -292,14 +295,14 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 
 ### 17. Order
 **Responsibility:** Customer purchase aggregating multi-vendor items  
-**Attributes:** Consumer (ref), Status, Total, **Order_Vendor_Group_List**, Orders_Status_History, Payments  
+**Attributes:** Consumer (ref), Status, Total, **Order_Vendor_Group_List**, Orders_Status_History, Payments, **Shipping_Address_Snapshot (Street, Number, Neighborhood, City, State — copied from chosen Address at checkout, CD-061)**  
 **Relationships:**
 - N:1 → Consumer
 - 1:N → Order_Vendor_Group
 - 1:N → Order_Status_History
 - 1:N → Payment
 
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-04):**
 - CD-020: Checkout creates Order, initiates payment
 - CD-021: Order = complete purchase; contains Order_Vendor_Groups
 - CD-024: Order persists even if payment fails/abandoned; history preserved
@@ -308,11 +311,11 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 - CD-036: Invoice uses historical Order values
 - **CD-044: Overall Order status, Payment status, and fulfillment status are separate concerns; Order may exist before Payment; failed/abandoned payment does not erase Order; three independent state machines (Order, Payment, Order_Vendor_Group)**
 - **CD-058: Aggregate financial status is a derived dimension separate from lifecycle state machine. Mutual exclusion precedence: (1) FULLY_REFUNDED — all Order_Vendor_Groups fully refunded; (2) PARTIALLY_REFUNDED — at least one group refunded (partial or full), not all fully refunded; (3) PAID — captured payment exists, no refunds initiated, lifecycle not terminal. CANCELLED/VOIDED are unconfirmed lifecycle proposals, not financial status values.**
+- **CD-061: Shipping address snapshot copied from chosen Address at checkout using CD-040 fields; immutable; subsequent Person Address changes do not affect Order**
 
 **Open Questions (Q-009 — PARTIALLY_RESOLVED):**
 - Status values for Order lifecycle? (pending, paid, processing, shipped, delivered, cancelled, refunded, failed_payment?)
 - Total calculation (sum of vendor groups + shipping - discounts)?
-- Shipping address snapshot?
 - Guest checkout support?
 - Reconcile existing terminology (placed, packed, shipped, delivered) with final state machines
 - CANCELLED and VOIDED lifecycle statuses — unconfirmed proposals
@@ -549,7 +552,7 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 |------|-----|-------------|-------|
 | Person | Address | 1:N | CD-008 |
 | Person | Contact_Info | 1:N | CD-008 |
-| Person | Credential | 1:1 or 1:N | CD-057 (TBD) |
+| Person | Credential | 1:1 | CD-060 |
 | Person | Consumer | 1:1 (specialization) | CD-001, CD-002 |
 | Person | Vendor | 1:1 (specialization) | CD-001, CD-002 |
 | Person | Admin | 1:1 (specialization) | CD-001, CD-003 (disjoint) |

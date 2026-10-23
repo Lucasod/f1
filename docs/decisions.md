@@ -481,13 +481,42 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Source:** MP-03 final correction for T-004  
 **Consequences:** Financial status is computed on-read or cached; two independent dimensions (lifecycle + financial); CANCELLED/VOIDED approval deferred to state machine definition (Q-009)
 
-### CD-057: Credential and Authentication Flow
-**Status:** Confirmed (MP-02)  
-**Subject:** Access credential modeling and conceptual authentication flow  
-**Decision:** `Credential` represents the access credential (e.g., password hash) and is associated with `Person`. Cardinality (1:1 or 1:N) is not yet defined. `Credential` does not store a second email and does not require a direct reference to `Contact_Info`. Login is performed by email; the email resides in `Contact_Info.Value` with `Type = email`. `Is_Primary` represents the primary contact for communication and does NOT automatically indicate which email is used for login. The `Contact_Info` record used for login must not be deleted while it is required for authentication. No `Purpose`, `Is_Login`, or similar attribute is added to `Contact_Info` solely to identify the login email. Email is not duplicated in `Person`, `Main_Info`, or `Credential`. The conceptual authentication flow is: (1) receive email and password; (2) locate `Contact_Info` matching the email (`Type = email`); (3) find the `Person` associated with that contact; (4) locate the `Credential` associated with that `Person`; (5) verify the credential and authenticate access if valid. `Login`/`Authentication` is not presumed to be a persisted entity solely because the authentication flow is represented conceptually.  
-**Justification:** Separates authentication credentials from contact information; avoids email duplication; protects login contact from deletion; keeps conceptual flow explicit without mandating persistence strategy  
-**Source:** MP-02 confirmed decisions (authentication approach)  
-**Consequences:** Credential concept added; authentication flow documented; Credential cardinality deferred (Q-029); email uniqueness for login deferred (Q-029); login contact deletion protection established
+### CD-059: Consumer and Vendor Authorization — Ownership-Based Isolation
+**Status:** Confirmed (MP-04)  
+**Subject:** Authorization model for Consumer and Vendor roles  
+**Decision:** Consumer and Vendor authorization is based exclusively on **ownership isolation** (CD-039). No generic RBAC framework is created for these roles in the MVP. Each protected operation validates that the requesting Person owns the target resource:
+- **Consumer** may only access/manage their own account, cart, and orders.
+- **Vendor** may only manage their own store, products, coupons, and Order_Vendor_Groups belonging to their store.
+- Backend validates ownership on every protected operation (e.g., `resource.ownerPersonId === currentPersonId`).
+- Cross-vendor data access is strictly prohibited.
+- Admin remains subject to its own permission model (Role + PermissionENUM per CD-004).  
+**Justification:** CD-039 mandates strict ownership isolation; a simple ownership check satisfies MVP requirements without speculative permission infrastructure; keeps Consumer/Vendor authorization separate from Admin RBAC per CD-004.  
+**Source:** MP-04 consolidation for T-103/Q-003  
+**Consequences:** Middleware-based ownership validation; no PermissionENUM for Consumer/Vendor; Admin dashboard permissions remain open (Q-003 partially resolved).
+
+### CD-060: Credential Cardinality and Login Email Uniqueness
+**Status:** Confirmed (MP-04)  
+**Subject:** Credential–Person relationship and login email constraints  
+**Decision:** 
+- **Credential cardinality:** Each `Person` has exactly **one** `Credential` (1:1). A single password hash per person. MFA, recovery credentials, and multiple credentials per person are deferred (TECHNICAL_FUTURE).
+- **Login email uniqueness:** The email used for login (Contact_Info with `Type = email`) is **globally unique** across the marketplace. The lookup flow in CD-057 (step 2: locate Contact_Info by email) assumes a single match.  
+**Justification:** CD-057 confirms the authentication flow but deferred cardinality and uniqueness (Q-029). 1:1 is the simplest correct model for MVP; global uniqueness is required for the login flow to be deterministic; single marketplace (CD-020/Q-020) makes global = marketplace-wide.  
+**Source:** MP-04 consolidation for Q-029  
+**Consequences:** Credential cardinality resolved; email uniqueness resolved; MFA/recovery remain TECHNICAL_FUTURE; Contact_Info identification remains implicit via email lookup (CD-057 step 2); no `Is_Login` flag added.
+
+### CD-061: Checkout Address Snapshot
+**Status:** Confirmed (MP-04)  
+**Subject:** Address preservation at order creation  
+**Decision:** 
+- A `Person` may have multiple `Address` records (1:N, CD-008). The first address registered becomes the primary by default; additional addresses do not automatically replace the primary.
+- At checkout, the primary address is pre-selected; the Consumer may choose any of their registered addresses.
+- If no address exists, the Consumer must register one before completing the purchase.
+- Upon `Order` creation, the chosen address fields (`Street`, `Number`, `Neighborhood`, `City`, `State` per CD-040) are **copied as an immutable snapshot** into the Order.
+- Subsequent changes to the Person's Address records **do not affect** existing Order snapshots.
+- No new entity (ShippingAddress, BillingAddress) or additional fields are introduced.  
+**Justification:** CD-040 explicitly requires historical order data preservation and leaves checkout snapshot semantics open. Snapshotting satisfies audit/historical requirements; reusing CD-040 fields avoids new entities; primary address default simplifies UX.  
+**Source:** MP-04 consolidation for T-104/Q-004  
+**Consequences:** Checkout snapshot semantics resolved; Address/Contact_Info field scope unchanged (CD-040); CEP, country, complement, address type remain deferred; Order now carries address snapshot (conceptual attribute).
 
 ---
 
@@ -608,7 +637,7 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-022 | Multi-tenancy scope | Out of scope | Q-020: Single marketplace confirmed; multi-tenancy belongs to another project |
 | D-023 | API design style | Technical / Future | Stage 1 deliverable; not decided |
 | D-024 | Frontend state management | Technical / Future | Stage 2+; not decided |
-| D-025 | Checkout address snapshots | Technical / Future | CD-040: Fields and cardinality confirmed; checkout snapshot semantics open |
+| D-025 | Checkout address snapshots | **Resolved (CD-061)** | CD-061: Snapshot semantics confirmed; uses CD-040 fields; immutable copy at Order creation |
 | D-026 | Product inactivation state | Technical / Future | CD-042: Inactive state confirmed; hard-delete referential check needed |
 | D-027 | Category cycle prevention | Technical / Future | CD-043: Hierarchy rules confirmed; cycle detection implementation required |
 | D-028 | Coupon mixed-cart discount calculation | Technical / Future | CD-050: Inclusion/exclusion rules confirmed; mixed-cart discount open; stacking/priority open |
@@ -616,7 +645,6 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-030 | Transaction currency | Technical / Future | CD-054: English UI confirmed; currency unresolved; FX service prohibited without decision |
 | D-031 | Notification infrastructure | Technical / Future | CD-055: Manual refresh MVP; WebSocket/event bus deferred |
 | D-032 | Testing configuration, CI, coverage targets | Technical / Future | CD-056: Vitest/Supertest/Playwright confirmed; TDD mandatory; payment test scenarios specified; coverage targets deferred |
-| D-033 | Credential cardinality (1:1 or 1:N per Person) | Technical / Future | CD-057: Credential associated with Person; cardinality not defined |
-| D-034 | Password hash algorithm and rotation | Technical / Future | CD-057: Credential stores hash; algorithm/rotation deferred |
-| D-035 | Credential status values and MFA | Technical / Future | CD-057: Credential status, MFA, recovery deferred |
-| D-036 | Email uniqueness for login | Technical / Future | CD-057: Login uses Contact_Info email; uniqueness constraint open (Q-029) |
+| D-033 | Password hash algorithm and rotation | Technical / Future | CD-057: Credential stores hash; algorithm/rotation deferred |
+| D-034 | Credential status values and MFA | Technical / Future | CD-057: Credential status, MFA, recovery deferred |
+| D-035 | Credential recovery/reset flow | Technical / Future | CD-057: Recovery/reset flow deferred |

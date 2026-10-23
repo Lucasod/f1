@@ -486,6 +486,104 @@ Test cases verified:
 
 ---
 
+## MP-04: Consolidação das Decisões Mínimas de Autenticação, Autorização e Endereço
+**Date:** 2026-10-23  
+**Objective:** Consolidate approved minimal decisions for authentication, authorization, and checkout address to unblock Stage 2 (Auth) and Stage 5 (Checkout) implementation  
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+
+### Results
+- **decisions.md**: Added CD-059 (Consumer/Vendor ownership-based authorization), CD-060 (Credential 1:1 + login email global uniqueness), CD-061 (Checkout address snapshot). Removed duplicate CD-057. Updated Technical/Future table: D-025 resolved (CD-061), D-033/D-036 resolved (CD-060), renumbered remaining entries.
+- **open_questions.md**: Q-003 → PARTIALLY_RESOLVED (Consumer/Vendor auth confirmed via CD-059; Admin matrix open); Q-004 → PARTIALLY_RESOLVED (checkout snapshot confirmed via CD-061; contact types pending); Q-029 → PARTIALLY_RESOLVED (credential cardinality + email uniqueness resolved via CD-060; MFA/recovery deferred).
+- **conceptual_model.md**: Updated Person (credential 1:1, ownership auth), Credential (1:1, email uniqueness), Address (snapshot semantics), Contact_Info (email uniqueness), Consumer (ownership auth), Vendor (ownership auth), Role/PermissionENUM (Admin only, 2 levels MVP), Order (shipping_address_snapshot attribute).
+- **task_list.md**: T-103, T-104 → covered_by_decision (17 total). Phase 1 status updated: 61 CD, 13 active tasks. MP sequence advanced: MP-05 next (variants + state machines).
+- **mp_log.md**: This entry added.
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| decisions.md | ~80 added, ~20 modified | 3 new CDs (59-61), duplicate CD-057 removed, Technical/Future table updated |
+| open_questions.md | ~30 modified | Q-003, Q-004, Q-029 state updates with CD references |
+| conceptual_model.md | ~50 modified | 8 concept sections updated with new confirmed rules |
+| task_list.md | ~30 modified | T-103/T-104 covered, counts updated, MP sequence advanced |
+| mp_log.md | ~60 appended | This entry |
+
+### Sources Consulted
+1. User confirmation of MP-04 minimal decisions (auth, authz, address)
+2. All 5 project documents (decisions.md, open_questions.md, conceptual_model.md, task_list.md, mp_log.md)
+3. Previously confirmed CDs (CD-001..CD-058)
+
+### Decisions Preserved
+All 61 CD-001..CD-061 remain confirmed. No decisions reverted.
+
+### New Proposals (NOT APPROVED)
+None — this MP was consolidation only.
+
+### Validation
+Decisions validated against confirmed requirements:
+- CD-059 satisfies CD-039 ownership isolation without speculative RBAC
+- CD-060 resolves CD-057 deferred cardinality/uniqueness; enables deterministic login flow
+- CD-061 resolves CD-040 open snapshot semantics; preserves historical data per CD-052
+- Admin PermissionENUM 2 levels retained for MVP; sufficiency evaluation deferred
+
+### Conceptual Blockers for MVP
+**Reduced.** T-103/T-104 blockers cleared. Remaining P1 blockers:
+- T-106b (Q-006): Product variants — blocks Stage 3
+- T-109 (Q-009): State machine values/transitions — blocks Stages 5-7
+- T-111 (Q-011): Razorpay USD/Route — blocks Stage 6
+- T-115 (Q-015): ES mapping/sync — blocks Stage 4
+- T-116 (Q-016): Coupon algorithm — blocks Stage 7
+- T-117 (Q-017): Review moderation — blocks Stage 7
+- T-118 (Q-018): Invoice trigger/storage — blocks Stage 7
+
+### Files Modified
+- `/home/workstation/source/f1/docs/decisions.md`
+- `/home/workstation/source/f1/docs/open_questions.md`
+- `/home/workstation/source/f1/docs/conceptual_model.md`
+- `/home/workstation/source/f1/docs/task_list.md`
+- `/home/workstation/source/f1/docs/mp_log.md`
+
+### Divergences, Risks, Limitations
+| Issue | Impact | Mitigation |
+|-------|--------|------------|
+| Diagram conflicts with CD-007, CD-004, CD-040, CD-043 | Implementation may follow incorrect diagram | Document conflicts; correct diagram in future MP |
+| 13 active P1 business decisions remain | High approval burden on responsible | Batch related questions; prioritize critical path |
+| Razorpay USD/Route compatibility unknown (T-111) | Blocks Stage 6 design & split payment flow | Validate early (MP-05); Stripe Connect fallback ready |
+| State machines (T-109) incomplete | Blocks Order, Payment, Refund flows | Define minimal viable states first (5-6 per level) |
+| Product variants (T-106b) open | Blocks Stage 3 product CRUD | Simple MVP: no variants; add later |
+| 14-day deadline (19/11/2026) | Tight for remaining tasks | Focus on mandatory deliverables; defer enhancements |
+
+### Task State Update (Post MP-04)
+| Phase | Tasks | Completed | Covered by Decision | In Progress | Pending |
+|-------|-------|-----------|---------------------|-------------|---------|
+| P0: Consolidation | 7 | 6 | 0 | 1 (T-007) | 0 |
+| P1: Conceptual Completion | 26 | 0 | 17 | 0 | 9 |
+| P2: Requirements | 4 | 0 | 0 | 0 | 4 |
+| P3a: Data Models | 6 | 0 | 0 | 0 | 6 |
+| P3b: API Spec | 5 | 0 | 0 | 0 | 5 |
+| P3c: Architecture | 6 | 0 | 0 | 0 | 6 |
+| P4a: Stage 2 Auth | 4 | 0 | 0 | 0 | 4 |
+| P4b: Stage 3 Vendor/Product | 5 | 0 | 0 | 0 | 5 |
+| P4c: Stage 4 Search | 3 | 0 | 0 | 0 | 3 |
+| P4d: Stage 5 Cart/Checkout | 6 | 0 | 0 | 0 | 6 |
+| P4e: Stage 6 Payments | 6 | 0 | 0 | 0 | 6 |
+| P4f: Stage 7 Reviews/Admin | 7 | 0 | 0 | 0 | 7 |
+| P5: Deploy/Demo | 9 | 0 | 0 | 0 | 9 |
+| **Total** | **128** | **6** | **17** | **1** | **104** |
+
+### Recommended Next MPs (Condensed)
+
+| MP | Objective | Prerequisites | Scope | Approval Criterion |
+|----|-----------|---------------|-------|---------------------|
+| **MP-05** | Product variants (T-106b), State machines (T-109) | MP-04 complete | Q-006, Q-009 | Variant decision; three-level state machine with transitions |
+| **MP-06** | Payment provider integration (T-111), Split flow (T-112) | MP-05 | Q-011, Q-012 | Provider abstraction verified; USD/Route validated; distribution flow diagram |
+| **MP-07** | Search, coupons, reviews, invoices (T-115, T-116, T-117, T-118) | MP-06 | Q-015, Q-016, Q-017, Q-018 | ES mapping; coupon algorithm; review policy; invoice generation |
+| **MP-08** | Currency, Conceptual model finalization (T-122, T-125, T-126) | MP-07 | Q-026, All P1 | Currency scope; versioned conceptual model signed off |
+| **MP-09+** | Requirements, data models, API, architecture, implementation... | MP-08 | P2-P5 | Per phase approval criteria |
+
+> **Note:** MPs 05-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-109 → T-111/T-112 → T-1001/T-1002.
+
+---
+
 ## MP Template for Future Entries
 
 ```

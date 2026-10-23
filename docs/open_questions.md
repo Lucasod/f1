@@ -42,26 +42,26 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ## Q-003: Role & Permission Model Completeness
 **What:** Are two permission levels (Read, Read/Write) sufficient? Resource-level permissions needed? What is the Consumer/Vendor permission model?  
 **Why:** Admin dashboard, vendor self-service, consumer features need different access granularity  
-**Dependencies:** CD-004, CD-010, CD-039  
+**Dependencies:** CD-004, CD-010, CD-039, CD-059  
 **Alternatives:**  
 - Extend PermissionENUM to per-resource actions (product:create, order:read, etc.)  
 - Policy-based (Casbin/OPA) instead of enum  
 - Keep simple enum, add resource scoping via middleware  
 **Resolution:** Approved permission matrix covering all planned features  
-**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-004: Role only for Admin; Consumer/Vendor authorization separate). Ownership isolation confirmed (CD-039: Admin manages platform, Vendor manages own store/products/orders, Consumer manages own account/cart/orders). Admin permission matrix sufficiency needs evaluation against requirements. Consumer/Vendor permission model not yet defined.
+**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-004: Role only for Admin; Consumer/Vendor authorization separate). Ownership isolation confirmed (CD-039: Admin manages platform, Vendor manages own store/products/orders, Consumer manages own account/cart/orders). **Consumer/Vendor authorization model confirmed (CD-059): ownership-based isolation, no generic RBAC.** Admin permission matrix sufficiency needs evaluation against requirements; 2-level PermissionENUM retained for MVP (not confirmed as sufficient).
 
 ---
 
 ## Q-004: Address & Contact Completeness
 **What:** Address fields, contact fields, cardinality, and checkout address semantics  
 **Why:** Checkout needs shipping/billing selection; notifications need verified primary contact; historical orders must preserve purchase-time data  
-**Dependencies:** CD-008, CD-040, CD-057, Stage 3 (vendor registration), Stage 5 (checkout)  
+**Dependencies:** CD-008, CD-040, CD-057, CD-061, Stage 3 (vendor registration), Stage 5 (checkout)  
 **Alternatives:**  
 - Add fields to existing entities  
 - Separate ShippingAddress/BillingAddress value objects  
 - Embed in Order/Order_Vendor_Group as snapshots  
 **Resolution:** Complete attribute list with validation rules per entity  
-**State:** **PARTIALLY_RESOLVED** — Address fields confirmed (CD-040: Street, Number, Neighborhood, City, State — NO CEP, country, complement, address type). Contact fields confirmed (CD-040: Type, Value, Is_Primary — NO Verified). Cardinality confirmed: Person 1:N Address, Person 1:N Contact_Info (CD-008). Login email handling confirmed: email in Contact_Info.Value with Type=email; Is_Primary is primary contact, not login indicator; login contact protected from deletion while used for auth (CD-057). Address/contact checkout address snapshot semantics remain unresolved. Historical order data must preserve purchase-time information (CD-040). Email uniqueness constraint for login and identification of which Contact_Info is used for login remain PENDING (Q-029).
+**State:** **PARTIALLY_RESOLVED** — Address fields confirmed (CD-040: Street, Number, Neighborhood, City, State — NO CEP, country, complement, address type). Contact fields confirmed (CD-040: Type, Value, Is_Primary — NO Verified). Cardinality confirmed: Person 1:N Address, Person 1:N Contact_Info (CD-008). Login email handling confirmed: email in Contact_Info.Value with Type=email; Is_Primary is primary contact, not login indicator; login contact protected from deletion while used for auth (CD-057). **Checkout address snapshot semantics confirmed (CD-061): primary address default at checkout, Consumer may choose any registered address, immutable snapshot copied to Order using CD-040 fields, subsequent Address changes do not affect existing Orders.** Email uniqueness constraint for login and identification of which Contact_Info is used for login resolved (CD-060). Allowed contact types and validation rules for `Contact_Info.Value` (e.g., phone, WhatsApp, email) remain PENDING.
 
 ---
 
@@ -381,11 +381,11 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ## Q-029: Credential, Login Email, and Authentication Integrity
 **What:** Credential cardinality, login email uniqueness, login contact identification, and credential management rules  
 **Why:** Credential is now a confirmed concept (CD-057) associated with Person; login uses email from Contact_Info; integrity rules needed for authentication flow  
-**Dependencies:** CD-008, CD-009, CD-040, CD-057, Q-004, Stage 2 (auth)  
+**Dependencies:** CD-008, CD-009, CD-040, CD-057, CD-060, Q-004, Stage 2 (auth)  
 **Alternatives:**  
 - Credential 1:1 with Person (single credential per person)  
 - Credential 1:N with Person (multiple credentials: password, MFA, recovery)  
 - Email uniqueness: global vs per-marketplace (single marketplace confirmed)  
 - Login contact identification: implicit via email lookup vs explicit flag  
 **Resolution:** Pendências catalogadas: cardinalidade de Credential (1:1 ou 1:N), unicidade do e-mail de login, identificação inequívoca da Person via e-mail, e regras de gestão de credencial. Nenhuma tem resolução de negócio confirmada.  
-**State:** **PENDING** — Credential concept confirmed (CD-057). Cardinality (1:1 or 1:N per Person) not defined. Email uniqueness for login not decided. Identification of which Contact_Info is used for login not decided (implicit via email lookup per CD-057 flow step 2). Distinção importante: o fluxo de localizar Contact_Info pelo e-mail informado está confirmado (CD-057, passo 2), mas a garantia de que esse e-mail identifica uma única Person (unicidade) e a política de troca/remoção do e-mail de login protegendo a integridade da autenticação permanecem pendentes. Credential status values, MFA support, recovery/reset flow remain TECHNICAL_FUTURE. Policy for changing/removing login email while protecting auth integrity not defined.
+**State:** **PARTIALLY_RESOLVED** — Credential concept confirmed (CD-057). **Credential cardinality resolved (CD-060): 1:1 (single credential per Person). Email uniqueness for login resolved (CD-060): globally unique. Login contact identification remains implicit via email lookup (CD-057 step 2), no `Is_Login` flag added. Credential status values, MFA support, recovery/reset flow remain TECHNICAL_FUTURE. Policy for changing/removing login email while protecting auth integrity not defined.

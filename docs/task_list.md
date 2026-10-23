@@ -28,16 +28,16 @@
 
 ## Phase 1: Conceptual Model Completion (P1)
 
-**Status after MP-02-S1:** 56 conceptual decisions confirmed (CD-001..CD-056). 28 questions reclassified: 10 RESOLVED (Q-005, Q-007, Q-008, Q-010, Q-013, Q-019, Q-020, Q-021, Q-027, Q-028), 7 PARTIALLY_RESOLVED, 8 PENDING, 3 TECHNICAL_FUTURE, 1 OUT_OF_SCOPE (Q-025).
+**Status after MP-04:** 61 conceptual decisions confirmed (CD-001..CD-061). 28 questions reclassified: 10 RESOLVED (Q-005, Q-007, Q-008, Q-010, Q-013, Q-019, Q-020, Q-021, Q-027, Q-028), 7 PARTIALLY_RESOLVED (Q-003, Q-004, Q-006, Q-009, Q-011, Q-012, Q-016), 6 PENDING (Q-001, Q-002, Q-014, Q-015, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 moved to PARTIALLY_RESOLVED.
 
-**Remaining conceptual work:** Resolve 8 PENDING + 7 PARTIALLY_RESOLVED (business rule gaps).
+**Remaining conceptual work:** Resolve 6 PENDING + 7 PARTIALLY_RESOLVED (business rule gaps).
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
 | T-101 | **COVERED** Person role model | CD-001..CD-004 confirmed: Person abstraction, Consumer+Vendor simultaneous, Admin exclusive, Role only for Admin | T-007 | — | ✅ covered_by_decision |
 | T-102 | **COVERED** CPF/CNPJ mutual exclusivity | CD-007 confirmed: exactly one, never both. Technical validation = TECHNICAL_FUTURE | T-007 | — | ✅ covered_by_decision |
-| T-103 | Resolve Q-003 Admin permission sufficiency | Evaluate 2-level PermissionENUM against Admin dashboard needs; define Consumer/Vendor auth model with ownership isolation | T-007 | Decision on Admin permission matrix; Consumer/Vendor auth approach | ⏳ pending |
-| T-104 | Resolve Q-004 Address/Contact attributes | Define cardinality and checkout address snapshot semantics | T-007 | Cardinality and checkout semantics approved | ⏳ pending |
+| T-103 | **COVERED** Admin permission sufficiency & Consumer/Vendor auth model | CD-004, CD-039, CD-059 confirmed: Role only for Admin; ownership isolation for Consumer/Vendor; no generic RBAC; 2-level PermissionENUM retained for MVP | T-007 | — | ✅ covered_by_decision |
+| T-104 | **COVERED** Address/Contact attributes & checkout snapshot | CD-040, CD-061 confirmed: Address fields (Street, Number, Neighborhood, City, State); Contact fields (Type, Value, Is_Primary); cardinality 1:N; checkout snapshot semantics (primary default, Consumer choice, immutable copy to Order) | T-007 | — | ✅ covered_by_decision |
 | T-105 | **COVERED** Vendor onboarding workflow | CD-041 confirmed: auto-publish after registration; suspension for abuse possible | T-007 | — | ✅ covered_by_decision |
 | T-106 | **COVERED** Product.Quantity as stock | CD-013 confirmed: Quantity = current stock; display ordering. Variants/reservations = PENDING (T-106b) | T-007 | — | ✅ covered_by_decision |
 | T-106b | Resolve Q-006 Variants, reservations, concurrency | Product variants/SKUs, stock reservation, backorder, optimistic locking | T-007 | Inventory model decided; concurrency strategy | ⏳ pending |
@@ -227,10 +227,11 @@ P0 (T-001..T-007)
 **Parallelizable after P3c:** P4b, P4c can run in parallel; P4d depends on P4b; P4e depends on P4d; P4f depends on P4d+P4e
 
 **Key Changes from MP-01:**
-- 15 P1 tasks now **covered_by_decision** (T-101, T-102, T-105, T-106, T-107, T-108, T-110, T-113, T-114, T-118, T-119, T-120, T-121, T-123, T-124)
-- Remaining P1: 8 tasks (8 PENDING + 7 PARTIALLY_RESOLVED business gaps - 15 covered = 8 pending + 7 partial = 15 active tasks)
+- 17 P1 tasks now **covered_by_decision** (T-101, T-102, T-103, T-104, T-105, T-106, T-107, T-108, T-110, T-113, T-114, T-118, T-119, T-120, T-121, T-123, T-124)
+- Remaining P1: 6 PENDING + 7 PARTIALLY_RESOLVED = 13 active tasks
 - Technical decisions (MongoDB, Redis, ES, S3, API style, frontend state, deploy, testing) correctly placed in P3a/P3b/P3c
 - Vendor onboarding (T-105) and Product variants (T-106b) are critical path blockers for Stage 3
+- T-103/T-104 (Auth, Address) now covered — unblocks Stage 2 (Auth) and Stage 5 (Checkout)
 
 ---
 
@@ -244,15 +245,15 @@ P0 (T-001..T-007)
 | Product variants (T-106b) open | Blocks Stage 3 product CRUD | Simple MVP: no variants; add later |
 
 **Recommended MP Sequence (Condensed):**
-1. **MP-03:** Core identity & admin auth (T-103, T-104)
-2. **MP-04:** Product variants (T-106b), Order/Payment/Vendor_Group state machines (T-109)
-3. **MP-05:** Payment provider integration (T-111), Split payment flow (T-112)
-4. **MP-06:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117)
-5. **MP-07:** Currency (T-122), Conceptual model finalization (T-125, T-126)
-6. **MP-08+:** Requirements, data models, API, architecture, implementation...
+1. **MP-04:** ~~Core identity & admin auth~~ (DONE — T-103, T-104 covered)
+2. **MP-05:** Product variants (T-106b), Order/Payment/Vendor_Group state machines (T-109)
+3. **MP-06:** Payment provider integration (T-111), Split payment flow (T-112)
+4. **MP-07:** Elasticsearch strategy (T-115), Coupon targeting/stacking (T-116), Review moderation (T-117)
+5. **MP-08:** Currency (T-122), Invoice generation (T-118), Conceptual model finalization (T-125, T-126)
+6. **MP-09+:** Requirements, data models, API, architecture, implementation...
 
 ---
 
 ## Immediate Next Action
 
-**MP-03:** Responsible reviews MP-02 changes and approves corrected baseline. Then resolve T-103 (Admin permission sufficiency + Consumer/Vendor auth model) and T-104 (Address/Contact cardinality and checkout snapshots) — unblocks Admin dashboard and checkout address design.
+**MP-05:** Resolve T-106b (Product variants) and T-109 (Order/Payment/Order_Vendor_Group state machines) — unblocks Stage 3 (Product CRUD) and Stage 5/6/7 (Order, Payment, Refund flows).
