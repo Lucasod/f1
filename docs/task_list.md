@@ -59,7 +59,7 @@
 | T-122 | Resolve Q-026 Transaction currency | CD-054: English interface confirmed; currency unresolved; FX service prohibited without decision; provider/currency validation retained | T-007 | Currency scope decision | ⏳ pending |
 | T-123 | **COVERED** Notification infrastructure | CD-055 confirmed: manual Refresh/Update button for MVP; WebSocket/event bus deferred | T-007 | — | ✅ covered_by_decision |
 | T-124 | **COVERED** Testing strategy | CD-056 confirmed: three-layer TDD (Vitest/Supertest/Playwright); RED→GREEN→REFACTOR at all layers; payment test scenarios specified; CI/coverage deferred | T-007 | — | ✅ covered_by_decision |
-| T-125 | Update conceptual_model.md | Incorporate all resolved decisions (T-103..T-123) | T-103..T-123 | File updated, versioned | ⏳ pending |
+| T-125 | **COVERED** Update conceptual_model.md | Incorporate all resolved decisions (T-103..T-123) | T-103..T-123 | File updated and versioned via MP process (MP-01..MP-07I) | ✅ covered_by_decision |
 | T-126 | Responsible review conceptual model | Sign-off on complete conceptual model | T-125 | Explicit approval recorded | ⏳ pending |
 
 ---

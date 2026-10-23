@@ -264,16 +264,15 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Vendor-issued discount code  
 **Attributes:** Vendor (ref), Code, Discount_Type, Discount_Value, Starts_At, Ends_At  
 **Relationships:** N:1 → Vendor; 1:1 → Coupon_Target; referenced by Order_Vendor_Group  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-07E):**
 - CD-026: Coupon and Coupon_Target accepted as concepts
 - CD-027: Product_List and Category_List are lists, not separate entities
-- **CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions**
+- **CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions. Coupon stacking and priority rules are resolved: no stacking of coupons from the same vendor (maximum one coupon per vendor per purchase); no automatic priority between eligible coupons; the consumer chooses which eligible coupon to apply for each vendor.**
 
 **Open Questions (Q-016 — PARTIALLY_RESOLVED):**
 - Discount_Type values (percentage, fixed, free_shipping)?
 - Usage limits (per coupon, per user, total)?
 - Mixed eligible/ineligible cart contents discount calculation?
-- Coupon stacking and priority rules?
 - Minimum order value?
 - Platform-wide coupons vs vendor-only?
 - **Coupon vs Coupon_Target attribute ownership: only Coupon_Target (section 16) currently declares Product_List and Category_List; Coupon (section 15) no longer declares these attributes. The final attribute allocation between Coupon and Coupon_Target requires a business decision**
@@ -284,13 +283,15 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 **Responsibility:** Defines which products/categories a coupon applies to  
 **Attributes:** Coupon (ref), Product_List, Category_List  
 **Relationships:** 1:1 → Coupon  
-**Confirmed Rules (MP-02):**
+**Confirmed Rules (MP-02, MP-07E):**
 - CD-026, CD-027: Target defines applicable products/categories as lists
+- **CD-050: Coupon stacking and priority rules are resolved: no stacking of coupons from the same vendor (maximum one coupon per vendor per purchase); no automatic priority between eligible coupons; the consumer chooses which eligible coupon to apply for each vendor.**
 
-**Open Questions (Q-016 — PENDING):**
+**Open Questions (Q-016 — PARTIALLY_RESOLVED):**
 - Product_List and Category_List as arrays of refs?
 - "All products" vs specific selection semantics?
 - **Coupon vs Coupon_Target attribute ownership: only Coupon_Target (section 16) currently declares Product_List and Category_List; Coupon (section 15) no longer declares these attributes. The final attribute allocation between Coupon and Coupon_Target requires a business decision**
+- Mixed eligible/ineligible cart contents discount calculation remains PENDING
 
 ---
 
