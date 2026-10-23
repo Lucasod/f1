@@ -1604,4 +1604,38 @@ All 65 CD-001..CD-065 remain confirmed. No business decisions made — 7 review 
 
 ---
 
+## MP-11 (conclusão): Aprovação do Baseline FR/NFR/AC — Encerramento da Fase P2
+**Date:** 2026-10-23  
+**Objective:** Register explicit human approval of FR/NFR/AC baseline and close P2 approval gate (T-204)  
+**Scope:** Documentation only — status update and transition record
+
+### Resultado
+- **T-204 updated to `✅ completed`** per explicit human approval
+- **P2 (Functional & Non-Functional Requirements) encerrada** — gate de aprovação passado
+- **FR/NFR/AC aprovados como baseline do MVP** com todas as pendências explicitamente documentadas
+
+### Decisão Registrada
+> "Aprovo FR/NFR/AC como baseline do MVP, mantendo todas as pendências e decisões ainda não resolvidas explicitamente documentadas."
+
+### Próxima Fase (P3) — Não Iniciada
+Conforme instruções: **não iniciar P3 nem executar T-301**. Transição será realizada sob autorização explícita separada.
+
+### Pendências Preservadas (Não Bloqueiam Baseline)
+| Item | Referência | Status |
+|------|------------|--------|
+| Moeda de transação | FR-PEND-001/006, NFR-DATA-004, Q-026 | Pendente |
+| Review moderation (7 decisões) | FR-PEND-003, Q-017 | Pendente |
+| Cálculo desconto carrinho misto | FR-PEND-004, Q-016 | Pendente |
+| Invoice generation trigger | FR-PEND-005, Q-018 | TECHNICAL_FUTURE |
+| Performance/NFR targets | NFR-PERF, NFR-AVAIL, NFR-OBS | Pendente |
+
+### Intenção Declarada
+Encerrar planejamento no estado atual e iniciar desenvolvimento orientado por TDD (RED → GREEN → REFACTOR), atualizando e corrigindo documentação conforme necessidades concretas durante implementação. Não criar novos documentos ou modelos apenas para prolongar planning. Preservar pendências de negócio e respeitar gates que exigirem decisões humanas durante o desenvolvimento.
+
+### Estado Git
+- `docs/task_list.md`: T-204 → ✅ completed
+- Nenhum commit realizado
+
+---
+
 ## MP Template for Future Entries
