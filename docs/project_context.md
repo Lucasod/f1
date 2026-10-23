@@ -1,0 +1,51 @@
+# Project Context — FS-01 Multi-Vendor E-Commerce Marketplace
+
+## Official Internship Statement
+
+**Project:** FS-01 — Multi-Vendor E-Commerce Marketplace  
+**Period:** 19/10/2026 to 19/11/2026 (estimated 14 days effort)  
+**Current Stage:** Planning and conceptual modeling (per README)
+
+## Planned Technologies
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React |
+| Backend | Node.js |
+| Database | MongoDB |
+| Search & Filtering | Elasticsearch |
+| Caching & Sessions | Redis |
+| Payments | Stripe Connect or Razorpay (test mode) |
+| Image Storage | AWS S3 |
+
+## Official Deliverables
+
+1. **Functional demonstration** — deployed or recorded
+2. **GitHub repository** — organized commits, README, setup instructions
+3. **Architecture diagram & data/API documentation**
+4. **Test results** — and performance/accuracy metrics where applicable
+5. **Final presentation** — 10 minutes
+6. **Individual reflection** — on learning and contribution
+
+## Stages Indicated in Official Statement
+
+1. Plan roles, design data schema and API list
+2. Implement JWT authentication and role-based access control
+3. Develop vendor registration, product CRUD, image upload to S3
+4. Implement search, filters, sorting with Elasticsearch
+5. Implement cart, checkout, order lifecycle; use Redis for cart and session cache
+6. Integrate payments and commissions with Stripe Connect or Razorpay (test mode)
+7. Implement reviews, coupons, PDF invoices, admin dashboard, separate frontend/backend deploy
+
+> Note: These stages guide planning but do not authorize implementation during conceptual modeling phase.
+
+## Scope Boundaries
+
+- **In scope:** Multi-vendor marketplace core domain (users, vendors, products, orders, payments, commissions, reviews, coupons, admin)
+- **Out of scope (for now):** Implementation details, specific class designs, database schema optimization, API endpoint specifications, infrastructure provisioning
+
+## Source References
+
+- Official internship statement (requirements & deliverables)
+- README.md (project description, objectives, technologies, features, status)
+- docs/modeling/conceptual-model.drawio (current conceptual diagram)
