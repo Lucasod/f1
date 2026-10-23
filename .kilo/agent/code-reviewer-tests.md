@@ -21,7 +21,7 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 - Agent searches decisions.md comprehensively (not just grep) — reads the full file or uses complete scan
 - Agent verifies whether CD-999 exists in the authoritative source
 - **If non-existence is confirmed** (full scan shows max CD-065): Finding classification: CONFIRMED — "CD-999 does not exist in decisions.md (confirmed decisions range CD-001 to CD-065). Reference is broken."
-- **If source cannot be fully verified**: Finding classification: UNCONFIRMED or OPEN_QUESTION with explicit limitation — "Could not verify CD-999; search incomplete. Full decisions.md scan required."
+- **If source cannot be fully verified**: Finding classification: UNCONFIRMED or OPEN_QUESTION with explicit limitation — "Could not verify CD-999; decisions.md was inaccessible or the search was incomplete. A full scan is required."
 - Does NOT declare reference broken based solely on grep result or partial search
 
 ## Test Case 3: Existing CD but Content Mismatch
@@ -58,8 +58,8 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 **Expected Report Content:**
 - Exact file path and line number where CD-010 is referenced
 - Search method used (e.g., "grep -n 'CD-010' docs/decisions.md" and "read docs/decisions.md full scan")
-- Exact search result (e.g., "No CD-010 found in decisions.md; confirmed decisions range CD-001 to CD-065")
-- Basis for conclusion
+- Exact search result confirming CD-010 exists with title "JWT + RBAC Required; Details Deferred" and status "Technical / Future"
+- Basis for conclusion that the reference is valid, not broken
 - Coder can verify independently by running same commands
 
 ## Test Case 7: Explicit Request Required
