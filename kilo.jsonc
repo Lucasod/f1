@@ -1,0 +1,41 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "instructions": [
+    ".kilo/rules/universal-rules.md",
+    ".kilo/rules/project-rules.md",
+    ".kilo/rules/autonomous-execution.md"
+  ],
+  "agent": {
+    "code": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "code-reviewer": "allow"
+        }
+      }
+    }
+  },
+  "indexing": {
+    "fileExtensions": [
+      ".cjs",
+      ".conf",
+      ".css",
+      ".html",
+      ".js",
+      ".json",
+      ".jsx",
+      ".lua",
+      ".md",
+      ".mdx",
+      ".mjs",
+      ".scss",
+      ".sh",
+      ".sql",
+      ".tf",
+      ".ts",
+      ".tsx",
+      ".yaml",
+      ".yml"
+    ]
+  }
+}

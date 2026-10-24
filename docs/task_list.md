@@ -94,7 +94,7 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-401 | Choose API style | REST/GraphQL/tRPC decision (Q-022 TECHNICAL_FUTURE) | T-204 | Decision recorded | ⏳ pending |
+| T-401 | Choose API style | REST/tRPC decision (Q-022 TECHNICAL_FUTURE) | T-204 | Decision recorded | ⏳ pending |
 | T-402 | Define API endpoints | Resource-oriented or operation-oriented | T-401, T-201 | Endpoint list with methods, paths | ⏳ pending |
 | T-403 | Specify request/response schemas | DTOs, validation, error formats | T-402, T-301 | OpenAPI/GraphQL schema files | ⏳ pending |
 | T-404 | Define auth & RBAC on endpoints | JWT claims, permission checks (CD-004, CD-010) | T-103, T-402 | Auth matrix per endpoint | ⏳ pending |

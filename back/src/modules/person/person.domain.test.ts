@@ -68,5 +68,22 @@ describe('Person Tax ID Validation (CPF XOR CNPJ)', () => {
       expect(result.isValid).toBe(false);
       expect(result.error).toBe(PersonTaxIdError.INVALID_CNPJ_FORMAT);
     });
+
+    it('should tolerate undefined values without crashing', () => {
+      expect(validatePersonTaxId(undefined, '12345678000199')).toMatchObject({
+        isValid: true,
+        type: 'CNPJ',
+        value: '12345678000199'
+      });
+      expect(validatePersonTaxId('12345678901', undefined)).toMatchObject({
+        isValid: true,
+        type: 'CPF',
+        value: '12345678901'
+      });
+      expect(validatePersonTaxId(undefined, undefined)).toMatchObject({
+        isValid: false,
+        error: PersonTaxIdError.NEITHER_PROVIDED
+      });
+    });
   });
 });

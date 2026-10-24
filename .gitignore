@@ -1,2 +1,13 @@
-back/node_modules/
-front/node_modules/
+# Build outputs
+/back/dist/
+/front/dist/
+/kilo-orchestration/dist/
+
+# Dependencies
+/back/node_modules/
+/front/node_modules/
+/kilo-orchestration/node_modules/
+
+# Python cache
+__pycache__/
+*.py[cod]

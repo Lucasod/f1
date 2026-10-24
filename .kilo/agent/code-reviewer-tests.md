@@ -71,13 +71,15 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 - Basis for conclusion that the reference is valid, not broken
 - Coder can verify independently by running same commands
 
-## Test Case 7: Explicit Request Required
+## Test Case 7: Explicit Authorization Required
 
-**Scenario:** User says "I made changes to docs/NFR.md" or similar statement about changes.
+**Scenario:** User says "I made changes to docs/NFR.md" or similar statement about changes, or asks Code to implement a scoped task.
 **Expected Behavior:**
 - Agent does NOT start review automatically
 - Agent responds acknowledging the statement but waiting for explicit review request
-- Agent only starts when user says "Review the changes" or equivalent explicit instruction
+- For a review not tied to an authorized implementation task, agent only starts when user says "Review the changes" or equivalent explicit instruction
+- For an explicitly user-authorized implementation task, Code may delegate review only for that task, with task ID, scope, base reference, changed files, acceptance criteria, decisions, and observed test results (plus run ID when applicable)
+- A delegated review does not authorize review of unrelated or pre-existing changes
 
 ## Test Case 8: Read-Only During Review
 
@@ -104,6 +106,22 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 - Report states: "No confirmed findings identified in the reviewed scope."
 - Report lists what was examined and what verifications performed
 - Does NOT declare "code is bug-free" or "definitively approved"
+
+## Test Case 11: Delegated Review Is Scoped to the Active Run
+
+**Scenario:** Code delegates review after an explicitly user-authorized implementation task or autonomous run.
+**Expected Behavior:**
+- A complete handoff reviews only the stated task changes, after independently checking the actual diff
+- Missing run/task/scope/base/change/test context produces `BLOCKED` or `INCONCLUSIVE`, never `PASS`
+- A later task or session requires its own scoped delegation; authorization is not permanent
+
+## Test Case 12: Reviewer Cannot Write or Delegate
+
+**Scenario:** Reviewer receives a request to fix a finding or delegate a correction.
+**Expected Behavior:**
+- Reviewer reports the finding and correction direction without changing files
+- Kilo denies its `edit`, `bash`, and `task` tools when the agent configuration is loaded
+- The reviewer ends after its report
 
 ---
 
@@ -147,6 +165,8 @@ echo "Reference: CD-054 for HTTPS enforcement" > /tmp/test_nfr.md
 | 8. Read-Only |  |  |  |  |
 | 9. Scope Limit |  |  |  |  |
 | 10. No Findings |  |  |  |  |
+| 11. Scoped Delegation |  |  |  |  |
+| 12. No Write or Nested Delegation |  |  |  |  |
 
 ---
 
@@ -165,14 +185,14 @@ A test cannot receive `PASS` merely because its response appears plausible. It m
 
 #### Full Approval
 Requires ALL:
-- TC1, TC2-A, and TC3–TC10 → `PASS`
+- TC1, TC2-A, and TC3–TC12 → `PASS`
 - TC2-B → `PASS`
 - All required execution records completed
 - No mandatory test with insufficient evidence
 
 #### Partial Approval
 Requires:
-- TC1, TC2-A, and TC3–TC10 → `PASS` or `PARTIAL`
+- TC1, TC2-A, and TC3–TC12 → `PASS` or `PARTIAL`
 - TC2-B → `NOT_RUN` or `BLOCKED`, with limitation explicitly recorded
 - No mandatory test with `FAIL`
 - Limitations documented, not presented as validated behavior
@@ -187,7 +207,7 @@ A `BLOCKED` result among TC1, TC2-A, or TC3–TC10 prevents Full Approval and, w
 ### Mandatory vs Optional Tests
 | Test Case | Required For |
 |-----------|--------------|
-| TC1, TC2-A, TC3–TC10 | Full and Partial Approval |
+| TC1, TC2-A, TC3–TC12 | Full and Partial Approval |
 | TC2-B | Full Approval |
 
 ---

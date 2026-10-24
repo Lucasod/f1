@@ -16,9 +16,15 @@ export interface PersonTaxIdResult {
 
 const ONLY_DIGITS = /^\d+$/;
 
-export function validatePersonTaxId(cpf: string, cnpj: string): PersonTaxIdResult {
-  const hasCpf = cpf.trim().length > 0;
-  const hasCnpj = cnpj.trim().length > 0;
+function normalizeTaxId(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function validatePersonTaxId(cpf: string | null | undefined, cnpj: string | null | undefined): PersonTaxIdResult {
+  const safeCpf = normalizeTaxId(cpf);
+  const safeCnpj = normalizeTaxId(cnpj);
+  const hasCpf = safeCpf.length > 0;
+  const hasCnpj = safeCnpj.length > 0;
 
   if (hasCpf && hasCnpj) {
     return { isValid: false, error: PersonTaxIdError.BOTH_PROVIDED };
@@ -29,22 +35,20 @@ export function validatePersonTaxId(cpf: string, cnpj: string): PersonTaxIdResul
   }
 
   if (hasCpf) {
-    const cleanCpf = cpf.trim();
-    if (!ONLY_DIGITS.test(cleanCpf)) {
+    if (!ONLY_DIGITS.test(safeCpf)) {
       return { isValid: false, error: PersonTaxIdError.INVALID_CPF_FORMAT };
     }
-    if (cleanCpf.length !== 11) {
+    if (safeCpf.length !== 11) {
       return { isValid: false, error: PersonTaxIdError.INVALID_CPF_LENGTH };
     }
-    return { isValid: true, type: 'CPF', value: cleanCpf };
+    return { isValid: true, type: 'CPF', value: safeCpf };
   }
 
-  const cleanCnpj = cnpj.trim();
-  if (!ONLY_DIGITS.test(cleanCnpj)) {
+  if (!ONLY_DIGITS.test(safeCnpj)) {
     return { isValid: false, error: PersonTaxIdError.INVALID_CNPJ_FORMAT };
   }
-  if (cleanCnpj.length !== 14) {
+  if (safeCnpj.length !== 14) {
     return { isValid: false, error: PersonTaxIdError.INVALID_CNPJ_LENGTH };
   }
-  return { isValid: true, type: 'CNPJ', value: cleanCnpj };
+  return { isValid: true, type: 'CNPJ', value: safeCnpj };
 }
