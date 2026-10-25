@@ -24,6 +24,21 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertRegex(frontmatter, r"(?m)^\s*task:\s*deny\s*$")
         self.assertRegex(frontmatter, r"(?m)^\s*bash:\s*deny\s*$")
 
+    def test_developer_is_implementation_agent_with_edit_and_bash(self):
+        developer = (ROOT / ".kilo/agent/code-developer.md").read_text()
+        frontmatter = developer.split("---", 2)[1]
+
+        self.assertRegex(frontmatter, r"(?m)^mode:\s*subagent\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*edit:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*bash:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*task:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*webfetch:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*websearch:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*read:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*glob:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*grep:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*list:\s*allow\s*$")
+
     def test_orchestration_rules_define_bounded_review_and_resume(self):
         rules = (ROOT / ".kilo/rules/autonomous-execution.md").read_text()
 
@@ -39,6 +54,25 @@ class AgentConfigurationTests(unittest.TestCase):
         ):
             with self.subTest(required_term=required_term):
                 self.assertIn(required_term.lower(), rules.lower())
+
+    def test_orchestrator_is_read_only_with_developer_and_reviewer_delegation(self):
+        orchestrator = (ROOT / ".kilo/agent/code-orchestrator.md").read_text()
+        frontmatter = orchestrator.split("---", 2)[1]
+
+        self.assertRegex(frontmatter, r"(?m)^mode:\s*primary\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*edit:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*bash:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*webfetch:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*websearch:\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*read:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*glob:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*grep:\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s*list:\s*allow\s*$")
+
+        self.assertRegex(frontmatter, r"(?m)^\s*task:\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s+\"\*\":\s*deny\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s+\"code-developer\":\s*allow\s*$")
+        self.assertRegex(frontmatter, r"(?m)^\s+\"code-reviewer\":\s*allow\s*$")
 
 
 if __name__ == "__main__":
