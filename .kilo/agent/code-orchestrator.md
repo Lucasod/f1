@@ -1,23 +1,23 @@
 ---
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-description: Orchestrates task execution, coordinates Code agent, manages run records, and enforces autonomous execution contract
+description: Orchestrates autonomous execution runs; delegates implementation to code-developer and reviews to code-reviewer via task tool; read-only except for task delegation
 mode: primary
 model: kilo/nvidia/nemotron-3-ultra-550b-a55b:free
-steps: 30
+steps: 50
 hidden: false
-color: "#4A90E2"
+color: "#00BFFF"
 permission:
-  bash: allow
   read: allow
   glob: allow
   grep: allow
-  edit: allow
   list: allow
-  task: allow
-  webfetch: allow
-  websearch: allow
+  edit: deny
+  bash: deny
+  task:
+    "*": deny
+    "code-developer": allow
+    "code-reviewer": allow
+  webfetch: deny
+  websearch: deny
 ---
 # Code Orchestrator Agent — Task Orchestration & Autonomous Execution Management
 

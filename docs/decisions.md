@@ -436,13 +436,13 @@
 **Source:** MP-02 confirmed decisions (Q-024)  
 **Consequences:** Three compose files (root, backend, frontend); backend owns infra dependencies; port/volume conflict avoidance
 
-### CD-054: Currency and Localization — English Interface
-**Status:** Confirmed (MP-02)  
+### CD-054: Currency and Localization — English Interface, BRL Currency
+**Status:** Confirmed (MP-02, updated with user decision)  
 **Subject:** Interface language and currency scope  
-**Decision:** The interface language is English. The transaction currency is unresolved. Do not infer USD merely from the English interface. Do not add a currency conversion or FX service without a confirmed requirement. Preserve the payment-provider/currency compatibility validation required by Q-011 and Q-012.  
-**Justification:** Explicit language decision; currency explicitly open; prevents assumptions  
-**Source:** MP-02 confirmed decisions (Q-026)  
-**Consequences:** English UI confirmed; currency open; FX service prohibited without decision; provider/currency validation retained
+**Decision:** The interface language is English. The transaction currency for the MVP is **BRL (Brazilian Real)**. Do not infer USD merely from the English interface. Do not add a currency conversion or FX service without a confirmed requirement. Preserve the payment-provider/currency compatibility validation required by Q-011 and Q-012 (Stripe Connect supports BRL in Brazil per CD-064).  
+**Justification:** Explicit language decision; currency explicitly decided as BRL for MVP scope; prevents assumptions  
+**Source:** MP-02 confirmed decisions (Q-026); user explicit decision "Coloca BRL"  
+**Consequences:** English UI confirmed; transaction currency = BRL; FX service prohibited without decision; provider/currency validation retained (Stripe Connect supports BRL in Brazil per CD-064)
 
 ### CD-055: Notifications — Manual Refresh MVP
 **Status:** Confirmed (MP-02)  

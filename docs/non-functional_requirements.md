@@ -171,11 +171,11 @@ Each requirement is categorized by domain and references the confirmed decisions
 
 **Title:** Transaction Currency Definition
 
-**Description:** The transaction currency for the marketplace has not been defined. The interface language is confirmed as English (CD-054), but the currency remains unresolved.
+**Description:** The transaction currency for the marketplace has been defined as **BRL (Brazilian Real)** for the MVP scope. The interface language is confirmed as English (CD-054). Stripe Connect Separate Charges and Transfers supports BRL in Brazil (CD-064).
 
-**Reference:** Q-026, CD-054
+**Reference:** Q-026, CD-054, CD-064
 
-**Status:** PENDING
+**Status:** **DEFINED** (BRL definido para MVP)
 
 ---
 
@@ -417,7 +417,7 @@ Each requirement is categorized by domain and references the confirmed decisions
 | NFR-DATA-001 | Data | CD-049 | DEFINED |
 | NFR-DATA-002 | Data | CD-036, CD-061 | DEFINED |
 | NFR-DATA-003 | Data | CD-033 | DEFINED |
-| NFR-DATA-004 | Data | Q-026 | PENDING |
+| NFR-DATA-004 | Data | Q-026, CD-054, CD-064 | **DEFINED** |
 | NFR-DATA-005 | Data | CD-007 | PARTIALLY_DEFINED |
 | NFR-PERF-001 | Performance | — | PENDING |
 | NFR-PERF-002 | Performance | — | PENDING |

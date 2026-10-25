@@ -5,7 +5,7 @@ import type {
   CodeReviewReport,
   CodeReviewRequest,
   ConsolidatedTaskReport,
-  OrchestrationAgentPort,
+  AgentDelegationPort,
   OrchestratedTaskStatus,
   ReviewVerdict,
   TaskClassification,
@@ -74,6 +74,18 @@ function expandDependencies(
   return [...dependencies];
 }
 
+/**
+ * Parses a backlog markdown table into BacklogTask objects.
+ *
+ * Dependency references in the markdown are collected as strings during parsing.
+ * Validation of dependency existence (i.e., whether referenced tasks actually exist
+ * in the backlog) is DEFERRED to the classification phase (`classifyBacklogTasks`).
+ * This function only extracts the raw dependency identifiers from the markdown cell.
+ *
+ * @param markdown - Backlog markdown content with pipe-separated table rows
+ * @returns Array of BacklogTask with dependencies as string arrays (may include invalid refs)
+ * @throws Error if duplicate task IDs are found in the backlog
+ */
 export function parseBacklogTasks(markdown: string): BacklogTask[] {
   const rows: ParsedBacklogRow[] = [];
   let phase = '';
@@ -331,7 +343,7 @@ async function executeEligibleTask(
   task: BacklogTask,
   classification: TaskClassification,
   request: TaskDelegationRequest,
-  agents: OrchestrationAgentPort,
+  agents: AgentDelegationPort,
   failureTracker?: SelfCorrectionEngine,
 ): Promise<ConsolidatedTaskReport> {
   if (
@@ -511,7 +523,7 @@ export class SequentialTaskOrchestrator {
   private pendingExecution: Promise<void> = Promise.resolve();
 
   public constructor(
-    private readonly agents: OrchestrationAgentPort,
+    private readonly agents: AgentDelegationPort,
     private readonly failureTracker?: SelfCorrectionEngine,
   ) {}
 
@@ -534,10 +546,14 @@ export class SequentialTaskOrchestrator {
     const execution = this.pendingExecution.then(() =>
       executeEligibleTask(task, classification, request, this.agents, this.failureTracker),
     );
-    this.pendingExecution = execution.then(
-      () => undefined,
-      () => undefined,
-    );
+    // Ensure errors are caught and logged, but don't break the chain for subsequent tasks
+    this.pendingExecution = execution
+      .catch((error: Error) => {
+        // Log error for debugging; chain continues with resolved promise
+        console.error(`[SequentialTaskOrchestrator] Task ${taskId} execution failed: ${error.message}`);
+        return undefined;
+      })
+      .then(() => undefined);
     return execution;
   }
 }

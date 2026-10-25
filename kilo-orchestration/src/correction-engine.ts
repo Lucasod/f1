@@ -17,8 +17,22 @@ import {
 import * as crypto from 'crypto';
 import * as path from 'path';
 
+/**
+ * Actions that are allowed without a file path.
+ * Currently only 'retry' is pathless. If additional pathless actions are needed
+ * (e.g., 'wait', 'recheck'), add them to this set.
+ * Note: Adding new pathless actions requires updating the authorization logic
+ * in isActionAuthorized() and corresponding tests.
+ */
 const PATHLESS_ACTIONS = new Set(['retry']);
 
+/**
+ * Self-correction engine for tracking and managing correction attempts
+ * within the autonomous execution contract.
+ *
+ * Enforces attempt limits (max 3 per failure, max 10 total) and
+ * authorization policies (allowed paths, blocked actions, review-required files).
+ */
 export class SelfCorrectionEngine {
   private state: SelfCorrectionState;
   private config: SelfCorrectionConfig;
@@ -71,13 +85,23 @@ export class SelfCorrectionEngine {
   }
 
   public getState(): SelfCorrectionState {
+    /** Returns a deep clone of the current engine state. */
     return structuredClone(this.state);
   }
 
   public getConfig(): SelfCorrectionConfig {
+    /** Returns a deep clone of the engine configuration. */
     return structuredClone(this.config);
   }
 
+  /**
+   * Records a new failure for tracking correction attempts.
+   * @param category - Failure category (TRANSIENT, DETERMINISTIC_TEST_BUILD, etc.)
+   * @param message - Human-readable failure description
+   * @param context - Additional structured context data
+   * @returns The recorded failure record with generated ID
+   * @throws Error if validation fails
+   */
   public recordFailure(
     category: FailureCategory,
     message: string,
@@ -104,15 +128,30 @@ export class SelfCorrectionEngine {
     return structuredClone(failure);
   }
 
+  /**
+   * Retrieves a failure record by ID.
+   * @param failureId - The failure identifier
+   * @returns The failure record or undefined if not found
+   */
   public getFailure(failureId: string): FailureRecord | undefined {
     const failure = this.state.failures.find(f => f.id === failureId);
     return failure ? structuredClone(failure) : undefined;
   }
 
+  /**
+   * Retrieves all failures matching a category.
+   * @param category - The failure category to filter by
+   * @returns Array of matching failure records
+   */
   public getFailuresByCategory(category: FailureCategory): FailureRecord[] {
     return structuredClone(this.state.failures.filter(f => f.category === category));
   }
 
+  /**
+   * Checks if a correction attempt is allowed for the given failure.
+   * @param failureId - The failure identifier
+   * @returns True if attempts remain within per-failure and total limits
+   */
   public canAttemptCorrection(failureId: string): boolean {
     const failure = this.getFailure(failureId);
     if (!failure) return false;
@@ -122,6 +161,13 @@ export class SelfCorrectionEngine {
     return true;
   }
 
+  /**
+   * Checks if an action is authorized for a given file path.
+   * Enforces blocked actions, path allowlists, and review-required patterns.
+   * @param action - The action to authorize (e.g., 'edit', 'retry')
+   * @param filePath - Optional file path; required for file-changing actions
+   * @returns True if the action is authorized
+   */
   public isActionAuthorized(action: string, filePath?: string): boolean {
     // Check blocked actions
     const normalizedAction = action.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -145,27 +191,48 @@ export class SelfCorrectionEngine {
       }
     }
 
-    // Check allowed paths
+    // Check allowed paths using canonical resolution
     if (filePath) {
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      if (
-        path.posix.isAbsolute(normalizedPath) ||
-        /^[a-zA-Z]:\//.test(normalizedPath) ||
-        normalizedPath.split('/').includes('..')
-      ) {
+      // Fully decode URL encoding (handle multiple layers of encoding)
+      let decodedPath = filePath;
+      let prevDecoded = '';
+      while (decodedPath !== prevDecoded) {
+        prevDecoded = decodedPath;
+        try {
+          decodedPath = decodeURIComponent(decodedPath);
+        } catch {
+          break; // Invalid encoding, stop decoding
+        }
+      }
+      // Normalize path separators
+      const normalizedPath = decodedPath.replace(/\\/g, '/');
+
+      // Reject absolute paths and Windows drive paths
+      if (path.posix.isAbsolute(normalizedPath) || /^[a-zA-Z]:\//.test(normalizedPath)) {
         return false;
       }
-      const allowed = this.config.allowedCorrectionPaths.some(allowedPath => {
-        const normalizedAllowedPath = path.posix.normalize(
-          allowedPath.replace(/\\/g, '/'),
-        ).replace(/\/$/, '');
-        const resolvedPath = path.posix.normalize(normalizedPath);
+
+      // Use canonical resolution: resolve both requested and allowed paths
+      // against a common base to prevent traversal bypasses
+      const basePath = path.posix.resolve('/');
+      const resolvedRequested = path.posix.resolve(basePath, normalizedPath);
+
+      // Ensure the resolved path is still under the base (no escape via ..)
+      if (!resolvedRequested.startsWith(basePath)) {
+        return false;
+      }
+
+const allowed = this.config.allowedCorrectionPaths.some(allowedPath => {
+        const normalizedAllowed = allowedPath.replace(/\\/g, '/').replace(/\/$/, '');
+        const resolvedAllowed = path.posix.resolve(basePath, normalizedAllowed);
+
+        // Check if requested path is within allowed path
         return (
-          normalizedAllowedPath.length > 0 &&
-          (resolvedPath === normalizedAllowedPath ||
-            resolvedPath.startsWith(`${normalizedAllowedPath}/`))
+          resolvedRequested === resolvedAllowed ||
+          resolvedRequested.startsWith(`${resolvedAllowed}/`)
         );
       });
+
       if (!allowed) {
         return false;
       }
@@ -174,6 +241,16 @@ export class SelfCorrectionEngine {
     return true;
   }
 
+  /**
+   * Attempts a correction for a recorded failure.
+   * Validates authorization, increments attempt counters, and records the attempt.
+   * @param failureId - The failure identifier
+   * @param action - The corrective action (e.g., 'edit', 'retry')
+   * @param description - Human-readable description of the correction
+   * @param filePath - Optional file path for file-changing actions
+   * @returns The recorded correction attempt
+   * @throws Error if failure not found, limits exceeded, or action not authorized
+   */
   public attemptCorrection(
     failureId: string,
     action: string,
@@ -216,6 +293,12 @@ export class SelfCorrectionEngine {
     return structuredClone(attempt);
   }
 
+  /**
+   * Completes a correction attempt with its result.
+   * @param failureId - The failure identifier
+   * @param result - The correction result (status, message, evidence)
+   * @throws Error if no active correction or invalid result
+   */
   public completeCorrection(failureId: string, result: CorrectionResult): void {
     const correction = this.state.corrections
       .filter(c => c.failureId === failureId)
@@ -243,12 +326,23 @@ export class SelfCorrectionEngine {
     }
   }
 
+  /**
+   * Checks if a failure has reached its maximum allowed attempts.
+   * @param failureId - The failure identifier
+   * @returns True if the failure's attempt count exceeds maxAttempts
+   */
   public hasReachedMaxAttempts(failureId: string): boolean {
     const failure = this.getFailure(failureId);
     if (!failure) return false;
     return failure.attempt > failure.maxAttempts;
   }
 
+  /**
+   * Checks if recent correction attempts show no progress.
+   * No progress = last 2 attempts have identical status AND message.
+   * @param failureId - The failure identifier
+   * @returns True if last 2 completed attempts show no progress
+   */
   public hasNoProgress(failureId: string): boolean {
     const failure = this.getFailure(failureId);
     if (!failure) return false;
@@ -264,6 +358,11 @@ export class SelfCorrectionEngine {
            last.result?.message === prev.result?.message;
   }
 
+  /**
+   * Determines if correction should stop for a failure.
+   * @param failureId - The failure identifier
+   * @returns Object with shouldStop flag and reason
+   */
   public shouldStopCorrecting(failureId: string): { shouldStop: boolean; reason: string } {
     const failure = this.getFailure(failureId);
     if (!failure) return { shouldStop: false, reason: '' };
@@ -283,14 +382,29 @@ export class SelfCorrectionEngine {
     return { shouldStop: false, reason: '' };
   }
 
+  /**
+   * Gets all failures that still have remaining attempts.
+   * @returns Array of pending failure records
+   */
   public getPendingFailures(): FailureRecord[] {
     return structuredClone(this.state.failures.filter(f => f.attempt <= f.maxAttempts));
   }
 
+  /**
+   * Serializes the engine state and configuration to JSON.
+   * @returns JSON string containing state and config
+   */
   public toJSON(): string {
     return JSON.stringify({ state: this.state, config: this.config });
   }
 
+  /**
+   * Deserializes a SelfCorrectionEngine from JSON.
+   * Validates state, config, and config/state consistency.
+   * @param json - JSON string from toJSON()
+   * @returns Restored SelfCorrectionEngine instance
+   * @throws Error if JSON is invalid, validation fails, or config/state mismatch
+   */
   public static fromJSON(json: string): SelfCorrectionEngine {
     const parsed: unknown = JSON.parse(json);
     if (!parsed || typeof parsed !== 'object') {
@@ -309,6 +423,22 @@ export class SelfCorrectionEngine {
       const configValidation = validateSelfCorrectionConfig(config);
       if (!configValidation.isValid) {
         throw new Error(`Invalid self-correction config: ${configValidation.errors.join(', ')}`);
+      }
+
+      // Validate config/state consistency
+      if (state.maxAttemptsPerFailure !== config.maxAttemptsPerFailure) {
+        throw new Error(
+          `Config/state mismatch: state.maxAttemptsPerFailure (${state.maxAttemptsPerFailure}) !== config.maxAttemptsPerFailure (${config.maxAttemptsPerFailure})`
+        );
+      }
+      if (state.totalAttempts !== undefined && config.maxTotalAttempts !== undefined) {
+        // totalAttempts in state is the current count, maxTotalAttempts in config is the limit
+        // They don't need to match, but we can check that totalAttempts doesn't exceed maxTotalAttempts
+        if (state.totalAttempts > config.maxTotalAttempts) {
+          throw new Error(
+            `Config/state mismatch: state.totalAttempts (${state.totalAttempts}) exceeds config.maxTotalAttempts (${config.maxTotalAttempts})`
+          );
+        }
       }
     }
 

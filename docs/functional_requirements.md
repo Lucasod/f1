@@ -1668,21 +1668,21 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Title:** Transaction Currency Definition
 
-**Description:** The transaction currency for the marketplace has not been definitively chosen. The interface language is confirmed as English, but the currency remains unresolved.
+**Description:** The transaction currency for the marketplace has been defined as **BRL (Brazilian Real)** for the MVP scope. The interface language is confirmed as English (CD-054). Stripe Connect Separate Charges and Transfers supports BRL in Brazil (CD-064).
 
 **Actors:** System
 
-**Category:** Pendente
+**Category:** Obrigatório
 
-**Origin:** Q-026; CD-054
+**Origin:** Q-026; CD-054, CD-064
 
 **Concepts:** Price, Payment, Wallet, Transaction
 
-**Affected Behavior:** All monetary values displayed and processed depend on currency choice. Payment provider integration may have currency constraints.
+**Affected Behavior:** All monetary values displayed and processed use BRL. Payment provider integration validated for BRL in Brazil.
 
-**Decision Required:** Define transaction currency (BRL, USD, or other). Validate Stripe Connect compatibility with chosen currency in Brazil.
+**Decision Required:** None — currency defined as BRL.
 
-**Status:** Pendente
+**Status:** **Resolvido** (BRL definido para MVP)
 
 ---
 
@@ -1788,21 +1788,21 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Title:** Transaction Currency for Wallet and Transactions
 
-**Description:** The currency used for Wallet balances and Transaction amounts has not been definitively chosen.
+**Description:** The currency used for Wallet balances and Transaction amounts has been defined as **BRL (Brazilian Real)** for the MVP scope.
 
 **Actors:** Vendor, System
 
-**Category:** Pendente
+**Category:** Obrigatório
 
-**Origin:** Q-026
+**Origin:** Q-026; CD-054, CD-064
 
 **Concepts:** Wallet, Transaction
 
-**Affected Behavior:** All financial calculations and vendor payouts depend on currency choice.
+**Affected Behavior:** All financial calculations and vendor payouts use BRL.
 
-**Decision Required:** Define transaction currency.
+**Decision Required:** None — currency defined as BRL.
 
-**Status:** Pendente
+**Status:** **Resolvido** (BRL definido para MVP)
 
 ---
 
@@ -1865,12 +1865,12 @@ Non-functional requirements are covered in the separate NFR document.
 | FR-HIST-001 | History | Obrigatório | CD-033 | - |
 | FR-HIST-002 | History | Obrigatório | CD-052 | Q-021 |
 | FR-DATA-001 | Data | Derivado | CD-057, CD-060 | Q-029 |
-| FR-PEND-001 | Currency | Pendente | Q-026, CD-054 | Q-026 |
+| FR-PEND-001 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
 | FR-PEND-002 | Search | Pendente | Q-015 | Q-015 |
 | FR-PEND-003 | Reviews | Pendente | Q-017 | Q-017 |
 | FR-PEND-004 | Coupons | Pendente | Q-016 | Q-016 |
 | FR-PEND-005 | Invoices | Pendente | Q-018 | Q-018 |
-| FR-PEND-006 | Currency | Pendente | Q-026 | Q-026 |
+| FR-PEND-006 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
 
 ---
 
@@ -1923,8 +1923,8 @@ Non-functional requirements are covered in the separate NFR document.
 | Historical Records | 2 | 2 | 0 | 0 |
 | Data Integrity | 1 | 0 | 1 | 0 |
 | **Subtotal (Main FRs)** | **53** | **48** | **5** | **0** |
-| **Pending Requirements (Section 4)** | **6** | **0** | **0** | **6** |
-| **Grand Total** | **59** | **48** | **5** | **6** |
+| **Pending Requirements (Section 4)** | **6** | **2** | **0** | **4** |
+| **Grand Total** | **59** | **50** | **5** | **4** |
 
 ---
 

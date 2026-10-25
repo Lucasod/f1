@@ -190,7 +190,7 @@ export interface CodeReviewRequest {
   acceptanceCriteria: string;
 }
 
-export interface OrchestrationAgentPort {
+export interface AgentDelegationPort {
   delegateToCode(request: TaskDelegationRequest): Promise<CodeExecutionReport>;
   reviewWithCodeReviewer(request: CodeReviewRequest): Promise<CodeReviewReport>;
 }

@@ -220,6 +220,24 @@ describe('SelfCorrectionEngine', () => {
       )).toThrow('not authorized');
     });
 
+    it('should reject URL-encoded path traversal attempts', () => {
+      const failure = engine.recordFailure('DETERMINISTIC_TEST_BUILD', 'Test fail', {});
+      // URL-encoded ../ as %2e%2e%2f
+      expect(() => engine.attemptCorrection(
+        failure.id,
+        'edit',
+        'URL encoded traversal',
+        'kilo-orchestration/src/..%2f..%2fetc%2fpasswd',
+      )).toThrow('not authorized');
+      // Double URL encoding
+      expect(() => engine.attemptCorrection(
+        failure.id,
+        'edit',
+        'Double URL encoded traversal',
+        'kilo-orchestration/src/..%252f..%252fetc%252fpasswd',
+      )).toThrow('not authorized');
+    });
+
     it('should reject file-changing corrections that omit the target path', () => {
       const failure = engine.recordFailure('DETERMINISTIC_TEST_BUILD', 'Test fail', {});
       expect(() => engine.attemptCorrection(
@@ -440,6 +458,26 @@ describe('SelfCorrectionEngine', () => {
       const state = restored.getState();
       expect(state.corrections).toHaveLength(1);
       expect(state.corrections[0].result?.status).toBe('SUCCEEDED');
+    });
+
+    it('should reject JSON with mismatched maxAttemptsPerFailure between state and config', () => {
+      engine.recordFailure('TRANSIENT', 'Test', {});
+      const json = JSON.parse(engine.toJSON());
+      json.state.maxAttemptsPerFailure = 3;
+      json.config.maxAttemptsPerFailure = 5;
+      expect(() => SelfCorrectionEngine.fromJSON(JSON.stringify(json))).toThrow(
+        'Config/state mismatch: state.maxAttemptsPerFailure (3) !== config.maxAttemptsPerFailure (5)'
+      );
+    });
+
+    it('should reject JSON where state.totalAttempts exceeds config.maxTotalAttempts', () => {
+      engine.recordFailure('TRANSIENT', 'Test', {});
+      const json = JSON.parse(engine.toJSON());
+      json.state.totalAttempts = 15;
+      json.config.maxTotalAttempts = 10;
+      expect(() => SelfCorrectionEngine.fromJSON(JSON.stringify(json))).toThrow(
+        'Config/state mismatch: state.totalAttempts (15) exceeds config.maxTotalAttempts (10)'
+      );
     });
   });
 

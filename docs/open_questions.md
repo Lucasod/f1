@@ -350,8 +350,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - BRL only, English interface (MVP)  
 - Multi-currency with exchange rate service  
 - i18n framework from start  
-**Resolution:** Scope decision recorded  
-**State:** **PARTIALLY_RESOLVED** — English interface confirmed (CD-054: The interface language is English. The transaction currency is unresolved. Do not infer USD merely from the English interface. Do not add a currency conversion or FX service without a confirmed requirement. Preserve the payment-provider/currency compatibility validation required by Q-011 and Q-012).
+**Resolution:** Currency decided as BRL for MVP scope. English interface confirmed (CD-054). Do not add a currency conversion or FX service without a confirmed requirement. Preserve the payment-provider/currency compatibility validation required by Q-011 and Q-012 (Stripe Connect supports BRL in Brazil).  
+**State:** **RESOLVED** — Transaction currency defined as BRL for MVP. English interface confirmed (CD-054). Stripe Connect Separate Charges and Transfers confirmed with BRL currency (CD-064). No FX service or multi-currency in MVP.
 
 ---
 

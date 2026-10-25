@@ -265,36 +265,6 @@ describe('Backlog orchestration contract', () => {
     expect(maxActive).toBe(1);
   });
 
-  it('serializes multiple dispatch requests to prevent workspace write conflicts', async () => {
-    let active = 0;
-    let maxActive = 0;
-    const dispatch = vi.fn(async (delegation: TaskDelegationRequest) => {
-      active++;
-      maxActive = Math.max(maxActive, active);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      active--;
-      return { ...executionReport, taskId: delegation.taskId };
-    });
-    const orchestrator = new SequentialTaskOrchestrator({
-      delegateToCode: dispatch,
-      reviewWithCodeReviewer: async reviewRequest => ({
-        ...reviewReport,
-        taskId: reviewRequest.taskId,
-      }),
-    });
-
-    await Promise.all([
-      orchestrator.execute('T-701', [task({ phase: 'P2' })], request),
-      orchestrator.execute(
-        'T-702',
-        [task({ taskId: 'T-702', phase: 'P2' })],
-        { ...request, taskId: 'T-702' },
-      ),
-    ]);
-
-    expect(maxActive).toBe(1);
-  });
-
   it('records delegation failures without hiding the original error', async () => {
     const correctionEngine = new SelfCorrectionEngine(request.runId);
     const orchestrator = new SequentialTaskOrchestrator({
@@ -415,6 +385,28 @@ describe('Backlog orchestration contract', () => {
     // The "pending" status is a recognized status, so the only blocker is the phase limit
     expect(result[0].blockers).toContain("Phase P3 is outside the authorized limit P2");
     expect(result[0].blockers).toHaveLength(1);
+  });
+
+  it('treats pending tasks in authorized phases (P1/P2) with no blockers as ELIGIBLE', () => {
+    const result = classifyBacklogTasks([
+      task({ taskId: 'T-P1-PENDING', phase: 'P1', status: 'pending' }),
+      task({ taskId: 'T-P2-PENDING', phase: 'P2', status: 'pending' }),
+      task({ taskId: 'T-P1-PENDING-DEP', phase: 'P1', status: 'pending', dependencies: ['T-P1-PENDING'] }),
+    ]);
+
+    const p1Pending = result.find(r => r.taskId === 'T-P1-PENDING')!;
+    const p2Pending = result.find(r => r.taskId === 'T-P2-PENDING')!;
+    const p1PendingDep = result.find(r => r.taskId === 'T-P1-PENDING-DEP')!;
+
+    expect(p1Pending.status).toBe('ELIGIBLE');
+    expect(p1Pending.blockers).toHaveLength(0);
+
+    expect(p2Pending.status).toBe('ELIGIBLE');
+    expect(p2Pending.blockers).toHaveLength(0);
+
+    // Task with unmet dependency should be BLOCKED
+    expect(p1PendingDep.status).toBe('BLOCKED');
+    expect(p1PendingDep.blockers.some(b => b.includes('T-P1-PENDING'))).toBe(true);
   });
 
   it('correctly identifies human approval tasks in P1', () => {
