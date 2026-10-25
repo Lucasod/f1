@@ -1400,18 +1400,24 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Acceptance Criteria:**
 - **Given** a product is eligible for review  
-  **When** consumer has a completed purchase (Order_Item with Order in PAID state or beyond) for that product  
+  **When** consumer has a completed purchase (Order_Item with Order in DELIVERED state) for that product  
   **Then** review creation is allowed
 
 - **Given** a consumer attempts to review without purchase  
   **When** review submission is attempted  
   **Then** submission is rejected
 
+- **Given** a consumer has a purchase in PAID, PROCESSING, or SHIPPED state  
+  **When** review submission is attempted  
+  **Then** submission is rejected (must wait for DELIVERED)
+
 **Status:** Defined
 
 **Dependencies:** FR-ORDER-004
 
-**Note:** The exact Order/Order_Item state qualifying as "verified purchase" (PAID vs DELIVERED) is not explicitly defined in CD-017. This requirement uses PAID as the minimum threshold per CD-063 cross-machine rules (Order PAID requires Payment CAPTURED). Final state determination pending Q-017 resolution.
+**Origin:** CD-017, CD-072
+
+**Note:** CD-072 (MP-08) confirms DELIVERED as the qualifying state for review eligibility. This provides the highest confidence that the consumer has received and used the product. DELIVERED is a terminal fulfillment state per CD-063 (Order_Vendor_Group = DELIVERED → Order = DELIVERED).
 
 ---
 
@@ -1716,21 +1722,21 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Title:** Review Moderation and Display Policy
 
-**Description:** Pre-moderation vs post-moderation policy, vendor response capability, verified purchase badge design, and rating aggregation method have not been decided.
+**Description:** All seven review moderation/display decisions have been resolved (MP-08): (1) Moderation policy → Post-moderation (CD-067); (2) Vendor response → Not permitted (CD-068); (3) Verified purchase badge → Not displayed (CD-069); (4) Rating scale → 1-5 stars (CD-070); (5) Aggregation method → Simple arithmetic mean (CD-070); (6) Verified purchase qualifying state → DELIVERED (CD-072); (7) Review images → Owned images permitted (CD-071).
 
 **Actors:** Consumer, Vendor, Admin
 
-**Category:** Pendente
+**Category:** **Resolvido**
 
-**Origin:** Q-017
+**Origin:** Q-017, CD-067, CD-068, CD-069, CD-070, CD-071, CD-072
 
 **Concepts:** Review
 
-**Affected Behavior:** Review workflow (immediate publish vs admin approval), trust signals displayed to consumers, vendor engagement capabilities.
+**Affected Behavior:** Review workflow (immediate publish, admin can hide/reject), no vendor response field, no verified purchase badge, 1-5 star rating with simple mean aggregation, review eligibility requires DELIVERED state, user-uploaded review images permitted.
 
-**Decision Required:** Define moderation workflow, badge display rules, vendor response mechanics, rating aggregation method.
+**Decision Required:** None — all seven decisions approved in MP-08.
 
-**Status:** Pendente
+**Status:** **Resolvido**
 
 ---
 
@@ -1855,7 +1861,7 @@ Non-functional requirements are covered in the separate NFR document.
 | FR-COUPON-004 | Coupons | Obrigatório | CD-050 | Q-016 |
 | FR-COUPON-005 | Coupons | Derivado | CD-026 | - |
 | FR-COUPON-006 | Coupons | Obrigatório | CD-026, CD-050 | Q-016 |
-| FR-RW-001 | Reviews | Obrigatório | CD-017 | Q-017 |
+| FR-RW-001 | Reviews | Obrigatório | CD-017, CD-072 | - |
 | FR-INV-001 | Invoices | Obrigatório | CD-035, CD-036 | Q-018 |
 | FR-INV-002 | Invoices | Obrigatório | CD-037 | Q-018 |
 | FR-ADMIN-001 | Admin | Obrigatório | CD-004 | Q-003 |
@@ -1867,7 +1873,7 @@ Non-functional requirements are covered in the separate NFR document.
 | FR-DATA-001 | Data | Derivado | CD-057, CD-060 | Q-029 |
 | FR-PEND-001 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
 | FR-PEND-002 | Search | Pendente | Q-015 | Q-015 |
-| FR-PEND-003 | Reviews | Pendente | Q-017 | Q-017 |
+| FR-PEND-003 | Reviews | **Resolvido** | Q-017, CD-067..CD-072 | - |
 | FR-PEND-004 | Coupons | Pendente | Q-016 | Q-016 |
 | FR-PEND-005 | Invoices | Pendente | Q-018 | Q-018 |
 | FR-PEND-006 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
@@ -1923,8 +1929,8 @@ Non-functional requirements are covered in the separate NFR document.
 | Historical Records | 2 | 2 | 0 | 0 |
 | Data Integrity | 1 | 0 | 1 | 0 |
 | **Subtotal (Main FRs)** | **53** | **48** | **5** | **0** |
-| **Pending Requirements (Section 4)** | **6** | **2** | **0** | **4** |
-| **Grand Total** | **59** | **50** | **5** | **4** |
+| **Pending Requirements (Section 4)** | **6** | **3** | **0** | **3** |
+| **Grand Total** | **59** | **51** | **5** | **3** |
 
 ---
 

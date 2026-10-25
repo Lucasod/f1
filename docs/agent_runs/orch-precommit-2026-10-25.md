@@ -171,14 +171,14 @@ IN_PROGRESS — Phase B complete, proceeding to Phase C
 
 | Finding | Severity | Status | Action Taken |
 |---------|----------|--------|--------------|
-| CR-001 | CRITICAL | ALREADY FIXED | code-orchestrator.md permissions already corrected: `edit: deny`, `bash: deny`, `task: deny` (except code-developer/code-reviewer), `webfetch: deny`, `websearch: deny` |
+| CR-001 | CRITICAL | **NOT FIXED IN WORKING TREE** | code-orchestrator.md permissions **NOT corrected in working tree**: current config has `edit: allow`, `bash: allow`, `task:` allow for code-developer, code-reviewer, code-orchestrator. Base commit (HEAD) has `edit: deny`, `bash: deny`. Tests expect `edit: deny`, `bash: deny`, `mode: primary`. |
 | CR-002 | CRITICAL | ARCHITECTURAL GAP | No live Kilo runtime adapter exists. Documented as known limitation. Requires architectural decision to implement or accept as gap. |
 | HI-001 | HIGH | FIXED | Added test for traversal attempt `kilo-orchestration/src/../kilo-orchestration/src/evil.ts` - existing canonical resolution correctly rejects it |
 | HI-002 | HIGH | NO ACTION NEEDED | Duplicate test not found in current codebase (only one `serializes multiple dispatch requests` test exists) |
 | HI-003 | HIGH | DOCUMENTED | Added JSDoc to `initialStatus` clarifying `pending` returns `undefined` for intentional ELIGIBLE behavior in authorized phases. Renamed test to reflect intentional behavior. |
 | HI-004 | HIGH | ALREADY VALIDATED | `fromJSON` validation for config/state consistency exists and passes (test for mismatched `maxAttemptsPerFailure` present) |
 | ME-001 | MEDIUM | FIXED | Added `failureTracker?.recordFailure()` for early returns in `SequentialTaskOrchestrator.execute` (task missing, classification failed) |
-| ME-002 | MEDIUM | ALREADY FIXED | code-orchestrator.md already has `webfetch: deny`, `websearch: deny` |
+| ME-002 | MEDIUM | **PARTIALLY CORRECT** | code-orchestrator.md has `webfetch: deny`, `websearch: deny` (unchanged from base). However, `edit: allow`, `bash: allow` in working tree vs `deny` in base commit and test expectations. |
 | ME-003 | MEDIUM | DOCUMENTED | Enhanced JSDoc for `parseBacklogTasks` documenting deferred dependency validation |
 | ME-004 | MEDIUM | DOCUMENTED | Added JSDoc to `RunRecord` interface in `types.ts` documenting `orchestration` optionality |
 | ME-005 | MEDIUM | DOCUMENTED | Added naming convention comments to all 4 test files (kebab-case for multi-word, single word for single-concept) |
@@ -589,19 +589,19 @@ IN_PROGRESS — Phase E complete, proceeding to Phase F
 | ME-003: Deferred validation JSDoc | `agent-orchestrator.ts` | ✅ Documented |
 | ME-004: `RunRecord.orchestration` JSDoc | `types.ts` | ✅ Documented |
 | ME-005: Naming convention comments | 4 test files | ✅ Added |
-| CR-001/ME-002: Permissions | `code-orchestrator.md` | ✅ Already correct |
+| CR-001/ME-002: Permissions | `code-orchestrator.md` | ❌ **NOT CORRECTED** — working tree diverges from base commit (`edit: allow`, `bash: allow` vs `deny`) and test expectations (`edit: deny`, `bash: deny`, `mode: primary`). Agent config tests FAIL (5/10). |
 
 ### Test Results Summary
 
 ```
 kilo-orchestration tests:     4 files, 122 tests ✅ PASS (exit 0)
 kilo-orchestration build:     TypeScript compilation ✅ PASS (exit 0)
-Agent configuration tests:    10 tests ✅ PASS (exit 0)
+Agent configuration tests:    10 tests ❌ **5 FAIL, 5 PASS** (exit 1)
 Git diff --check:             (not run but no whitespace errors expected)
 ```
 
 **Note on Test Types:**
-- **Configuration tests** (`.kilo/tests/test_agent_configuration.py`): Static validation of agent frontmatter and `kilo.jsonc` allowlists. Do NOT test runtime delegation.
+- **Configuration tests** (`.kilo/tests/test_agent_configuration.py`): Static validation of agent frontmatter and `kilo.jsonc` allowlists. Do NOT test runtime delegation. **Currently FAILING due to code-orchestrator.md working tree divergence.**
 - **Orchestration unit tests** (`kilo-orchestration/tests/`): Test logic with mocked `AgentDelegationPort`. Do NOT test real Kilo `task` tool integration.
 - **Functional runtime tests**: NOT RUNNABLE — no live Kilo runtime adapter (CR-002), no docker environment for backend/frontend.
 
@@ -612,7 +612,7 @@ Git diff --check:             (not run but no whitespace errors expected)
 | No commits made | ✅ | `git status` shows no staged changes |
 | No destructive operations | ✅ | No `git add/commit/push/reset/clean/rebase` |
 | No allowlist expansion | ✅ | `kilo.jsonc` task allowlist unchanged for Code agent |
-| No permission escalation | ✅ | Agent configs unchanged (code-orchestrator remains read-only) |
+| No permission escalation | ❌ **DIVERGENCE** | Working tree has `edit: allow`, `bash: allow` vs base commit `deny`; agent config tests FAIL (5/10) |
 | P3/P4/P5 blocked | ⚠️ PRE-EXISTING VIOLATION | `MAX_AUTHORIZED_PHASE=3` unblocks P3; was 2 at baseline |
 | Human gates respected | ✅ | T-117, T-122 remain BLOCKED in classification |
 | Code Reviewer independence | ✅ | `code-reviewer` config: `edit:deny, bash:deny, task:deny` |

@@ -228,38 +228,38 @@ Extracted from `docs/modeling/conceptual-model.drawio` (draw.io diagram).
 ---
 
 ### 13. Product_Pic
-**Responsibility:** Product image asset  
-**Attributes:** Product (ref), Pic_Product (ref?), Description, Pic_Path  
-**Relationships:** N:1 → Product; also referenced by Review  
-**Confirmed Rules (MP-02):**
-- CD-016: Images for Product and Review
+**Responsibility:** Product image asset (vendor product images) AND Review image asset (user-uploaded review images)  
+**Attributes:** Product (ref, nullable), Review (ref, nullable), Description, Pic_Path  
+**Relationships:** N:1 → Product (for vendor product images); N:1 → Review (for owned review images)  
+**Confirmed Rules (MP-02, MP-08):**
+- CD-016: Images for Product and Review — confirmed
+- CD-071: Review images are owned images (user-uploaded, separate from vendor product images) — Product_Pic serves both with nullable refs
 
 **Open Questions:**
 - "Pic_Product" meaning unclear — possibly duplicate of Product ref (already has Product ref attribute)
 - S3 key vs full URL in Pic_Path?
 - Primary image designation?
 - Order/sequence for gallery?
-- **Relationship with Review: Review references Product_Pics (plural) but cardinality and ownership (shared vs owned images) not defined**
+- **Relationship with Review clarified (CD-071): Review has its own Product_Pic entities (owned images); no shared references to vendor Product_Pic**
 
 ---
 
 ### 14. Review
 **Responsibility:** Customer feedback on Product  
-**Attributes:** Product (ref), Comment, Rating, Product_Pic_List  
-**Relationships:** N:1 → Product; references Product_Pic  
-**Confirmed Rules (MP-02):**
+**Attributes:** Product (ref), Comment, Rating, Product_Pic_List (owned images)  
+**Relationships:** N:1 → Product; references Product_Pic (owned images, separate from vendor product images)  
+**Confirmed Rules (MP-02, MP-08):**
 - CD-017: Review only by verified purchaser (must have purchased the product)
-- CD-016: Images for Review (via Product_Pic)
+- CD-016: Images for Review (via Product_Pic) — confirmed
+- CD-067: Post-moderation policy — reviews published immediately; admin can hide/reject
+- CD-068: Vendor response not permitted — no vendor response field
+- CD-069: Verified purchase badge not displayed — all reviews are verified by design
+- CD-070: Rating scale = 1-5 stars; aggregation = simple arithmetic mean
+- CD-071: Review images = owned images (user-uploaded, separate from vendor Product_Pic)
 
-**Open Questions (Q-017 — PARTIALLY_RESOLVED):**
+**Open Questions (Q-017 — RESOLVED):**
 - No explicit Consumer/Vendor author reference in diagram (implied via verified purchase)
-- Rating scale (1-5?) — **business decision required**
-- Moderation status (pending/approved/rejected)? — **business decision required (post-moderation recommended)**
-- Vendor response? — **business decision required (single response recommended)**
-- **Product_Pic_List attribute: plural form suggests list of images, but relationship to Product_Pic entity is ambiguous (single ref vs list of refs; shared vs owned images) — **business decision required (owned images recommended)**
-- Verified purchase badge? — **business decision required (explicit badge recommended)**
-- Aggregation method? — **business decision required (simple mean recommended)**
-- Verified purchase qualifying state (PAID vs DELIVERED)? — **business decision required (PAID recommended per CD-063)**
+- **Verified purchase qualifying state → DELIVERED (CD-072 confirmed)** — review creation allowed only when Order_Item's Order has reached DELIVERED state (product physically delivered). FR-RW-001 acceptance criteria: "Order_Item with Order in DELIVERED state".
 
 See `docs/analysis/analysis_review_moderation.md` for detailed analysis and recommendations.
 

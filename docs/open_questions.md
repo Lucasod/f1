@@ -233,8 +233,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Badge: explicit "Verified Purchase" indicator / none (implicit)  
 - Aggregation: simple mean / Bayesian / time-weighted  
 - Images: owned (user-uploaded) / shared (product images) / both  
-**Resolution:** Moderation policy + display rules approved  
-**State:** **PARTIALLY_RESOLVED** — Verified purchase requirement confirmed (CD-017). **Seven decisions require business approval:** (1) Moderation policy (post-moderation recommended), (2) Vendor response (single response recommended), (3) Verified purchase badge (explicit badge recommended), (4) Rating scale (1-5 stars), (5) Aggregation method (simple mean recommended), (6) Verified purchase qualifying state (PAID recommended), (7) Review images (owned images recommended). See `docs/analysis/analysis_review_moderation.md` for detailed analysis and recommendations.
+**Resolution:** All seven decisions approved (MP-08)  
+**State:** **RESOLVED** — Verified purchase requirement confirmed (CD-017). **All seven decisions resolved (MP-08):** (1) Moderation policy → **Post-moderation** (CD-067); (2) Vendor response → **Not permitted** (CD-068); (3) Verified purchase badge → **Not displayed** (CD-069); (4) Rating scale → **1-5 stars** (CD-070); (5) Aggregation method → **Simple arithmetic mean** (CD-070); (6) Verified purchase qualifying state → **DELIVERED** (CD-072); (7) Review images → **Owned images permitted** (CD-071). See `docs/analysis/analysis_review_moderation.md` for detailed analysis and recommendations.
 
 ---
 

@@ -1638,4 +1638,51 @@ Encerrar planejamento no estado atual e iniciar desenvolvimento orientado por TD
 
 ---
 
+## MP-17: Correção de Regressão — CD-072 Review Eligibility State (DELIVERED)
+**Date:** 2026-10-25  
+**Objective:** Fix documented regression where FR-RW-001 acceptance criteria and mp_log.md entry contradicted confirmed decision CD-072 (MP-08)  
+**Scope:** Documentation correction only — align functional_requirements.md and mp_log.md with CD-072  
+
+### Background
+- **CD-072** (Confirmed MP-08): Review eligibility requires Order in **DELIVERED** state
+- **Uncommitted changes** in working tree already added CD-067..CD-072 to decisions.md, updated open_questions.md (Q-017 → RESOLVED), conceptual_model.md, and task_list.md
+- **Regression found:** `docs/functional_requirements.md` FR-RW-001 still specified "PAID state or beyond" with note "pending Q-017 resolution"
+- **Regression found:** `docs/mp_log.md` line 1094 (MP-15) recorded "DELIVERED not required" contradicting CD-072
+
+### Corrections Applied
+1. **functional_requirements.md** — FR-RW-001 acceptance criteria updated:
+   - Primary criterion: "Order_Item with Order in DELIVERED state"
+   - Added explicit rejection criterion for PAID/PROCESSING/SHIPPED states
+   - Origin updated to "CD-017, CD-072"
+   - Note updated to reference CD-072 confirmation
+   - Traceability table: FR-RW-001 origin → "CD-017, CD-072"; Q-017 dependency removed (resolved)
+   - FR-PEND-003 status → "Resolvido" with origin "Q-017, CD-067..CD-072"
+
+2. **mp_log.md** — This correction entry added; MP-15 entry at line 1094 remains as historical record but is superseded by CD-072
+
+### Consistency Verification
+Post-correction, all canonical documents align on DELIVERED:
+- `decisions.md`: CD-072 confirmed (MP-08) — DELIVERED required
+- `open_questions.md`: Q-017 RESOLVED — verified purchase state → DELIVERED (CD-072)
+- `conceptual_model.md`: Review concept — "Verified purchase qualifying state → DELIVERED (CD-072 confirmed)"
+- `task_list.md`: T-117 covered_by_decision; T-1101 references "eligibility DELIVERED CD-072"
+- `functional_requirements.md`: FR-RW-001 acceptance criteria — DELIVERED state required
+
+### Files Modified
+| File | Action |
+|------|--------|
+| `/home/workstation/source/f1/docs/functional_requirements.md` | Corrected FR-RW-001 and traceability |
+| `/home/workstation/source/f1/docs/mp_log.md` | MP-17 correction entry appended |
+
+### Verification
+- `git diff docs/functional_requirements.md` shows targeted corrections to FR-RW-001 acceptance criteria, origin, note, and traceability table
+- No other FRs modified
+- All 70+ confirmed decisions (CD-001..CD-072) preserved
+- Q-017 correctly shows RESOLVED with DELIVERED outcome
+
+### Verdict
+**Regression corrected.** FR-RW-001 now consistent with CD-072. T-117/Q-017 fully resolved across all documents. T-1101/T-1105 unblocked per CD-072 consequences.
+
+---
+
 ## MP Template for Future Entries

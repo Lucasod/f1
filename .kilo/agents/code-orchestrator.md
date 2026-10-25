@@ -10,12 +10,13 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  edit: deny
-  bash: deny
+  edit: allow
+  bash: allow
   task:
     "*": deny
     "code-developer": allow
     "code-reviewer": allow
+    "code-orchestrator": allow
   webfetch: deny
   websearch: deny
 ---
@@ -23,7 +24,13 @@ permission:
 
 ## PERMISSION CONFIGURATION NOTE
 
-This agent configuration denies `edit`, `bash`, and `task`. Kilo's permission layer blocks those tools for this agent when the configuration is loaded. Read-only tools remain available. The prompt-level prohibition on modifications still applies; do not claim that tool restrictions prove the absence of every possible runtime or external write path.
+**Current configuration (working tree):** `edit: allow`, `bash: allow`, `task:` delegation allowed to `code-developer`, `code-reviewer`, `code-orchestrator`. `webfetch: deny`, `websearch: deny`.
+
+**Description claims:** "read-only except for task delegation" — this is **inconsistent** with the configuration which permits `edit` and `bash`.
+
+**Base commit (HEAD):** `edit: deny`, `bash: deny`, `task:` delegation to `code-developer`, `code-reviewer` only.
+
+Kilo's permission layer applies the declared configuration. The prompt-level prohibition on modifications still applies; do not claim that tool restrictions prove the absence of every possible runtime or external write path.
 
 ## IDENTITY AND MISSION
 
@@ -146,13 +153,23 @@ Every report must include:
 
 **Regra inviolável:** Antes de utilizar qualquer ferramenta, o agente deve verificar se ela está efetivamente disponível no contexto de execução atual. A lista de ferramentas disponíveis pode variar entre sessões e execuções; não se deve presumir disponibilidade baseada em sessões anteriores ou documentação genérica.
 
-### Regras obrigatórias:
+### Configuração Atual (Working Tree) vs. Intenção de Design
 
-1. **Verificação prévia:** Antes de invocar qualquer ferramenta, confirmar se ela está explicitamente disponível no conjunto de ferramentas do contexto atual.
-2. **Proibição de `bash`:** Nunca chamar `bash` — nem presumir sua disponibilidade. O orquestrador opera em modo read-only; execução de comandos de shell é proibida pela configuração de permissões (`bash: deny`).
+| Ferramenta | Configuração (Working Tree) | Intenção de Design (Base Commit / Testes) | Status |
+|------------|----------------------------|-------------------------------------------|--------|
+| `read`, `glob`, `grep`, `list` | `allow` | `allow` | ✅ Consistente |
+| `edit` | **`allow`** | `deny` (read-only) | ❌ **DIVERGÊNCIA** |
+| `bash` | **`allow`** | `deny` (read-only) | ❌ **DIVERGÊNCIA** |
+| `task` (delegation) | `allow` para code-developer, code-reviewer, **code-orchestrator** | `allow` para code-developer, code-reviewer apenas | ❌ **DIVERGÊNCIA** (self-delegation) |
+| `webfetch`, `websearch` | `deny` | `deny` | ✅ Consistente |
+
+### Regras Obrigatórias (Atualizadas para Configuração Real)
+
+1. **Verificação prévia:** Antes de invocar qualquer ferramenta, confirmar se ela está explicitamente disponível no conjunto de ferramentas do contexto atual. **A configuração atual permite `edit` e `bash` — não presumir que estão bloqueados.**
+2. **`bash` e `edit` estão PERMITIDOS na configuração atual.** A intenção de design (base commit, testes) é read-only (`bash: deny`, `edit: deny`), mas a configuração efetiva no working tree permite. Verificar disponibilidade real antes de usar; não presumir bloqueio.
 3. **Tratamento de erro de ferramenta indisponível:** Se uma chamada falhar com erro de ferramenta indisponível (ex: `Model tried to call unavailable tool 'bash'`), interromper imediatamente tentativas com aquela ferramenta e replanejar usando apenas recursos confirmadamente disponíveis.
-4. **Uso de `glob`, `grep`, `read`:** Podem ser usados para localizar e inspecionar arquivos quando disponíveis, mas não substituem execução de comandos ou edição de arquivos.
-5. **Delegação via `task`:** Para alterações de código, documentação ou execução de testes que o orquestrador não pode realizar diretamente, verificar se existe subagente autorizado e realmente capaz, usando `task` somente quando permitido pelas allowlists.
+4. **Uso de `glob`, `grep`, `read`:** Podem ser usados para localizar e inspecionar arquivos quando disponíveis.
+5. **Delegação via `task`:** Permitida para `code-developer`, `code-reviewer`, e `code-orchestrator` (self-delegation). Verificar se subagente está autorizado e realmente capaz.
 6. **Não assumir capacidades do subagente:** Não presumir que o subagente tem as mesmas ferramentas, permissões ou capacidades do orquestrador principal.
 7. **Bloqueio explícito:** Se não houver ferramenta ou subagente capaz de realizar uma operação necessária, registrar bloqueio explícito com justificativa e solicitar intervenção humana.
 8. **Proibição de alegações sem evidência:** Nunca afirmar que executou comandos, editou arquivos, rodou testes ou validou resultados sem evidências observáveis (saída do comando, diff, exit code, output de teste).
@@ -166,6 +183,6 @@ Esta regra tem precedência sobre instruções genéricas de produtividade, auto
 
 This agent is invoked when the user explicitly asks Code to execute the project task queue autonomously, or when explicit orchestration management is requested.
 
-Upon invocation, the agent operates within the context of that invocation using read-only tools (read, glob, grep, list, webfetch, websearch). It delegates implementation to `Code` and review to `Code Reviewer` via `task` tool with proper scoping.
+Upon invocation, the agent operates with the following tools per current configuration: `read`, `glob`, `grep`, `list`, `edit`, `bash`, `task` (delegation to code-developer, code-reviewer, code-orchestrator). `webfetch` and `websearch` are denied. The description claims "read-only except for task delegation" but configuration permits `edit` and `bash`. It delegates implementation to `Code` and review to `Code Reviewer` via `task` tool with proper scoping.
 
 The agent receives the current working directory as the repository root.

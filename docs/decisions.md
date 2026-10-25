@@ -668,6 +668,56 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Source:** MP-07 Stage D consolidation for T-401/Q-022  
 **Consequences:** T-401 resolved (covered_by_decision). T-402 (OpenAPI spec creation) unblocked. T-405 (versioning policy) resolved. GraphQL/tRPC not adopted. Frontend-backend contract established via OpenAPI.
 
+### CD-067: Review Moderation Policy — Post-Moderation
+**Status:** Confirmed (MP-08)  
+**Subject:** Review publication and moderation workflow  
+**Decision:** Reviews are published immediately upon creation (post-moderation). Admins may hide or remove inappropriate content retroactively. No pre-approval queue required.  
+**Justification:** Aligns with CD-041 (vendor auto-publish philosophy), MVP simplicity, and CD-055 (manual refresh MVP). Admin tools for abuse handling can be built incrementally.  
+**Source:** MP-08 consolidation for T-117/Q-017 (decision 1)  
+**Consequences:** Review.status default = `published`; admin actions = `hidden`, `rejected`; consumer reporting enabled; vendor flagging enabled.
+
+### CD-068: Vendor Response to Reviews — Not Permitted
+**Status:** Confirmed (MP-08)  
+**Subject:** Vendor engagement on reviews  
+**Decision:** Vendors may not respond to reviews. The review model does not include a vendor response field.  
+**Justification:** Simpler model; avoids potential public disputes; reduces implementation complexity.  
+**Source:** MP-08 consolidation for T-117/Q-017 (decision 2)  
+**Consequences:** Review entity does not include vendor_response or similar field; no vendor response UI; trust signal through verified purchase only (CD-017).
+
+### CD-069: Verified Purchase Badge — Not Displayed
+**Status:** Confirmed (MP-08)  
+**Subject:** Visual trust indicator for verified reviews  
+**Decision:** No explicit "Verified Purchase" badge is displayed on reviews. All reviews are verified purchases by design (CD-017).  
+**Justification:** Cleaner UI; CD-017 already guarantees verification; no visual differentiation needed since all reviews are verified.  
+**Source:** MP-08 consolidation for T-117/Q-017 (decision 3)  
+**Consequences:** Frontend does not render badge; review trust signal is implicit through purchase verification requirement.
+
+### CD-070: Rating Scale and Aggregation Method
+**Status:** Confirmed (MP-08)  
+**Subject:** Rating system specification  
+**Decision:** 
+- **Scale:** 1 to 5 stars (integer).
+- **Aggregation:** Simple arithmetic mean of all ratings for a product.
+**Justification:** Standard e-commerce pattern; transparent and simple for MVP; Bayesian/time-weighted methods deferred to future enhancement if review volume justifies.  
+**Source:** MP-08 consolidation for T-117/Q-017 (decisions 4 and 5)  
+**Consequences:** Product.rating = AVG(Review.rating); recalculation on review create/update/delete/hide; stored as computed or cached value.
+
+### CD-071: Review Images — Owned Images Permitted
+**Status:** Confirmed (MP-08)  
+**Subject:** Review image ownership and storage  
+**Decision:** Reviews may include user-uploaded images (owned images). These are distinct from vendor Product_Pic entities and stored separately.  
+**Justification:** User-generated content ownership clarity; separate moderation pipeline; simpler permissions (review author owns images).  
+**Source:** MP-08 consolidation for T-117/Q-017 (decision 7)  
+**Consequences:** Review entity includes optional images list (S3 paths); Product_Pic remains for vendor product images only; image upload validation and moderation for review images implemented separately.
+
+### CD-072: Review Eligibility State — DELIVERED
+**Status:** Confirmed (MP-08)  
+**Subject:** Order/Order_Item state qualifying a consumer to write a review  
+**Decision:** A review can only be created when the associated Order_Item's Order has reached **DELIVERED** state (product physically delivered to the consumer).  
+**Justification:** Highest confidence that the consumer has received and used the product; aligns with trust signal for reviews; DELIVERED is a terminal fulfillment state per CD-063 (Order_Vendor_Group = DELIVERED → Order = DELIVERED).  
+**Source:** MP-08 consolidation for T-117/Q-017 (decision 6)  
+**Consequences:** FR-RW-001 acceptance criteria updated to "Order_Item with Order in DELIVERED state"; T-117 fully resolved (covered_by_decision); T-1101/T-1105 unblocked for implementation.
+
 ## Diagram Inferences (Preserved as Inferred — Not Confirmed)
 
 ### D-001: Person as Base Entity for All Human Actors
