@@ -10,7 +10,8 @@
       "permission": {
         "task": {
           "*": "deny",
-          "code-reviewer": "allow"
+          "code-reviewer": "allow",
+          "code-orchestrator": "allow"
         }
       }
     }

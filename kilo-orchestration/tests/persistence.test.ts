@@ -44,6 +44,40 @@ describe('Run Record Persistence', () => {
       expect(loaded!.updatedAt).toBe(record.updatedAt);
     });
 
+    it('should persist and recover the orchestration snapshot with its run record', async () => {
+      const record = createValidRecord({
+        orchestration: {
+          generatedAt: '2026-10-24T21:30:00.000Z',
+          maxAuthorizedPhase: 2,
+          classifications: [
+            { taskId: 'T-117', status: 'BLOCKED', blockers: ['Human approval is required'] },
+            { taskId: 'T-201', status: 'COMPLETED', blockers: [] },
+          ],
+        },
+      });
+
+      await writeRunRecord(record, { storageDir });
+      const loaded = await loadRunRecord(record.runId, { storageDir });
+
+      expect(loaded?.orchestration).toEqual(record.orchestration);
+    });
+
+    it('should reject invalid orchestration snapshots before persisting', async () => {
+      const record = createValidRecord({
+        orchestration: {
+          generatedAt: '2026-10-24T21:30:00.000Z',
+          maxAuthorizedPhase: 2,
+          classifications: [
+            { taskId: 'T-117', status: 'UNKNOWN' as never, blockers: [] },
+          ],
+        },
+      });
+
+      await expect(writeRunRecord(record, { storageDir })).rejects.toThrow(
+        'orchestration: classifications[0].status is invalid',
+      );
+    });
+
     it('P4 - should reject invalid record before writing', async () => {
       const invalidRecord = { runId: '', startedAt: 'invalid', status: 'INVALID' as RunStatus, updatedAt: 'invalid' };
 

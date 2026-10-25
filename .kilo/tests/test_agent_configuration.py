@@ -13,7 +13,7 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertIn(".kilo/rules/project-rules.md", config["instructions"])
         self.assertIn(".kilo/rules/autonomous-execution.md", config["instructions"])
         delegation = config["agent"]["code"]["permission"]["task"]
-        self.assertEqual(delegation, {"*": "deny", "code-reviewer": "allow"})
+        self.assertEqual(delegation, {"*": "deny", "code-reviewer": "allow", "code-orchestrator": "allow"})
 
     def test_reviewer_is_delegated_read_only_agent(self):
         reviewer = (ROOT / ".kilo/agent/code-reviewer.md").read_text()
