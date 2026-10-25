@@ -1,3 +1,6 @@
+// Test file naming convention:
+// - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
+// - single word for single-concept names (e.g., storage.test.ts)
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SelfCorrectionEngine } from '../src/correction-engine';
 import {
@@ -196,7 +199,7 @@ describe('SelfCorrectionEngine', () => {
 
     it('should reject modification of review-required file', () => {
       const failure = engine.recordFailure('DETERMINISTIC_TEST_BUILD', 'Test fail', {});
-      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix test', '.kilo/agent/code-reviewer.md')).toThrow('not authorized');
+      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix test', '.kilo/agents/code-reviewer.md')).toThrow('not authorized');
     });
 
     it('should allow correction within allowed paths', () => {
@@ -217,6 +220,17 @@ describe('SelfCorrectionEngine', () => {
         'edit',
         'Change a project decision',
         'kilo-orchestration/src/../../docs/decisions.md',
+      )).toThrow('not authorized');
+    });
+
+    it('should reject sibling directory traversal via .. path segment', () => {
+      const failure = engine.recordFailure('DETERMINISTIC_TEST_BUILD', 'Test fail', {});
+      // Attempt to escape via ../ sibling traversal
+      expect(() => engine.attemptCorrection(
+        failure.id,
+        'edit',
+        'Sibling traversal',
+        'kilo-orchestration/src/../kilo-orchestration/src/evil.ts',
       )).toThrow('not authorized');
     });
 
@@ -424,8 +438,8 @@ describe('SelfCorrectionEngine', () => {
 
     it('should deny files requiring review', () => {
       const failure = engine.getFailuresByCategory('DETERMINISTIC_TEST_BUILD')[0];
-      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agent/code-reviewer.md')).toThrow('not authorized');
-      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agent/code-reviewer-tests.md')).toThrow('not authorized');
+      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agents/code-reviewer.md')).toThrow('not authorized');
+      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agents/code-reviewer-tests.md')).toThrow('not authorized');
     });
   });
 

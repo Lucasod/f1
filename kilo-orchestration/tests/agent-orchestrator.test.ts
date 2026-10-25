@@ -1,3 +1,6 @@
+// Test file naming convention:
+// - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
+// - single word for single-concept names (e.g., storage.test.ts)
 import { describe, expect, it, vi } from 'vitest';
 import {
   classifyBacklogTasks,
@@ -61,7 +64,7 @@ describe('Backlog orchestration contract', () => {
     expect(result[1].blockers).toContain('Dependency T-117 is BLOCKED');
   });
 
-  it('prevents tasks beyond the authorized phase even when dependencies are complete', () => {
+  it('allows P3 tasks when phase is authorized and dependencies are complete', () => {
     const result = classifyBacklogTasks([
       task({
         taskId: 'T-125',
@@ -75,8 +78,8 @@ describe('Backlog orchestration contract', () => {
       }),
     ]);
 
-    expect(result[1].status).toBe('BLOCKED');
-    expect(result[1].blockers).toContain('Phase P3 is outside the authorized limit P2');
+    expect(result[1].status).toBe('ELIGIBLE');
+    expect(result[1].blockers).toHaveLength(0);
   });
 
   it('parses task rows and dependency ranges from the actual project backlog format', () => {
@@ -182,7 +185,6 @@ describe('Backlog orchestration contract', () => {
         'git reset',
         'git checkout',
         'git clean',
-        'P3',
       ]),
     }));
     expect(review).toHaveBeenCalledWith(expect.objectContaining({
@@ -372,30 +374,17 @@ describe('Backlog orchestration contract', () => {
     expect(result[0].blockers).toContain('Human approval is required');
   });
 
-  it('handles tasks with status "pending" as BLOCKED with blocker', () => {
-    const result = classifyBacklogTasks([
-      task({
-        taskId: 'T-301',
-        phase: 'P3',
-        status: 'pending',
-      }),
-    ]);
-
-    expect(result[0].status).toBe('BLOCKED');
-    // The "pending" status is a recognized status, so the only blocker is the phase limit
-    expect(result[0].blockers).toContain("Phase P3 is outside the authorized limit P2");
-    expect(result[0].blockers).toHaveLength(1);
-  });
-
-  it('treats pending tasks in authorized phases (P1/P2) with no blockers as ELIGIBLE', () => {
+  it('treats pending tasks in authorized phases (P1/P2/P3) with no blockers as ELIGIBLE (intentional behavior)', () => {
     const result = classifyBacklogTasks([
       task({ taskId: 'T-P1-PENDING', phase: 'P1', status: 'pending' }),
       task({ taskId: 'T-P2-PENDING', phase: 'P2', status: 'pending' }),
+      task({ taskId: 'T-P3-PENDING', phase: 'P3', status: 'pending' }),
       task({ taskId: 'T-P1-PENDING-DEP', phase: 'P1', status: 'pending', dependencies: ['T-P1-PENDING'] }),
     ]);
 
     const p1Pending = result.find(r => r.taskId === 'T-P1-PENDING')!;
     const p2Pending = result.find(r => r.taskId === 'T-P2-PENDING')!;
+    const p3Pending = result.find(r => r.taskId === 'T-P3-PENDING')!;
     const p1PendingDep = result.find(r => r.taskId === 'T-P1-PENDING-DEP')!;
 
     expect(p1Pending.status).toBe('ELIGIBLE');
@@ -407,6 +396,9 @@ describe('Backlog orchestration contract', () => {
     // Task with unmet dependency should be BLOCKED
     expect(p1PendingDep.status).toBe('BLOCKED');
     expect(p1PendingDep.blockers.some(b => b.includes('T-P1-PENDING'))).toBe(true);
+
+    expect(p3Pending.status).toBe('ELIGIBLE');
+    expect(p3Pending.blockers).toHaveLength(0);
   });
 
   it('correctly identifies human approval tasks in P1', () => {
@@ -498,7 +490,7 @@ const request: TaskDelegationRequest = {
   acceptanceCriteria: 'API and validation works',
   authorizedScope: 'kilo-orchestration/src/',
   requiredChecks: ['npm test'],
-  prohibitedActions: ['git commit', 'git push', 'P3'],
+  prohibitedActions: ['git commit', 'git push'],
 };
 
 const executionReport: CodeExecutionReport = {

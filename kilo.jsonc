@@ -37,6 +37,25 @@
       ".tsx",
       ".yaml",
       ".yml"
-    ]
+    ],
+    "enabled": false
+  },
+  "mcp": {
+    "mongodb-mcp-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mongodb-mcp-server@1.13.0",
+        "--readOnly"
+      ],
+      "environment": {
+        "MDB_MCP_CONNECTION_STRING": "{{MDB_MCP_CONNECTION_STRING}}",
+        "MDB_MCP_API_CLIENT_ID": "{{MDB_MCP_API_CLIENT_ID}}",
+        "MDB_MCP_API_CLIENT_SECRET": "{{MDB_MCP_API_CLIENT_SECRET}}",
+        "MDB_MCP_READ_ONLY": "true"
+      },
+      "enabled": true
+    }
   }
 }

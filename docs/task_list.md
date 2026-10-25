@@ -81,12 +81,12 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-301 | Design MongoDB collections | Map concepts → collections, embedding vs refs (CD-005: deferred from conceptual) | T-125 | Collection schemas with indexes | ⏳ pending |
-| T-302 | Design Elasticsearch mappings | Index settings, analyzers, mappings | T-115, T-301 | ES index definitions | ⏳ pending |
-| T-303 | Design Redis schemas | Cart, session, cache keys, TTLs (Q-014 TECHNICAL_FUTURE) | T-125 | Redis key patterns + data structures | ⏳ pending |
-| T-304 | Define S3 object naming | Product images, invoices, uploads (Q-018 TECHNICAL_FUTURE) | T-118 | Naming convention + folder structure | ⏳ pending |
-| T-305 | Data integrity rules | Unique constraints, referential integrity, validation | T-301 | Rules documented per collection | ⏳ pending |
-| T-306 | Migration/seed strategy | Initial data, versioning approach | T-301 | Migration plan documented | ⏳ pending |
+| T-301 | Design MongoDB collections | Map concepts → collections, embedding vs refs (CD-005: deferred from conceptual) | T-125 | Collection schemas with indexes | ✅ covered_by_decision |
+| T-302 | Design Elasticsearch mappings | Index settings, analyzers, mappings | T-115, T-301 | ES index definitions | ✅ covered_by_decision |
+| T-303 | Design Redis schemas | Cart, session, cache keys, TTLs (Q-014 TECHNICAL_FUTURE) | T-125 | Redis key patterns + data structures | ✅ covered_by_decision |
+| T-304 | Define S3 object naming | Product images, invoices, uploads (Q-018 TECHNICAL_FUTURE) | T-118 | Naming convention + folder structure | ✅ covered_by_decision |
+| T-305 | Data integrity rules | Unique constraints, referential integrity, validation | T-301 | Rules documented per collection | ✅ covered_by_decision |
+| T-306 | Migration/seed strategy | Initial data, versioning approach | T-301 | Migration plan documented | ✅ covered_by_decision |
 
 ---
 

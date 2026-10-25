@@ -2,7 +2,7 @@
 
 ## Run identity and initial state
 
-- Objective: remediate all findings from `docs/audit-report-2026-10-24.md` (15 findings: 2 CRITICAL, 4 HIGH, 5 MEDIUM, 4 LOW)
+- Objective: remediate all findings from `docs/agent_runs/audit-report-2026-10-24.md` (15 findings: 2 CRITICAL, 4 HIGH, 5 MEDIUM, 4 LOW)
 - Branch: `feature/initial-implementation`
 - Base commit: `775eb767025c8f3a86dec3c94d79d27806f60b69`
 - Initial worktree state: 6 modified tracked files, 7 untracked files (unchanged from audit)

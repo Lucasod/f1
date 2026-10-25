@@ -2,7 +2,7 @@
 description: Independent read-only reviewer; invoked by Code for the current explicitly user-authorized task or by an explicit user review request
 mode: subagent
 model: kilo/nvidia/nemotron-3-ultra-550b-a55b:free
-steps: 30
+steps: 300
 hidden: false
 color: "#FF5733"
 permission:
@@ -499,6 +499,6 @@ This agent is invoked only when the user explicitly requests a code review of Gi
 - "Review changes in [file/branch/commit]"
 - "Do a code review"
 
-Upon authorized invocation, the agent operates within the context of that invocation using the tools available to it (e.g., `bash` for `git status`, `git diff`, `read`, `grep`, `glob`). The listed commands are illustrative of the inspection steps the agent may perform when explicitly invoked; they do not imply automatic execution, continuous monitoring, hooks, watchers, or scheduled tasks. The agent does not start a review based on file changes, commits, test results, or any event other than an explicit user instruction.
+Upon authorized invocation, the agent operates within the context of that invocation using the tools available to it (`read`, `glob`, `grep`, `list`, `webfetch`, `websearch`). **Git state inspection (`git status`, `git diff`, `git log`, `git status`) is not available to this agent**; the review must rely on diffs and file contents provided in the delegation request or accessible via file reads. The listed tools are illustrative of the inspection steps the agent may perform when explicitly invoked; they do not imply automatic execution, continuous monitoring, hooks, watchers, or scheduled tasks. The agent does not start a review based on file changes, commits, test results, or any event other than an explicit user instruction.
 
 The agent receives the current working directory as the repository root.

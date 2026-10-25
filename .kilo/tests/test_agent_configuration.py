@@ -5,7 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-AGENT_DIR = ROOT / ".kilo/agent"
+AGENT_DIR = ROOT / ".kilo/agents"
+if not AGENT_DIR.exists():
+    AGENT_DIR = ROOT / ".kilo/agent"
 
 
 def parse_frontmatter(agent_file: Path) -> dict | None:

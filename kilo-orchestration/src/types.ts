@@ -4,6 +4,12 @@ export type RunStatus =
   | 'BLOCKED'
   | 'PAUSED';
 
+/**
+ * Represents a run record for the orchestration system.
+ * The `orchestration` field is optional; when present, it must be a complete
+ * OrchestrationSnapshot with all required fields (generatedAt, maxAuthorizedPhase, classifications).
+ * Validation of the orchestration snapshot is performed by `validateRunRecord` in validation.ts.
+ */
 export interface RunRecord {
   runId: string;
   startedAt: string;

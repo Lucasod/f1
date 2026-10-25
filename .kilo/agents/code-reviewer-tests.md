@@ -231,7 +231,7 @@ For each test case executed, record the following to ensure auditability:
 | **Limitations** | Environmental constraints, incomplete verification, partial evidence |
 | **TC7 Explicit Sequence** | For TC7: the exact two-message sequence (declaration → explicit request) |
 | **TC2-B Simulation** | For TC2-B: method used to simulate inaccessible source or incomplete search |
-| **File Integrity Confirmed** | Confirmation that `.kilo/agent/code-reviewer.md` and `.kilo/agent/code-reviewer-tests.md` were not modified during test execution |
+| **File Integrity Confirmed** | Confirmation that `.kilo/agents/code-reviewer.md` and `.kilo/agents/code-reviewer-tests.md` were not modified during test execution |
 | **Target File Integrity (TC8)** | For TC8: path of target file, pre-execution content/hash, post-execution content/hash, comparison method, and result |
 
 **Important:** Filling this template documents the test execution. It does not constitute execution itself. Behavioral tests must be run separately with explicit invocation of the Code Reviewer agent.

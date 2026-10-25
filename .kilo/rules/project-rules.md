@@ -55,7 +55,7 @@ The Dev's self-review does not substitute the independent review.
 
 ### B. Code Reviewer Responsibilities
 
-The Code Reviewer agent (configured in `.kilo/agent/code-reviewer.md`) must:
+The Code Reviewer agent (configured in `.kilo/agents/code-reviewer.md`) must:
 
 - Inspect the actual diff, not rely solely on the Dev's summary.
 - Consult pertinent requirements and acceptance criteria.

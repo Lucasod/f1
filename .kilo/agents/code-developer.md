@@ -2,7 +2,7 @@
 description: Implements code changes within authorized scope; follows TDD; reports evidence; does not decide scope or authorization
 mode: subagent
 model: kilo/nvidia/nemotron-3-ultra-550b-a55b:free
-steps: 50
+steps: 300
 hidden: false
 color: "#32CD32"
 permission:

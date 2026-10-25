@@ -16,14 +16,13 @@ import { SelfCorrectionEngine } from './correction-engine.js';
 const TASK_ID_PATTERN = /^T-\d+[a-z]?$/i;
 const TASK_ID_GLOBAL_PATTERN = /T-\d+[a-z]?/gi;
 const TASK_RANGE_PATTERN = /(T-\d+)\s*\.\.\s*(T-\d+)/gi;
-const MAX_AUTHORIZED_PHASE = 2;
+const MAX_AUTHORIZED_PHASE = 3;
 const PROHIBITED_ACTIONS = [
   'git commit',
   'git push',
   'git reset',
   'git checkout',
   'git clean',
-  'P3',
 ];
 
 interface ParsedBacklogRow {
@@ -81,6 +80,9 @@ function expandDependencies(
  * Validation of dependency existence (i.e., whether referenced tasks actually exist
  * in the backlog) is DEFERRED to the classification phase (`classifyBacklogTasks`).
  * This function only extracts the raw dependency identifiers from the markdown cell.
+ * Invalid or missing dependency references are preserved in the returned task objects
+ * and will cause the dependent task to be classified as BLOCKED with an appropriate
+ * blocker message during classification.
  *
  * @param markdown - Backlog markdown content with pipe-separated table rows
  * @returns Array of BacklogTask with dependencies as string arrays (may include invalid refs)
@@ -134,6 +136,15 @@ function phaseNumber(phase: string): number | undefined {
 }
 
 function initialStatus(status: BacklogTaskStatus): OrchestratedTaskStatus | undefined {
+  /**
+   * Maps backlog task status to orchestration status.
+   * Returns a fixed status for known terminal/blocked states.
+   * Returns `undefined` for 'pending' to indicate that eligibility
+   * should be determined by dependency resolution, phase authorization,
+   * and human approval gates — not by the backlog status alone.
+   * This allows pending tasks in authorized phases (P1/P2/P3) with no
+   * blockers to be classified as ELIGIBLE.
+   */
   switch (status) {
     case 'in_progress':
       return 'IN_PROGRESS';
@@ -535,11 +546,21 @@ export class SequentialTaskOrchestrator {
     const backlogSnapshot = structuredClone(tasks);
     const task = backlogSnapshot.find(item => item.taskId === taskId);
     if (!task) {
+      this.failureTracker?.recordFailure('UNKNOWN', `Task ${taskId} is missing from the backlog`, {
+        runId: request.runId,
+        taskId,
+        stage: 'ORCHESTRATION',
+      });
       return Promise.reject(new Error(`Task ${taskId} is missing from the backlog`));
     }
     const classification = classifyBacklogTasks(backlogSnapshot)
       .find(item => item.taskId === taskId);
     if (!classification) {
+      this.failureTracker?.recordFailure('UNKNOWN', `Task ${taskId} could not be classified`, {
+        runId: request.runId,
+        taskId,
+        stage: 'ORCHESTRATION',
+      });
       return Promise.reject(new Error(`Task ${taskId} could not be classified`));
     }
 
