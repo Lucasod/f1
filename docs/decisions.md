@@ -660,6 +660,14 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Justification:** Separate Charges and Transfers is the only Stripe charge type supporting 1 checkout → 1 payment → N vendors. Aligns with CD-021, CD-028, CD-031, CD-045, CD-047, CD-048, CD-058, CD-063.  
 **Source:** MP-06-R4
 
+### CD-066: API Design Style — REST with OpenAPI 3.0
+**Status:** Confirmed (MP-07 Stage D)  
+**Subject:** API architecture and contract specification  
+**Decision:** The API follows **REST** architectural style with **OpenAPI 3.0** specification. Versioning uses **URL path versioning** (`/api/v1/...`). Request and response payloads use **JSON**. Error responses follow **RFC 7807 Problem Details** format. The OpenAPI spec will be created in T-402.  
+**Justification:** REST with OpenAPI 3.0 provides broad ecosystem support, cacheability, clear resource-oriented design, and tooling for client generation. URL path versioning is explicit and cache-friendly. JSON is the de facto standard. RFC 7807 standardizes error handling across all endpoints.  
+**Source:** MP-07 Stage D consolidation for T-401/Q-022  
+**Consequences:** T-401 resolved (covered_by_decision). T-402 (OpenAPI spec creation) unblocked. T-405 (versioning policy) resolved. GraphQL/tRPC not adopted. Frontend-backend contract established via OpenAPI.
+
 ## Diagram Inferences (Preserved as Inferred — Not Confirmed)
 
 ### D-001: Person as Base Entity for All Human Actors
@@ -775,7 +783,7 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-020 | Vendor suspension/abuse mechanism | Technical / Future | CD-041: Auto-publish confirmed; suspension mechanism needed |
 | D-021 | Soft delete vs hard delete implementation | Technical / Future | CD-052: Inactivation for referenced entities; hard-delete when safe; order snapshots defined |
 | D-022 | Multi-tenancy scope | Out of scope | Q-020: Single marketplace confirmed; multi-tenancy belongs to another project |
-| D-023 | API design style | Technical / Future | Stage 1 deliverable; not decided |
+| D-023 | API design style | **Resolved (CD-066)** | CD-066: REST with OpenAPI 3.0 confirmed; URL path versioning (/api/v1/...); JSON; RFC 7807 errors |
 | D-024 | Frontend state management | Technical / Future | Stage 2+; not decided |
 | D-025 | Checkout address snapshots | **Resolved (CD-061)** | CD-061: Snapshot semantics confirmed; uses CD-040 fields; immutable copy at Order creation |
 | D-026 | Product inactivation state | Technical / Future | CD-042: Inactive state confirmed; hard-delete referential check needed |

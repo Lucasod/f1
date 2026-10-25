@@ -10,6 +10,7 @@
       "permission": {
         "task": {
           "*": "deny",
+          "code-developer": "allow",
           "code-reviewer": "allow",
           "code-orchestrator": "allow"
         }

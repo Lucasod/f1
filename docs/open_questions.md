@@ -299,7 +299,7 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - tRPC (end-to-end type safety)  
 - REST for public, GraphQL for admin  
 **Resolution:** API style + spec tooling + versioning policy approved  
-**State:** **TECHNICAL_FUTURE** — Stage 1 deliverable; implementation choice deferred.
+**State:** **RESOLVED** — REST with OpenAPI 3.0 confirmed; URL path versioning (/api/v1/...); JSON request/response; RFC 7807 Problem Details for errors. OpenAPI spec to be created in T-402.
 
 ---
 

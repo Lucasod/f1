@@ -1,12 +1,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { config } from './config';
+import { config, validateConfig } from './config';
+
+validateConfig();
 
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: config.corsOrigins.length > 0 ? config.corsOrigins : true,
+  credentials: true
+}));
 app.use(express.json());
 
 app.get('/health', (_req: Request, res: Response) => {

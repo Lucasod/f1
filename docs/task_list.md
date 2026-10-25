@@ -92,26 +92,32 @@
 
 ## Phase 4: API Specification (P3b)
 
+**Status:** 5 tasks covered_by_decision (T-401..T-405); 0 remaining
+
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-401 | Choose API style | REST/tRPC decision (Q-022 TECHNICAL_FUTURE) | T-204 | Decision recorded | ⏳ pending |
-| T-402 | Define API endpoints | Resource-oriented or operation-oriented | T-401, T-201 | Endpoint list with methods, paths | ⏳ pending |
-| T-403 | Specify request/response schemas | DTOs, validation, error formats | T-402, T-301 | OpenAPI/GraphQL schema files | ⏳ pending |
-| T-404 | Define auth & RBAC on endpoints | JWT claims, permission checks (CD-004, CD-010) | T-103, T-402 | Auth matrix per endpoint | ⏳ pending |
-| T-405 | API versioning & deprecation policy | URL vs header, lifecycle | T-401 | Policy documented | ⏳ pending |
+| T-401 | Choose API style | REST/tRPC decision (Q-022 TECHNICAL_FUTURE) | T-204 | Decision recorded | ✅ covered_by_decision |
+| T-402 | Define API endpoints | Resource-oriented or operation-oriented | T-401, T-201 | Endpoint list with methods, paths | ✅ covered_by_decision |
+| T-403 | Specify request/response schemas | DTOs, validation, error formats | T-402, T-301 | OpenAPI/GraphQL schema files | ✅ covered_by_decision |
+| T-404 | Define auth & RBAC on endpoints | JWT claims, permission checks (CD-004, CD-010) | T-103, T-402 | Auth matrix per endpoint | ✅ covered_by_decision |
+| T-405 | API versioning & deprecation policy | URL vs header, lifecycle | T-401 | Policy documented | ✅ covered_by_decision |
 
 ---
 
 ## Phase 5: Technical Architecture (P3c)
 
+**Status:** 6 tasks covered_by_decision (T-501..T-506); 0 remaining
+
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-501 | Backend architecture | Layered/clean/hexagonal, module boundaries | T-301, T-402 | Architecture diagram + module map | ⏳ pending |
-| T-502 | Frontend architecture | Component structure, state, routing (Q-023 TECHNICAL_FUTURE) | T-401 | Architecture diagram + folder structure | ⏳ pending |
-| T-503 | Infrastructure architecture | AWS services, networking, secrets, monitoring | T-401, T-501 | Infrastructure diagram + IaC plan | ⏳ pending |
-| T-504 | CI/CD pipeline design | Build, test, deploy stages per env | T-503 | Pipeline diagram + tool choices | ⏳ pending |
-| T-505 | Observability design | Logging, metrics, tracing, alerting | T-503 | Observability stack decided | ⏳ pending |
-| T-506 | Security hardening plan | TLS, headers, rate limits, secrets | T-503 | Security checklist | ⏳ pending |
+| T-501 | Backend architecture | Layered/clean/hexagonal, module boundaries | T-301, T-402 | Architecture diagram + module map | ✅ covered_by_decision |
+| T-502 | Frontend architecture | Component structure, state, routing (Q-023 TECHNICAL_FUTURE) | T-401 | Architecture diagram + folder structure | ✅ covered_by_decision |
+| T-503 | Infrastructure architecture | AWS services, networking, secrets, monitoring | T-401, T-501 | Infrastructure diagram + IaC plan | ✅ covered_by_decision |
+| T-504 | CI/CD pipeline design | Build, test, deploy stages per env | T-503 | Pipeline diagram + tool choices | ✅ covered_by_decision |
+| T-505 | Observability design | Logging, metrics, tracing, alerting | T-503 | Observability stack decided | ✅ covered_by_decision |
+| T-506 | Security hardening plan | TLS, headers, rate limits, secrets | T-503 | Security checklist | ✅ covered_by_decision |
+
+**Note:** Architecture documentation created in `.kilo/architecture/` — backend.md, frontend.md, infrastructure.md, ci-cd.md, observability.md, security.md
 
 ---
 
@@ -211,8 +217,8 @@ P0 (T-001..T-007)
     → P1 (T-103..T-125)  [10 tasks covered by decisions; 24 remaining]
         → P2 (T-201..T-204) 
             → P3a (T-301..T-306) 
-            → P3b (T-401..T-405) 
-            → P3c (T-501..T-506)
+            → P3b (T-401..T-405)  [5 covered_by_decision (T-401..T-405); 0 remaining]
+            → P3c (T-501..T-506)  [6 covered_by_decision (T-501..T-506); 0 remaining]
                 → P4a (T-601..T-604) 
                     → P4b (T-701..T-705) 
                         → P4c (T-801..T-803)
@@ -229,12 +235,14 @@ P0 (T-001..T-007)
 **Key Changes from MP-01:**
 - 21 P1 tasks now **covered_by_decision** (T-101, T-102, T-103, T-104, T-105, T-106, T-106b, T-107, T-108, T-109, T-110, T-111, T-112, T-113, T-114, T-118, T-119, T-120, T-121, T-123, T-124)
 - Remaining P1: 6 PENDING + 6 PARTIALLY_RESOLVED = 12 active tasks
-- Technical decisions (MongoDB, Redis, ES, S3, API style, frontend state, deploy, testing) correctly placed in P3a/P3b/P3c
+- Technical decisions (MongoDB, Redis, ES, S3, frontend state, deploy, testing) correctly placed in P3a/P3b/P3c; **API style (T-401), versioning (T-405), and endpoints (T-402) resolved in P3b**
 - Vendor onboarding (T-105) covered — Stage 3 unblocked
 - Product variants (T-106b) resolved: no variants in MVP
 - State machines (T-109) resolved: minimal states defined
 - Payment provider (T-111) and split flow (T-112) covered — unblocks Stage 6
 - T-103/T-104 (Auth, Address) covered — unblocks Stage 2 (Auth) and Stage 5 (Checkout)
+- **OpenAPI specification created at `docs/api/openapi.yaml` (3694 lines, 33 paths, 59 schemas)**
+- **P3c architecture complete** — 6 architecture docs created in `.kilo/architecture/` covering backend, frontend, infrastructure, CI/CD, observability, security
 
 ---
 

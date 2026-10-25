@@ -1,6 +1,6 @@
 ---
 description: Orchestrates autonomous execution runs; delegates implementation to code-developer and reviews to code-reviewer via task tool; read-only except for task delegation
-mode: primary
+mode: all
 model: kilo/nvidia/nemotron-3-ultra-550b-a55b:free
 steps: 300
 hidden: false

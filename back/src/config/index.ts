@@ -1,13 +1,66 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+function validateRequiredInProduction(value: string | undefined, name: string): string {
+  const trimmed = value?.trim();
+  if (isProduction() && (!trimmed || trimmed.length === 0)) {
+    throw new Error(`Configuration error: ${name} is required in production but is empty or whitespace`);
+  }
+  return trimmed || '';
+}
+
+function parseCorsOrigins(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
+function validateCorsOrigins(origins: string[]): void {
+  if (isProduction()) {
+    if (origins.length === 0) {
+      throw new Error('Configuration error: CORS_ORIGIN is required in production and must contain at least one valid origin');
+    }
+    if (origins.includes('*')) {
+      throw new Error('Configuration error: Wildcard (*) CORS origin is not allowed in production when credentials are enabled');
+    }
+  }
+}
+
+const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+validateCorsOrigins(corsOrigins);
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/fs01_marketplace',
+  mongoUri: validateRequiredInProduction(process.env.MONGO_URI, 'MONGO_URI') || 'mongodb://localhost:27017/fs01_marketplace',
   mongoDbName: process.env.MONGO_DB_NAME || 'fs01_marketplace',
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
-  elasticsearchUrl: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h'
+  redisUrl: validateRequiredInProduction(process.env.REDIS_URL, 'REDIS_URL') || 'redis://localhost:6379',
+  elasticsearchUrl: validateRequiredInProduction(process.env.ELASTICSEARCH_URL, 'ELASTICSEARCH_URL') || 'http://localhost:9200',
+  jwtSecret: validateRequiredInProduction(process.env.JWT_SECRET, 'JWT_SECRET') || 'dev-secret-change-in-production',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  corsOrigins,
+  isProduction: isProduction(),
 };
+
+export function validateConfig(): void {
+  if (config.isProduction) {
+    if (!config.mongoUri || config.mongoUri === 'mongodb://localhost:27017/fs01_marketplace') {
+      throw new Error('Configuration error: MONGO_URI must be set to a production value');
+    }
+    if (!config.redisUrl || config.redisUrl === 'redis://localhost:6379') {
+      throw new Error('Configuration error: REDIS_URL must be set to a production value');
+    }
+    if (!config.elasticsearchUrl || config.elasticsearchUrl === 'http://localhost:9200') {
+      throw new Error('Configuration error: ELASTICSEARCH_URL must be set to a production value');
+    }
+    if (!config.jwtSecret || config.jwtSecret === 'dev-secret-change-in-production') {
+      throw new Error('Configuration error: JWT_SECRET must be set to a production value');
+    }
+  }
+}
