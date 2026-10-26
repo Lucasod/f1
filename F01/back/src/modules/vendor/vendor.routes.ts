@@ -57,7 +57,7 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
   }) as RequestHandler);
 
   // GET /api/v1/vendor/me
-  router.get('/me', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  router.get('/me', authMw as RequestHandler, requireRole(PersonRole.VENDOR, PersonRole.ADMIN) as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const personId = req.user.sub;
       const vendor = await vendorService.getVendorByPersonId(personId);
@@ -73,7 +73,7 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
   }) as RequestHandler);
 
   // PATCH /api/v1/vendor/me
-  router.patch('/me', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  router.patch('/me', authMw as RequestHandler, requireRole(PersonRole.VENDOR, PersonRole.ADMIN) as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { storeName } = req.body;
 
@@ -89,7 +89,9 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
       }
 
       // Ownership check - user can only update their own vendor (CD-059)
-      if (vendor.personId !== personId) {
+      // Allow ADMIN to manage any vendor (CD-059: Admin manages the platform)
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+      if (!isAdmin && vendor.personId !== personId) {
         return res.status(403).json({ error: 'FORBIDDEN', message: 'Access denied' });
       }
 

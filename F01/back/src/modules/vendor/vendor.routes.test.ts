@@ -296,8 +296,8 @@ describe('Vendor Routes', () => {
       expect(response.body.vendor.status).toBe('active');
     });
 
-    it('should return 404 for user without vendor profile', async () => {
-      // Register a consumer without vendor
+    it('should return 403 for CONSUMER role (ownership isolation)', async () => {
+      // Register a consumer without vendor - CONSUMER cannot access vendor endpoints (403 from requireRole middleware)
       const consumerRegister = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -315,8 +315,8 @@ describe('Vendor Routes', () => {
         .get('/api/v1/vendor/me')
         .set('Authorization', `Bearer ${consumerToken}`);
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
     });
 
     it('should return 401 for missing token', async () => {
@@ -379,7 +379,7 @@ describe('Vendor Routes', () => {
       expect(response.body.error).toBe('STORE_NAME_REQUIRED');
     });
 
-    it('should return 404 for user without vendor profile', async () => {
+    it('should return 403 for CONSUMER role (ownership isolation)', async () => {
       const consumerRegister = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -400,8 +400,8 @@ describe('Vendor Routes', () => {
           storeName: 'New Name'
         });
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
     });
   });
 });
