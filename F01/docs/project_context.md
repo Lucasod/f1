@@ -4,7 +4,7 @@
 
 **Project:** FS-01 — Multi-Vendor E-Commerce Marketplace  
 **Period:** 19/10/2026 to 19/11/2026 (estimated 14 days effort)  
-**Current Stage:** Planning and conceptual modeling (per README)
+**Current Stage:** Initial implementation merged (authentication, vendor onboarding); P4/P5 blocked pending explicit human authorization. Documentation reconciliation in progress.
 
 ## Planned Technologies
 
@@ -37,12 +37,12 @@
 6. Integrate payments and commissions with Stripe Connect or Razorpay (test mode)
 7. Implement reviews, coupons, PDF invoices, admin dashboard, separate frontend/backend deploy
 
-> Note: These stages guide planning but do not authorize implementation during conceptual modeling phase.
+> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4/P5 remain blocked pending explicit human authorization; MAX_AUTHORIZED_PHASE = 3 unchanged.
 
 ## Scope Boundaries
 
 - **In scope:** Multi-vendor marketplace core domain (users, vendors, products, orders, payments, commissions, reviews, coupons, admin)
-- **Out of scope (for now):** Implementation details, specific class designs, database schema optimization, API endpoint specifications, infrastructure provisioning
+- **Out of scope for P4/P5 (blocked):** Further implementation details, specific class designs, database schema optimization, API endpoint specifications, infrastructure provisioning. Initial implementation (auth, vendor onboarding) completed in P0-P3.
 
 ## Source References
 

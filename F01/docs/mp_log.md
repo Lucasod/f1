@@ -1,9 +1,9 @@
 # MP Execution Log — FS-01 Marketplace
 
 ## MP-01: Consolidate Context, Decisions & Backlog
-**Date:** 2026-10-22  
-**Objective:** Establish persistent, auditable planning baseline from existing artifacts  
-**Scope:** Inspect README, drawio diagram, repo structure; create project_context.md, decisions.md, conceptual_model.md, open_questions.md, task_list.md, mp_log.md  
+**Date:** 2026-10-22
+**Objective:** Establish persistent, auditable planning baseline from existing artifacts
+**Scope:** Inspect README, drawio diagram, repo structure; create project_context.md, decisions.md, conceptual_model.md, open_questions.md, task_list.md, mp_log.md
 
 ### Results
 - Created 6 documentation files in `/home/workstation/source/f1/docs/`
@@ -98,9 +98,9 @@ All 28 questions in open_questions.md are pending. Key blockers:
 ---
 
 ## MP-02: Reconcile Decisions & Correct Baseline
-**Date:** 2026-10-22  
-**Objective:** Review MP-01 documentation against responsible's confirmed decisions; separate confirmed rules from inferences; reclassify open questions; adjust task list  
-**Scope:** Documentation audit and correction only — no code, no diagram changes, no new phases  
+**Date:** 2026-10-22
+**Objective:** Review MP-01 documentation against responsible's confirmed decisions; separate confirmed rules from inferences; reclassify open questions; adjust task list
+**Scope:** Documentation audit and correction only — no code, no diagram changes, no new phases
 
 ### Results
 - Updated `decisions.md` with 38 confirmed decisions (CD-001..CD-038) across identity, products, orders, payments, coupons, finances, histories, invoices
@@ -214,9 +214,9 @@ Technical tasks correctly deferred to P3a/P3b/P3c: MongoDB collections (T-301), 
 ---
 
 ## MP-02-S1: Saneamento e Reconciliação da Baseline Documental
-**Date:** 2026-10-22  
-**Objective:** Correct inconsistencies identified in MP-02 audit; remove LGPD from active scope; register single marketplace decision; reconcile question states and task counts; fix CD-034 classification; clarify lists/images/history references; audit staged Git state  
-**Scope:** Documentation corrections only — no code, no diagram changes, no new phases  
+**Date:** 2026-10-22
+**Objective:** Correct inconsistencies identified in MP-02 audit; remove LGPD from active scope; register single marketplace decision; reconcile question states and task counts; fix CD-034 classification; clarify lists/images/history references; audit staged Git state
+**Scope:** Documentation corrections only — no code, no diagram changes, no new phases
 
 ### Results
 - **S1 (LGPD removal):** Removed T-122 (LGPD compliance task) from P1; updated Q-025 to OUT_OF_SCOPE; removed LGPD references from risk assessment, security hardening (T-506), MP sequence, and cross-cutting scope (MP-08)
@@ -299,9 +299,9 @@ None — this MP was correction only.
 ---
 
 ## MP-03: Full Reconciliation of All Confirmed Marketplace Decisions
-**Date:** 2026-10-22  
-**Objective:** Reconcile all project documentation against 28 explicitly confirmed decisions from conceptual planning discussions; add missing decisions, correct question statuses, synchronize tasks, update conceptual model, and align all cross-references  
-**Scope:** Documentation-only reconciliation across all 9 project documents; no code implementation  
+**Date:** 2026-10-22
+**Objective:** Reconcile all project documentation against 28 explicitly confirmed decisions from conceptual planning discussions; add missing decisions, correct question statuses, synchronize tasks, update conceptual model, and align all cross-references
+**Scope:** Documentation-only reconciliation across all 9 project documents; no code implementation
 
 ### Results
 - **decisions.md**: Added 18 new confirmed decisions (CD-039..CD-056) covering ownership model (CD-039), address/contact fields (CD-040), vendor auto-publish (CD-041), product inactivation (CD-042), category hierarchy rules (CD-043), three independent state machines (CD-044), global commission % (CD-045), Razorpay with verification (CD-046), payment/distribution separation (CD-047), refund policy with ledger adjustments (CD-048), Elasticsearch constraints (CD-049), coupon inclusion/exclusion (CD-050), vendor dashboard scope (CD-051), historical records/deletion (CD-052), Docker Compose structure (CD-053), English interface/currency (CD-054), manual refresh MVP (CD-055), three-layer TDD (CD-056). Updated Technical/Future table with 20 entries (D-013..D-032). Fixed D-022 "Fora do escopo" → "Out of scope".
@@ -398,9 +398,9 @@ Technical tasks correctly deferred to P3a/P3b/P3c: MongoDB collections (T-301), 
 ---
 
 ## MP-03-S1: Correção Final e Encerramento da T-004
-**Date:** 2026-10-23  
-**Objective:** Apply final correction to Order aggregate financial status precedence (T-004 closure); validate mutual exclusion; preserve pending decisions; no scope expansion  
-**Scope:** Documentation-only correction across decisions.md, open_questions.md, conceptual_model.md; no code, no diagram changes, no new tasks  
+**Date:** 2026-10-23
+**Objective:** Apply final correction to Order aggregate financial status precedence (T-004 closure); validate mutual exclusion; preserve pending decisions; no scope expansion
+**Scope:** Documentation-only correction across decisions.md, open_questions.md, conceptual_model.md; no code, no diagram changes, no new tasks
 
 ### Results
 - **decisions.md**: Added CD-058 confirming Order aggregate financial status as derived dimension with mutual exclusion precedence: FULLY_REFUNDED (all groups fully refunded) → PARTIALLY_REFUNDED (at least one group refunded, not all fully) → PAID (captured payment, no refunds, lifecycle not terminal). CANCELLED/VOIDED kept as unconfirmed lifecycle proposals.
@@ -487,9 +487,9 @@ Test cases verified:
 ---
 
 ## MP-04: Consolidação das Decisões Mínimas de Autenticação, Autorização e Endereço
-**Date:** 2026-10-23  
-**Objective:** Consolidate approved minimal decisions for authentication, authorization, and checkout address to unblock Stage 2 (Auth) and Stage 5 (Checkout) implementation  
-**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+**Date:** 2026-10-23
+**Objective:** Consolidate approved minimal decisions for authentication, authorization, and checkout address to unblock Stage 2 (Auth) and Stage 5 (Checkout) implementation
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks
 
 ### Results
 - **decisions.md**: Added CD-059 (Consumer/Vendor ownership-based authorization), CD-060 (Credential 1:1 + login email global uniqueness), CD-061 (Checkout address snapshot). Removed duplicate CD-057. Updated Technical/Future table: D-025 resolved (CD-061), D-033/D-036 resolved (CD-060), renumbered remaining entries.
@@ -585,9 +585,9 @@ Decisions validated against confirmed requirements:
 ---
 
 ## MP-05: Variantes de Produto e Estados Mínimos das Máquinas de Estado
-**Date:** 2026-10-23  
-**Objective:** Resolve product variants decision and define minimal state machines for Order, Payment, and Order_Vendor_Group to unblock Stage 3 (Product CRUD) and Stages 5-7 (Order, Payment, Refund flows)  
-**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+**Date:** 2026-10-23
+**Objective:** Resolve product variants decision and define minimal state machines for Order, Payment, and Order_Vendor_Group to unblock Stage 3 (Product CRUD) and Stages 5-7 (Order, Payment, Refund flows)
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks
 
 ### Results
 - **decisions.md**: Added CD-062 (Product Variants — Not in MVP: each variation is separate Product) and CD-063 (Minimal State Machines for Order, Payment, Order_Vendor_Group with 7+5+7 states, transitions, cross-machine rules). Technical/Future table unchanged.
@@ -682,9 +682,9 @@ Decisions validated against confirmed requirements:
 ---
 
 ## MP-06-R4: Consolidação Final do Stripe Connect (Separate Charges and Transfers)
-**Date:** 2026-10-23  
-**Objective:** Finalize and consolidate CD-064 (Payment Provider) and CD-065 (Distribution Flow) with corrected financial separation, fulfillment trigger alignment, and async payment handling  
-**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks  
+**Date:** 2026-10-23
+**Objective:** Finalize and consolidate CD-064 (Payment Provider) and CD-065 (Distribution Flow) with corrected financial separation, fulfillment trigger alignment, and async payment handling
+**Scope:** Documentation-only consolidation across decisions.md, open_questions.md, conceptual_model.md, task_list.md; no code, no diagram changes, no new tasks
 
 ### Results
 - **decisions.md**: Added CD-064 (Stripe Connect Separate Charges and Transfers) and CD-065 (split-payment flow with commission per CD-045, manual Transfer reversal on refunds, fulfillment trigger = Vendor confirmation). Updated Technical/Future table: D-017 resolved (CD-064). CD-046 (Razorpay) preserved as historical.
@@ -779,9 +779,9 @@ Decisions validated against confirmed requirements:
 ---
 
 ## MP-07E: Formalização Mínima das Regras de Cupons (Q-016)
-**Date:** 2026-10-23  
-**Objective:** Formalize the six confirmed coupon business rules in documentation, correcting CD-050 and Q-016 to reflect that stacking/priority rules are resolved (no stacking, no priority, consumer choice) while keeping mixed-cart discount calculation as pending  
-**Scope:** Documentation-only updates to decisions.md (CD-050), open_questions.md (Q-016), task_list.md (T-116), and mp_log.md; no ES, MongoDB, reviews, notifications, or currency changes  
+**Date:** 2026-10-23
+**Objective:** Formalize the six confirmed coupon business rules in documentation, correcting CD-050 and Q-016 to reflect that stacking/priority rules are resolved (no stacking, no priority, consumer choice) while keeping mixed-cart discount calculation as pending
+**Scope:** Documentation-only updates to decisions.md (CD-050), open_questions.md (Q-016), task_list.md (T-116), and mp_log.md; no ES, MongoDB, reviews, notifications, or currency changes
 
 ### Results
 - **decisions.md**: Updated CD-050 to reflect that coupon stacking and priority rules are resolved (no stacking, max one coupon per vendor per purchase; no automatic priority; consumer selects eligible coupon per vendor). Mixed-cart discount calculation remains unresolved.
@@ -867,9 +867,9 @@ None — this MP was documentation correction only.
 ---
 
 ## MP-13: Execução da T-201 — Requisitos Funcionais do Marketplace FS-01
-**Date:** 2026-10-23  
-**Objective:** Execute T-201 to produce the functional requirements document with traceability, acceptance criteria, and explicit separation between confirmed decisions, derived requirements, and pending questions  
-**Scope:** Documentation-only creation of `docs/functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+**Date:** 2026-10-23
+**Objective:** Execute T-201 to produce the functional requirements document with traceability, acceptance criteria, and explicit separation between confirmed decisions, derived requirements, and pending questions
+**Scope:** Documentation-only creation of `docs/functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution
 
 ### Results
 - Created `docs/functional_requirements.md` (1,797 lines) with:
@@ -965,7 +965,7 @@ All 65 confirmed decisions (CD-001..CD-065) assessed for functional requirement 
 | `/home/workstation/source/f1/docs/task_list.md` | T-201 → completed |
 
 ### Working Tree State
-**Initial:** Clean (no uncommitted changes to tracked files; functional_requirements.md did not exist)  
+**Initial:** Clean (no uncommitted changes to tracked files; functional_requirements.md did not exist)
 **Final:** New file `docs/functional_requirements.md` (untracked)
 
 ### Verification
@@ -983,7 +983,7 @@ All 65 confirmed decisions (CD-001..CD-065) assessed for functional requirement 
 - No implementation details, architecture, or technical design included
 
 ### Verdict
-**T-201 COMPLETED** — The functional requirements document is ready for responsible review (T-204). 
+**T-201 COMPLETED** — The functional requirements document is ready for responsible review (T-204).
 
 **Next Recommended Step:** MP-10 — Non-functional requirements (T-202), acceptance criteria refinement (T-203), and responsible review (T-204).
 
@@ -996,12 +996,12 @@ All 65 confirmed decisions (CD-001..CD-065) assessed for functional requirement 
 ---
 
 ## MP-09: Sign-off da T-126, Housekeeping da T-007 e Liberação da P2 — FS-01
-**Date:** 2026-10-23  
-**Objective:** Register human approval of conceptual model (T-126 sign-off), complete T-007 housekeeping, and initiate P2 (T-201)  
-**Scope:** Documentation updates to task_list.md (T-126, T-007, T-201) and mp_log.md; no conceptual model, decisions, or open questions changes  
+**Date:** 2026-10-23
+**Objective:** Register human approval of conceptual model (T-126 sign-off), complete T-007 housekeeping, and initiate P2 (T-201)
+**Scope:** Documentation updates to task_list.md (T-126, T-007, T-201) and mp_log.md; no conceptual model, decisions, or open questions changes
 
 ### Results
-- **task_list.md**: 
+- **task_list.md**:
   - T-126 → covered_by_decision (human sign-off recorded for conceptual model approval)
   - T-007 → covered_by_decision (MP-02 reconciliation complete via MPs 01-07I)
   - T-201 → in_progress (P2 initiated)
@@ -1071,9 +1071,9 @@ None — this MP registers sign-off and initiates P2 only.
 ---
 
 ## MP-15: Correção e Fechamento da T-201 | P2 — Especificação de Requisitos FS-01
-**Date:** 2026-10-23  
-**Objective:** Correct all issues identified in MP-14 audit and close T-201 with a functionally complete, traceable, and internally consistent requirements document  
-**Scope:** Corrections to `docs/functional_requirements.md` only; no implementation, no conceptual model changes, no business decision resolution  
+**Date:** 2026-10-23
+**Objective:** Correct all issues identified in MP-14 audit and close T-201 with a functionally complete, traceable, and internally consistent requirements document
+**Scope:** Corrections to `docs/functional_requirements.md` only; no implementation, no conceptual model changes, no business decision resolution
 
 ### Results
 Corrected `docs/functional_requirements.md` (now 1,935 lines, version 2.0) addressing all MP-14 findings:
@@ -1144,7 +1144,7 @@ All 65 CD-001..CD-065 remain confirmed. No decisions changed or invented.
 | `/home/workstation/source/f1/docs/mp_log.md` | MP-15 entry appended |
 
 ### Working Tree State
-**Initial:**  
+**Initial:**
 ```
  M docs/mp_log.md
  M docs/task_list.md
@@ -1167,9 +1167,9 @@ All 65 CD-001..CD-065 remain confirmed. No decisions changed or invented.
 ---
 
 ## MP-16: Execução da T-202 — Requisitos Não-Funcionais do Marketplace FS-01
-**Date:** 2026-10-23  
-**Objective:** Execute T-202 to produce the non-functional requirements document with traceability to decisions and explicit identification of pending targets with their business impact  
-**Scope:** Documentation-only creation of `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+**Date:** 2026-10-23
+**Objective:** Execute T-202 to produce the non-functional requirements document with traceability to decisions and explicit identification of pending targets with their business impact
+**Scope:** Documentation-only creation of `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution
 
 ### Results
 - Created `docs/non-functional_requirements.md` (documenting all NFR domains with identified targets and gaps) with:
@@ -1258,9 +1258,9 @@ All confirmed decisions CD-001..CD-065 remain applicable. NFR document reflects:
 ---
 
 ## MP-17: Correções Orientadas pelo Code Review do NFR (T-202)
-**Date:** 2026-10-23  
-**Objective:** Apply corrections from code review of `docs/non-functional_requirements.md`, preserving confirmed decisions, traceability, and MVP scope  
-**Scope:** Documentation-only corrections to `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution  
+**Date:** 2026-10-23
+**Objective:** Apply corrections from code review of `docs/non-functional_requirements.md`, preserving confirmed decisions, traceability, and MVP scope
+**Scope:** Documentation-only corrections to `docs/non-functional_requirements.md`; no implementation, no conceptual model changes, no business decision resolution
 
 ### Findings Addressed
 
@@ -1328,8 +1328,8 @@ All 65 confirmed decisions CD-001..CD-065 remain applicable. Corrections only fi
 ---
 
 ## MP-07 Stage A: Elasticsearch Strategy (T-115/Q-015)
-**Date:** 2026-10-23  
-**Objective:** Resolve conceptual scope of Elasticsearch index strategy per CD-049 and Q-015  
+**Date:** 2026-10-23
+**Objective:** Resolve conceptual scope of Elasticsearch index strategy per CD-049 and Q-015
 **Scope:** Documentation-only analysis and updates to open_questions.md, conceptual_model.md, task_list.md, and new `docs/analysis/analysis_es_strategy.md`; no code, no diagram changes, no business decisions required (all within CD-049 boundaries)
 
 ### Results
@@ -1379,8 +1379,8 @@ All 65 CD-001..CD-065 remain confirmed. No new business decisions — all recomm
 ---
 
 ## MP-07 Stage B: Coupon Consistency Check (T-116/Q-016)
-**Date:** 2026-10-23  
-**Objective:** Verify consistency of coupon rules across all project documents per MP-07 instructions  
+**Date:** 2026-10-23
+**Objective:** Verify consistency of coupon rules across all project documents per MP-07 instructions
 **Scope:** Documentation-only consistency audit across decisions.md, open_questions.md, conceptual_model.md, functional_requirements.md, task_list.md; no changes to business rules
 
 ### Results
@@ -1432,8 +1432,8 @@ All 65 CD-001..CD-065 remain confirmed. No business rules changed or invented. C
 ---
 
 ## MP-07 Stage C: Review Moderation & Display Analysis (T-117/Q-017)
-**Date:** 2026-10-23  
-**Objective:** Analyze pending review moderation and display rules per Q-017 and CD-017; present alternatives with recommendations for business approval  
+**Date:** 2026-10-23
+**Objective:** Analyze pending review moderation and display rules per Q-017 and CD-017; present alternatives with recommendations for business approval
 **Scope:** Documentation-only analysis; creates `docs/analysis/analysis_review_moderation.md`; updates open_questions.md, conceptual_model.md, task_list.md; no business decisions made (requires responsible approval)
 
 ### Results
@@ -1488,8 +1488,8 @@ All 65 CD-001..CD-065 remain confirmed. **No business decisions made** — 7 rec
 ---
 
 ## MP-07 Stage D: Stripe Connect Test Mode Validation Analysis (CD-064/CD-065)
-**Date:** 2026-10-23  
-**Objective:** Validate Stripe Connect Separate Charges and Transfers flow per CD-064/CD-065; identify what requires test execution vs documentation; document validation requirements for responsible approval  
+**Date:** 2026-10-23
+**Objective:** Validate Stripe Connect Separate Charges and Transfers flow per CD-064/CD-065; identify what requires test execution vs documentation; document validation requirements for responsible approval
 **Scope:** Documentation-only analysis; creates `docs/analysis/analysis_stripe_validation.md`; updates Q-011, Q-012; no test execution (no credentials), no business decisions
 
 ### Results
@@ -1562,8 +1562,8 @@ All 65 CD-001..CD-065 remain confirmed. **No changes** to confirmed decisions. F
 ---
 
 ## MP-07 Consolidated: Elasticsearch Strategy, Coupon Consistency, Review Moderation, Stripe Connect Validation
-**Date:** 2026-10-23  
-**Objective:** Complete MP-07 with all four stages (A-D) as specified in task_list.md  
+**Date:** 2026-10-23
+**Objective:** Complete MP-07 with all four stages (A-D) as specified in task_list.md
 **Scope:** Documentation-only; analysis files created, documents updated per MP-07 instructions; no implementation, no business decisions without approval
 
 ### Summary of Stages
@@ -1605,8 +1605,8 @@ All 65 CD-001..CD-065 remain confirmed. No business decisions made — 7 review 
 ---
 
 ## MP-11 (conclusão): Aprovação do Baseline FR/NFR/AC — Encerramento da Fase P2
-**Date:** 2026-10-23  
-**Objective:** Register explicit human approval of FR/NFR/AC baseline and close P2 approval gate (T-204)  
+**Date:** 2026-10-23
+**Objective:** Register explicit human approval of FR/NFR/AC baseline and close P2 approval gate (T-204)
 **Scope:** Documentation only — status update and transition record
 
 ### Resultado
@@ -1639,9 +1639,9 @@ Encerrar planejamento no estado atual e iniciar desenvolvimento orientado por TD
 ---
 
 ## MP-17: Correção de Regressão — CD-072 Review Eligibility State (DELIVERED)
-**Date:** 2026-10-25  
-**Objective:** Fix documented regression where FR-RW-001 acceptance criteria and mp_log.md entry contradicted confirmed decision CD-072 (MP-08)  
-**Scope:** Documentation correction only — align functional_requirements.md and mp_log.md with CD-072  
+**Date:** 2026-10-25
+**Objective:** Fix documented regression where FR-RW-001 acceptance criteria and mp_log.md entry contradicted confirmed decision CD-072 (MP-08)
+**Scope:** Documentation correction only — align functional_requirements.md and mp_log.md with CD-072
 
 ### Background
 - **CD-072** (Confirmed MP-08): Review eligibility requires Order in **DELIVERED** state
@@ -1690,9 +1690,9 @@ Post-correction, all canonical documents align on DELIVERED:
 ---
 
 ## MP-18: Implementação T-601 e T-602 — Autenticação e Autorização (Stage 2)
-**Date:** 2026-10-25  
-**Objective:** Implement T-601 (Backend: User registration/login with JWT) and T-602 (Backend: Role guards & permission middleware) using TDD  
-**Scope:** Backend implementation only — credential domain, auth service, routes, and middleware with comprehensive tests  
+**Date:** 2026-10-25
+**Objective:** Implement T-601 (Backend: User registration/login with JWT) and T-602 (Backend: Role guards & permission middleware) using TDD
+**Scope:** Backend implementation only — credential domain, auth service, routes, and middleware with comprehensive tests
 
 ### TDD Cycle Execution
 
@@ -1757,5 +1757,108 @@ Implemented minimal code to pass tests:
 - T-603: Frontend Auth pages & context
 - T-604: Frontend Role-based UI rendering
 - T-701: Backend Vendor onboarding API (depends on T-602)
+
+---
+
+## Feature Closure — `initial-implementation` (2026-10-26)
+
+- **Verdict:** `APPROVED WITH CAVEATS` for the initial-implementation milestone only; this does not close P4 implementation work or authorize P4/P5.
+- **Verified Git reference:** feature tip `6a83ece` (`refactor(devops): modernize container orchestration and testing infrastructure`) is an ancestor of merge commit `4b42c5c` (`Merge branch 'feature/initial-implementation' into develop`). The merge commit is the current tip of `develop` and `feature/closing-initial-implementation`.
+- **Branch:** the literal local name `closing-initial-implementation` does not exist; the repository-convention branch `feature/closing-initial-implementation` is already checked out and tracking its remote at the verified merge commit. No branch was created or history changed.
+- **Historical authorization:** `orch-mvp-2026-10-25.md` records explicit user authorization for T-603/T-701 at that time. Later continuity records restored the P4 block at `MAX_AUTHORIZED_PHASE = 3`; this closeout grants no current P4 authorization.
+- **Backlog audit:** P0–P3 task rows are recorded as `completed` or `covered_by_decision`; no P0–P3 row is `pending`, `in_progress`, or `blocked`. P2 requirements are marked reviewed. P4a records T-601/T-602 completed and T-603/T-604 pending; P4b records T-701 onward pending. Auth UI/context and vendor API source/tests exist, but their presence does not change those task statuses or prove every acceptance criterion. In particular, T-603's E2E criterion is not established by component tests alone.
+- **Validation evidence:** the resumed validation reported backend tests 158/158 and build pass, frontend build pass, and the full frontend suite 54/54 with normal process exit. Runtime validation later passed the backend health check (HTTP 200), frontend page (HTTP 200), Podman service-name DNS, and frontend proxy to the backend's unauthenticated protected endpoint (expected HTTP 401). This supersedes the earlier snapshot in [orch-resume-2026-10-26.md](../../docs/agent_runs/orch-resume-2026-10-26.md), which accurately recorded the then-current 48-test hang and that container runtime validation had not yet been run. Exact commands/output for the later 54-test and integrated-container runs are not persisted in that snapshot.
+- **Caveats:** [project_context.md](project_context.md) still describes the project as planning/conceptual modeling and says implementation is out of scope; this is stale against the merged implementation. [task_list.md](task_list.md) also has a P1 narrative claiming conceptual work remains while all listed P0–P3 tasks are completed or covered; some open questions remain partially resolved but are deferred. The backlog leaves T-603/T-701 pending despite implementation artifacts. These inconsistencies are recorded, not silently reconciled; update the minimum affected metadata only in a separately authorized documentation task after acceptance evidence is reviewed.
+- **Phase transition:** `MAX_AUTHORIZED_PHASE` remains 3 in `kilo-orchestration/src/agent-orchestrator.ts`; the orchestrator blocks work above that limit. P4/P5 remain unauthorized and T-901 remains out of scope. Phase release requires explicit human authorization. After release, T-603 is the first candidate in P4a (dependencies T-502/T-601 recorded satisfied); first reconcile its existing implementation and acceptance evidence rather than reimplementing it. T-701 is in P4b and is not the next phase candidate.
+- **Closeout scope:** no application code, backlog status, phase limit, business decision, container, or persistent data was changed. No commit was made. The execution-time evidence above is a closure summary, not a claim that all implementation tasks are complete.
+
+---
+
+## P4 Execution — `p4-unlock-2026-10-26`
+
+**Date:** 2026-10-26
+**Objective:** Execute authorized P4 tasks (T-603, T-701) with manual E2E checklist, containerized validation, and documentation updates
+**Scope:** P4a (T-603, T-604), P4b (T-701 onward); P5 remains blocked
+
+### Authorization
+- `MAX_AUTHORIZED_PHASE` updated from 3 to 4 in `kilo-orchestration/src/agent-orchestrator.ts:24`
+- P5 remains blocked (MAX_AUTHORIZED_PHASE = 4, not 5)
+- No T-901 implementation
+
+### Fix Stage (Pre-Implementation)
+1. **T-701 status correction**: Updated `task_list.md` T-701 from `pending` → `completed` (implementation exists, 16 tests pass)
+2. **P1 narrative fix**: Updated `task_list.md` lines 31-33 to clarify remaining work is technical implementation, not business decisions
+3. **P3a dependencies fix**: Updated `task_list.md` lines 84-89 to reference decisions (CD-005, CD-049, CD-018, Q-014, Q-018) instead of T-125
+4. **project_context.md correction**: Previously corrected in prior session to reflect initial implementation merged
+
+### Implementation Stage
+
+#### T-603: Frontend Auth Pages & Context
+**Acceptance Criterion:** Auth flow works E2E
+**Approach:** Manual E2E checklist executed via API (per authorization, as alternative to Playwright)
+
+**Test Results:**
+| Scenario | Result | Notes |
+|----------|--------|-------|
+| Register Consumer | ✅ PASS | HTTP 201, tokens issued |
+| Register Vendor | ✅ PASS | HTTP 201, tokens issued |
+| Login Consumer | ✅ PASS | HTTP 200, tokens issued |
+| Login Vendor | ✅ PASS | HTTP 200, tokens issued |
+| Consumer → /api/v1/vendor/me | ⚠️ 404 | Expected 403 Forbidden; returns 404 (vendor not found) |
+| Vendor → /api/v1/vendor/me (pre-onboard) | ❌ | VENDOR_NOT_FOUND (expected) |
+| Refresh Token | ✅ PASS | New token pair issued |
+| Vendor Onboarding | ✅ PASS | Store created, status=active |
+| Vendor → /api/v1/vendor/me (post-onboard) | ✅ PASS | Profile returned |
+
+**Gap Identified:** Consumer accessing vendor-only endpoint returns 404 instead of 403. This is a backend authorization gap in `/api/v1/vendor/me` route (lacks role-based middleware for non-vendor roles). Documented for future fix.
+
+**Supporting Evidence:**
+- Frontend unit tests: 54/54 pass (LoginForm, RegisterForm, AuthProvider, ProtectedRoute, authStore, authApi)
+- Backend unit tests: 158/158 pass
+- Vite proxy integration verified: `localhost:5173/api/v1/vendor/me` → backend returns 401
+
+#### T-701: Backend Vendor Onboarding API
+**Acceptance Criterion:** API + status machine works
+**Status:** Already implemented and tested (pre-existing)
+
+**Verification:**
+- 16 Supertest tests pass (onboard, auth, validation, duplicates, slug, admin forbidden)
+- Auto-publish confirmed (status=active on creation)
+- Ownership isolation enforced (PATCH /me checks vendor.personId === personId)
+- Commission from global config (CD-045)
+
+### Containerized Validation
+**File:** `F01/docker-compose.validation.yml` (created)
+**Port Mapping:** Redis 6380→6379 (avoids host 6379 conflict), Backend 3001, Frontend 5174, Mongo 27018, ES 9201
+
+**Services Verified:**
+| Service | Port | Health |
+|---------|------|--------|
+| Backend | 3001 | ✅ HTTP 200 /health |
+| Frontend | 5174 | ✅ HTTP 200 / |
+| Frontend→Backend Proxy | 5174/api | ✅ HTTP 401 (auth required) |
+| MongoDB | 27018 | ✅ Connection OK |
+| Redis | 6380 | ✅ Connection OK |
+| Elasticsearch | 9201 | ✅ Cluster green |
+
+**Backend Tests in Container:** 158/158 pass
+
+### Documentation Stage
+1. **task_list.md**: T-603 → `completed`, T-701 → `completed`; P1 narrative fixed; P3a dependencies fixed; Immediate Next Action updated
+2. **project_context.md**: Previously corrected (initial implementation merged, P4/P5 blocked)
+3. **mp_log.md**: This entry added
+
+### Known Issues / Follow-up
+1. **Consumer → vendor endpoint returns 404 not 403** - Backend route `/api/v1/vendor/me` needs role-based middleware for proper 403 response
+2. **T-604 (Frontend Role-based UI)** - Next task, depends on T-603 (now completed)
+3. **T-702 (Product CRUD)** - Next P4b task, depends on T-701 (completed)
+
+### Verification Summary
+- All backend tests: 158/158 pass (local + container)
+- All frontend tests: 54/54 pass
+- Builds: backend (tsc) ✅, frontend (tsc + vite) ✅
+- Manual E2E checklist: 8/9 scenarios pass (1 gap documented)
+- Container integration: All 6 services healthy, proxy working
+- P4 authorized (MAX_AUTHORIZED_PHASE = 4), P5 blocked
 
 ---

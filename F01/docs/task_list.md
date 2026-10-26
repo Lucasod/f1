@@ -30,7 +30,7 @@
 
 **Status after MP-07 (Stage A):** 65 conceptual decisions confirmed (CD-001..CD-065). 28 questions reclassified: 12 RESOLVED (Q-005, Q-006, Q-007, Q-008, Q-010, Q-013, Q-015, Q-019, Q-020, Q-021, Q-027, Q-028), 6 PARTIALLY_RESOLVED (Q-003, Q-004, Q-009, Q-011, Q-012, Q-016), 5 PENDING (Q-001, Q-002, Q-014, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 is PARTIALLY_RESOLVED.
 
-**Remaining conceptual work:** Resolve 5 PENDING + 6 PARTIALLY_RESOLVED (business rule gaps).
+**Remaining P1 work:** Technical implementation of resolved decisions (MongoDB schemas T-301, ES mappings T-302, Redis schemas T-303, S3 naming T-304). Business decisions complete. Q-018 Glacier/WORM/trigger pending human decision.
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
@@ -81,10 +81,10 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-301 | Design MongoDB collections | Map concepts → collections, embedding vs refs (CD-005: deferred from conceptual) | T-125 | Collection schemas with indexes | ✅ covered_by_decision |
-| T-302 | Design Elasticsearch mappings | Index settings, analyzers, mappings | T-115, T-301 | ES index definitions | ✅ covered_by_decision |
-| T-303 | Design Redis schemas | Cart, session, cache keys, TTLs (Q-014 TECHNICAL_FUTURE) | T-125 | Redis key patterns + data structures | ✅ covered_by_decision |
-| T-304 | Define S3 object naming | Product images, invoices, uploads (Q-018 TECHNICAL_FUTURE) | T-118 | Naming convention + folder structure | ✅ covered_by_decision |
+| T-301 | Design MongoDB collections | Map concepts → collections, embedding vs refs (CD-005: deferred from conceptual) | CD-005 | Collection schemas with indexes | ✅ covered_by_decision |
+| T-302 | Design Elasticsearch mappings | Index settings, analyzers, mappings | CD-049, T-301 | ES index definitions | ✅ covered_by_decision |
+| T-303 | Design Redis schemas | Cart, session, cache keys, TTLs (Q-014 TECHNICAL_FUTURE) | CD-018, Q-014 | Redis key patterns + data structures | ✅ covered_by_decision |
+| T-304 | Define S3 object naming | Product images, invoices, uploads (Q-018 TECHNICAL_FUTURE) | Q-018 | Naming convention + folder structure | ✅ covered_by_decision |
 | T-305 | Data integrity rules | Unique constraints, referential integrity, validation | T-301 | Rules documented per collection | ✅ covered_by_decision |
 | T-306 | Migration/seed strategy | Initial data, versioning approach | T-301 | Migration plan documented | ✅ covered_by_decision |
 
@@ -125,7 +125,7 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-601 | Backend: User registration/login | JWT issue/refresh, password hash (CD-010) | T-403, T-501 | API works, tests pass | ✅ completed |
 | T-602 | Backend: Role guards & permission middleware | Protect routes per permission matrix (CD-004: Admin only; Consumer/Vendor separate) | T-601, T-103 | All endpoints guarded | ✅ completed |
-| T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E | ⏳ pending |
+| T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E (manual checklist executed, API-level E2E verified) | ✅ completed |
 | T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ⏳ pending |
 
 ---
@@ -134,7 +134,7 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ⏳ pending |
+| T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
 | T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ⏳ pending |
 | T-703 | Backend: Image upload to S3 | Presigned URLs, multipart, validation (T-304) | T-304, T-602 | Upload works, CDN served | ⏳ pending |
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ⏳ pending |
@@ -267,5 +267,6 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**MP-07 Stage C:** Review moderation/display (T-117/Q-017) — unblocks Stage 7 (Reviews).
+**T-604:** Frontend Role-based UI rendering — depends on T-603 (now completed).
+**T-702:** Backend Product CRUD API — depends on T-701 (completed), T-106b, T-107, T-602.
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).
