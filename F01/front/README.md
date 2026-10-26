@@ -60,32 +60,33 @@ npm run test:e2e     # Run E2E tests (Playwright)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VITE_API_URL` | Backend API base URL (browser → API) | `http://localhost:3000` |
+| `VITE_API_PROXY_TARGET` | Backend target used by the Vite `/api` proxy | `http://localhost:3000` |
 
-Create a `.env.local` file to override:
+API requests use relative `/api` paths, so the browser talks to Vite and Vite forwards requests to this target. Override it in `.env.local` for local development:
 
 ```bash
-VITE_API_URL=http://localhost:3000
+VITE_API_PROXY_TARGET=http://localhost:3000
 ```
 
-## Vite Proxy (Docker Development)
+## Vite Proxy
 
-In Docker, the frontend container cannot reach `localhost:3000` (the backend runs on the host). The Vite dev server proxies `/api` requests to the host:
+The Vite dev server proxies `/api` requests from its own network namespace:
 
 ```typescript
 // vite.config.ts
 server: {
   proxy: {
     '/api': {
-      target: 'http://host.docker.internal:3000',
+      target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
       changeOrigin: true
     }
   }
 }
 ```
 
-- **Browser → API**: Uses `VITE_API_URL` (default `http://localhost:3000`)
-- **Container frontend → Backend**: Uses Vite proxy `/api` → `host.docker.internal:3000`
+- Local Vite uses `http://localhost:3000` by default.
+- The standalone frontend Compose file maps `host.docker.internal` to the host gateway and targets the backend on host port `3000`.
+- The integrated `F01/docker-compose.yml` targets the backend service directly at `http://backend:3000`; it does not depend on host-gateway DNS.
 
 ## Docker Usage
 
@@ -98,7 +99,7 @@ docker compose down         # Stop and remove container
 
 - **Port**: `5173:5173` (host:container)
 - **Hot reload**: Source files mounted as volumes
-- **Environment**: `VITE_API_URL=http://localhost:3000` (browser accesses backend via host localhost)
+- **Environment**: `VITE_API_PROXY_TARGET` is set for the frontend container; the browser makes same-origin `/api` requests through Vite.
 
 ## State Management (Zustand)
 

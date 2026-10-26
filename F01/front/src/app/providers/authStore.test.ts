@@ -89,9 +89,12 @@ describe('useAuthStore', () => {
 
       await useAuthStore.getState().login('john@example.com', 'password123');
 
-      expect(localStorage.getItem('accessToken')).toBe('access-token');
-      expect(localStorage.getItem('refreshToken')).toBe('refresh-token');
-      expect(localStorage.getItem('user')).toBe(JSON.stringify(mockResponse.person));
+      const persistedState = JSON.parse(localStorage.getItem('auth-storage') ?? 'null')?.state;
+      expect(persistedState).toMatchObject({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        user: mockResponse.person
+      });
     });
 
     it('should set error on login failure', async () => {
@@ -201,8 +204,11 @@ describe('useAuthStore', () => {
       const state = useAuthStore.getState();
       expect(state.accessToken).toBe('new-access-token');
       expect(state.refreshToken).toBe('new-refresh-token');
-      expect(localStorage.getItem('accessToken')).toBe('new-access-token');
-      expect(localStorage.getItem('refreshToken')).toBe('new-refresh-token');
+      const persistedState = JSON.parse(localStorage.getItem('auth-storage') ?? 'null')?.state;
+      expect(persistedState).toMatchObject({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token'
+      });
     });
 
     it('should logout on refresh token failure', async () => {

@@ -5,12 +5,18 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
 
-const renderWithProviders = (component: React.ReactNode, initialPath = '/') => {
+const renderWithProviders = (
+  component: React.ReactNode,
+  outlet: React.ReactNode = <div data-testid="protected-content">Protected Content</div>
+) => {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={['/dashboard']}>
       <AuthProvider>
         <Routes>
-          <Route path="*" element={component} />
+          <Route path="/login" element={<div>Login page</div>} />
+          <Route path="/dashboard" element={component}>
+            <Route index element={outlet} />
+          </Route>
         </Routes>
       </AuthProvider>
     </MemoryRouter>
@@ -38,34 +44,21 @@ describe('ProtectedRoute', () => {
       accessToken: 'token'
     });
 
-    renderWithProviders(
-      <ProtectedRoute>
-        <div data-testid="protected-content">Protected Content</div>
-      </ProtectedRoute>
-    );
+    renderWithProviders(<ProtectedRoute />);
 
     expect(screen.getByTestId('protected-content')).toBeInTheDocument();
   });
 
   it('redirects to login when not authenticated', () => {
-    renderWithProviders(
-      <ProtectedRoute>
-        <div data-testid="protected-content">Protected Content</div>
-      </ProtectedRoute>,
-      '/dashboard'
-    );
+    renderWithProviders(<ProtectedRoute />);
 
-    expect(screen.getByText(/redirecting to login/i)).toBeInTheDocument();
+    expect(screen.getByText(/login page/i)).toBeInTheDocument();
   });
 
   it('shows loading while auth initializes', () => {
     useAuthStore.setState({ isLoading: true });
 
-    renderWithProviders(
-      <ProtectedRoute>
-        <div data-testid="protected-content">Protected Content</div>
-      </ProtectedRoute>
-    );
+    renderWithProviders(<ProtectedRoute />);
 
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
@@ -78,9 +71,8 @@ describe('ProtectedRoute', () => {
     });
 
     renderWithProviders(
-      <ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']}>
-        <div data-testid="vendor-content">Vendor Dashboard</div>
-      </ProtectedRoute>
+      <ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']} />,
+      <div data-testid="vendor-content">Vendor Dashboard</div>
     );
 
     expect(screen.getByTestId('vendor-content')).toBeInTheDocument();
@@ -93,11 +85,7 @@ describe('ProtectedRoute', () => {
       accessToken: 'token'
     });
 
-    renderWithProviders(
-      <ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']}>
-        <div data-testid="vendor-content">Vendor Dashboard</div>
-      </ProtectedRoute>
-    );
+    renderWithProviders(<ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']} />);
 
     expect(screen.getByText(/access denied/i)).toBeInTheDocument();
   });
@@ -110,9 +98,8 @@ describe('ProtectedRoute', () => {
     });
 
     renderWithProviders(
-      <ProtectedRoute allowedRoles={['VENDOR']}>
-        <div data-testid="vendor-content">Vendor Dashboard</div>
-      </ProtectedRoute>
+      <ProtectedRoute allowedRoles={['VENDOR']} />,
+      <div data-testid="vendor-content">Vendor Dashboard</div>
     );
 
     expect(screen.getByTestId('vendor-content')).toBeInTheDocument();

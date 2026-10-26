@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../features/home/HomePage';
 import { AuthProvider } from '../app/providers/AuthProvider';
 import { useAuthStore } from '../app/providers/authStore';
@@ -11,7 +12,11 @@ vi.mock('../app/providers/authStore', () => ({
 const mockUseAuthStore = vi.mocked(useAuthStore);
 
 const renderWithProvider = (component: React.ReactNode) => {
-  return render(<AuthProvider>{component}</AuthProvider>);
+  return render(
+    <MemoryRouter>
+      <AuthProvider>{component}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe('HomePage', () => {
@@ -38,7 +43,7 @@ describe('HomePage', () => {
     expect(screen.getByText('Welcome to FS-01 Marketplace')).toBeInTheDocument();
     expect(screen.getByText('Your marketplace for buying and selling products.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /get started/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /login/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /login/i })).toHaveLength(2);
   });
 
   it('renders user dashboard when authenticated as consumer', () => {
@@ -85,7 +90,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
   });
 
-  it('renders admin dashboard link when authenticated as admin', () => {
+  it('renders only the admin dashboard link when authenticated as admin', () => {
     mockUseAuthStore.mockReturnValue({
       user: { id: '1', name: 'Admin', email: 'admin@example.com', roles: ['ADMIN'] },
       isAuthenticated: true,
@@ -103,7 +108,7 @@ describe('HomePage', () => {
     renderWithProvider(<HomePage />);
 
     expect(screen.getByRole('link', { name: /admin dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /vendor dashboard/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /vendor dashboard/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
   });
 });
