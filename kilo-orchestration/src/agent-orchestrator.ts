@@ -10,7 +10,12 @@ import type {
   ReviewVerdict,
   TaskClassification,
   TaskDelegationRequest,
+  FIPRPhase,
+  FIPRState,
+  DocUpdateRequest,
+  DocUpdateReport,
 } from './types.js';
+import { FIPRPhaseEnum } from './types.js';
 import { SelfCorrectionEngine } from './correction-engine.js';
 
 const TASK_ID_PATTERN = /^T-\d+[a-z]?$/i;
@@ -245,6 +250,9 @@ function createReport(
   divergences: string[],
   confirmedCriteria: string[] = [],
   unverifiedCriteria: string[] = [],
+  fiprPhase: FIPRPhase = FIPRPhaseEnum.REVIEW,
+  docUpdatePerformed: boolean = false,
+  docUpdateFiles: string[] = [],
 ): ConsolidatedTaskReport {
   return {
     runId: execution.runId,
@@ -256,6 +264,9 @@ function createReport(
     unverifiedCriteria,
     divergences,
     findings: reviewer?.findings ?? [],
+    fiprPhase,
+    docUpdatePerformed,
+    docUpdateFiles,
   };
 }
 
@@ -532,13 +543,182 @@ async function executeEligibleTask(
 
 export class SequentialTaskOrchestrator {
   private pendingExecution: Promise<void> = Promise.resolve();
+  private fiprStates: Map<string, FIPRState> = new Map();
 
   public constructor(
     private readonly agents: AgentDelegationPort,
     private readonly failureTracker?: SelfCorrectionEngine,
   ) {}
 
-  public execute(
+  private getFiprStateInternal(taskId: string): FIPRState | undefined {
+    const state = this.fiprStates.get(taskId);
+    return state ? structuredClone(state) : undefined;
+  }
+
+  private getFiprStateRef(taskId: string): FIPRState | undefined {
+    return this.fiprStates.get(taskId);
+  }
+
+  private setFiprState(taskId: string, state: FIPRState): void {
+    this.fiprStates.set(taskId, state);
+  }
+
+  private initializeFiprState(runId: string, taskId: string): FIPRState {
+    const state: FIPRState = {
+      runId,
+      taskId,
+      currentPhase: FIPRPhaseEnum.FIX,
+      phaseHistory: [],
+      fixAttempts: 0,
+      impAttempts: 0,
+    };
+    this.setFiprState(taskId, state);
+    return state;
+  }
+
+  private updateFiprPhase(taskId: string, phase: FIPRPhase, outcome?: string): void {
+    const state = this.getFiprStateRef(taskId);
+    if (!state) return;
+
+    // Complete the previous phase
+    const lastPhase = state.phaseHistory[state.phaseHistory.length - 1];
+    if (lastPhase && !lastPhase.completedAt) {
+      lastPhase.completedAt = new Date().toISOString();
+      lastPhase.outcome = outcome;
+    }
+
+    // Add new phase
+    state.phaseHistory.push({
+      phase,
+      startedAt: new Date().toISOString(),
+    });
+    state.currentPhase = phase;
+    this.setFiprState(taskId, state);
+  }
+
+  private completeFiprPhase(taskId: string, outcome?: string): void {
+    const state = this.getFiprStateRef(taskId);
+    if (!state) return;
+
+    const lastPhase = state.phaseHistory[state.phaseHistory.length - 1];
+    if (lastPhase && !lastPhase.completedAt) {
+      lastPhase.completedAt = new Date().toISOString();
+      lastPhase.outcome = outcome;
+    }
+    this.setFiprState(taskId, state);
+  }
+
+  private isCodeDefectFinding(finding: { severity: string; description: string }): boolean {
+    const codeDefectKeywords = ['code defect', 'bug', 'logic error', 'null check', 'type error', 'runtime error', 'crash', 'exception', 'incorrect logic', 'wrong implementation', 'security'];
+    const description = finding.description.toLowerCase();
+    return (finding.severity === 'CRITICAL' || finding.severity === 'HIGH') &&
+           codeDefectKeywords.some(keyword => description.includes(keyword.toLowerCase()));
+  }
+
+  private isImplementationGapFinding(finding: { severity: string; description: string }): boolean {
+    const gapKeywords = ['implementation gap', 'missing feature', 'missing validation', 'missing test', 'incomplete', 'not implemented', 'edge case', 'missing requirement'];
+    const description = finding.description.toLowerCase();
+    return gapKeywords.some(keyword => description.includes(keyword.toLowerCase()));
+  }
+
+  private async executeFixPhase(
+    task: BacklogTask,
+    request: TaskDelegationRequest,
+    isRetry: boolean,
+  ): Promise<CodeExecutionReport> {
+    const delegation: TaskDelegationRequest = {
+      ...request,
+      fiprPhase: FIPRPhaseEnum.FIX,
+      isRetry,
+      prohibitedActions: [...new Set([...request.prohibitedActions, ...PROHIBITED_ACTIONS])],
+    };
+
+    if (this.failureTracker && this.failureTracker.getState().runId !== delegation.runId) {
+      throw new Error('Self-correction state belongs to a different run');
+    }
+
+    const execution = await this.agents.delegateToCode(delegation);
+    validateExecutionReport(execution);
+    assertExecutionIdentity(execution, delegation);
+    return execution;
+  }
+
+  private async executeImpPhase(
+    task: BacklogTask,
+    request: TaskDelegationRequest,
+    isRetry: boolean,
+  ): Promise<CodeExecutionReport> {
+    const delegation: TaskDelegationRequest = {
+      ...request,
+      fiprPhase: FIPRPhaseEnum.IMP,
+      isRetry,
+      prohibitedActions: [...new Set([...request.prohibitedActions, ...PROHIBITED_ACTIONS])],
+    };
+
+    if (this.failureTracker && this.failureTracker.getState().runId !== delegation.runId) {
+      throw new Error('Self-correction state belongs to a different run');
+    }
+
+    const execution = await this.agents.delegateToCode(delegation);
+    validateExecutionReport(execution);
+    assertExecutionIdentity(execution, delegation);
+    return execution;
+  }
+
+  private async executeReviewPhase(
+    task: BacklogTask,
+    request: TaskDelegationRequest,
+    execution: CodeExecutionReport,
+  ): Promise<CodeReviewReport> {
+    const reviewRequest: CodeReviewRequest = {
+      runId: execution.runId,
+      taskId: execution.taskId,
+      baseCommit: execution.baseCommit,
+      snapshotId: execution.snapshotId,
+      changedFiles: [...execution.changedFiles],
+      commands: [...execution.commands],
+      acceptanceCriteria: request.acceptanceCriteria,
+    };
+
+    const reviewer = await this.agents.reviewWithCodeReviewer(reviewRequest);
+    validateReviewReport(reviewer);
+    // Ensure reviewer's snapshotId matches the requested snapshotId (reviewer should echo back the snapshot it reviewed)
+    return {
+      ...reviewer,
+      snapshotId: reviewRequest.snapshotId,
+    };
+  }
+
+  private async executeDocUpdatePhase(
+    task: BacklogTask,
+    request: TaskDelegationRequest,
+    execution: CodeExecutionReport,
+    confirmedCriteria: string[],
+  ): Promise<DocUpdateReport> {
+    if (!this.agents.performDocUpdate) {
+      // DOCUPDATE not available - return a default completed report
+      return {
+        runId: execution.runId,
+        taskId: execution.taskId,
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      };
+    }
+
+    const docUpdateRequest: DocUpdateRequest = {
+      runId: execution.runId,
+      taskId: execution.taskId,
+      baseCommit: execution.baseCommit,
+      changedFiles: execution.changedFiles,
+      acceptanceCriteria: request.acceptanceCriteria,
+      confirmedCriteria,
+    };
+
+    return await this.agents.performDocUpdate(docUpdateRequest);
+  }
+
+  public async executeFiprFlow(
     taskId: string,
     tasks: BacklogTask[],
     request: TaskDelegationRequest,
@@ -564,17 +744,692 @@ export class SequentialTaskOrchestrator {
       return Promise.reject(new Error(`Task ${taskId} could not be classified`));
     }
 
-    const execution = this.pendingExecution.then(() =>
-      executeEligibleTask(task, classification, request, this.agents, this.failureTracker),
+    if (
+      classification.taskId !== task.taskId ||
+      classification.status !== 'ELIGIBLE' ||
+      classification.blockers.length > 0
+    ) {
+      throw new Error(`Task ${task.taskId} is not eligible for delegation`);
+    }
+
+    const phase = phaseNumber(task.phase);
+    if (
+      phase === undefined ||
+      phase > MAX_AUTHORIZED_PHASE ||
+      task.humanApprovalRequired
+    ) {
+      throw new Error(`Task ${task.taskId} is outside the authorized orchestration scope`);
+    }
+
+    // Initialize FIPR state
+    const fiprState = this.initializeFiprState(request.runId, taskId);
+    let currentExecution: CodeExecutionReport;
+    let currentReviewer: CodeReviewReport;
+    let docUpdatePerformed = false;
+    let docUpdateFiles: string[] = [];
+    let finalOutcome: ReviewVerdict = 'INCONCLUSIVE';
+    let finalDivergences: string[] = [];
+    let finalConfirmedCriteria: string[] = [];
+    let finalUnverifiedCriteria: string[] = [];
+
+    // Track failure IDs for each finding to use with SelfCorrectionEngine
+    const findingFailureIds = new Map<string, string>();
+
+    // Wrap the entire flow in a promise for serialization chaining
+    const flowExecution = (async (): Promise<ConsolidatedTaskReport> => {
+      try {
+        // Phase 1: FIX
+        fiprState.fixAttempts = 1;
+        this.updateFiprPhase(taskId, FIPRPhaseEnum.FIX);
+        currentExecution = await this.executeFixPhase(task, request, false);
+        this.completeFiprPhase(taskId, currentExecution.status);
+
+        if (currentExecution.status !== 'COMPLETED') {
+          this.failureTracker?.recordFailure(
+            currentExecution.commands.some(c => c.exitCode !== 0)
+              ? 'DETERMINISTIC_TEST_BUILD'
+              : 'UNKNOWN',
+            'FIX phase execution failed',
+            {
+              runId: request.runId,
+              taskId,
+              executionId: currentExecution.executionId,
+              snapshotId: currentExecution.snapshotId,
+              commands: currentExecution.commands,
+              changedFiles: currentExecution.changedFiles,
+              stage: 'CODE_EXECUTION',
+            },
+          );
+          return this.createFiprReport(
+            currentExecution,
+            undefined,
+            'INCONCLUSIVE',
+            ['FIX phase did not complete'],
+            [],
+            [request.acceptanceCriteria],
+            FIPRPhaseEnum.FIX,
+            false,
+            [],
+          );
+        }
+
+        // Phase 2: IMP
+        fiprState.impAttempts = 1;
+        this.updateFiprPhase(taskId, FIPRPhaseEnum.IMP);
+        currentExecution = await this.executeImpPhase(task, request, false);
+        this.completeFiprPhase(taskId, currentExecution.status);
+
+        if (currentExecution.status !== 'COMPLETED') {
+          this.failureTracker?.recordFailure(
+            currentExecution.commands.some(c => c.exitCode !== 0)
+              ? 'DETERMINISTIC_TEST_BUILD'
+              : 'UNKNOWN',
+            'IMP phase execution failed',
+            {
+              runId: request.runId,
+              taskId,
+              executionId: currentExecution.executionId,
+              snapshotId: currentExecution.snapshotId,
+              commands: currentExecution.commands,
+              changedFiles: currentExecution.changedFiles,
+              stage: 'CODE_EXECUTION',
+            },
+          );
+          return this.createFiprReport(
+            currentExecution,
+            undefined,
+            'INCONCLUSIVE',
+            ['IMP phase did not complete'],
+            [],
+            [request.acceptanceCriteria],
+            FIPRPhaseEnum.IMP,
+            false,
+            [],
+          );
+        }
+
+        // Phase 3: REVIEW (with potential corrections loop)
+        const maxCorrectionAttempts = this.failureTracker?.getConfig().maxAttemptsPerFailure ?? 3;
+        let reviewAttempt = 0;
+        let reviewFindings: Array<{ id: string; severity: string; description: string; evidence: string[] }> = [];
+
+while (true) {
+          reviewAttempt++;
+          this.updateFiprPhase(taskId, FIPRPhaseEnum.REVIEW);
+          currentReviewer = await this.executeReviewPhase(task, request, currentExecution);
+          this.completeFiprPhase(taskId, currentReviewer.verdict);
+
+          if (
+            currentReviewer.runId !== request.runId ||
+            currentReviewer.taskId !== request.taskId
+          ) {
+            this.failureTracker?.recordFailure('PERSISTENCE_INTEGRITY', 'Code Reviewer report identity mismatch', {
+              runId: request.runId,
+              taskId,
+              reviewerRunId: currentReviewer.runId,
+              reviewerTaskId: currentReviewer.taskId,
+              stage: 'CODE_REVIEW',
+            });
+            return this.createFiprReport(
+              currentExecution,
+              currentReviewer,
+              'BLOCKED',
+              ['Reviewer report does not match the delegated task and run'],
+              [],
+              [request.acceptanceCriteria],
+              FIPRPhaseEnum.REVIEW,
+              false,
+              [],
+            );
+          }
+
+          reviewFindings = currentReviewer.findings;
+
+          // Check verdict first
+          if (currentReviewer.verdict === 'PASS') {
+            // Snapshot validation only for PASS verdict - we only accept work if reviewer examined the correct snapshot
+            if (currentReviewer.snapshotId !== currentExecution.snapshotId) {
+              this.failureTracker?.recordFailure('PERSISTENCE_INTEGRITY', 'Code Reviewer snapshot mismatch', {
+                runId: request.runId,
+                taskId,
+                executionSnapshotId: currentExecution.snapshotId,
+                reviewerSnapshotId: currentReviewer.snapshotId,
+                stage: 'CODE_REVIEW',
+              });
+              return this.createFiprReport(
+                currentExecution,
+                currentReviewer,
+                'BLOCKED',
+                ['Reviewer examined a different snapshot'],
+                [],
+                [request.acceptanceCriteria],
+                FIPRPhaseEnum.REVIEW,
+                false,
+                [],
+              );
+            }
+            finalOutcome = 'PASS';
+            break;
+          }
+
+          if (currentReviewer.verdict === 'BLOCKED') {
+            finalOutcome = 'BLOCKED';
+            return this.createFiprReport(
+              currentExecution,
+              currentReviewer,
+              'BLOCKED',
+              ['Review returned BLOCKED verdict'],
+              [],
+              [request.acceptanceCriteria],
+              FIPRPhaseEnum.REVIEW,
+              false,
+              [],
+            );
+          }
+
+          if (currentReviewer.verdict === 'INCONCLUSIVE') {
+            finalOutcome = 'INCONCLUSIVE';
+            return this.createFiprReport(
+              currentExecution,
+              currentReviewer,
+              'INCONCLUSIVE',
+              ['Review returned INCONCLUSIVE verdict'],
+              [],
+              [request.acceptanceCriteria],
+              FIPRPhaseEnum.REVIEW,
+              false,
+              [],
+            );
+          }
+
+          // CORRECTIONS_NEEDED - loop back to appropriate phase then REVIEW (per FIPR spec)
+          if (currentReviewer.verdict === 'CORRECTIONS_NEEDED') {
+              // Record failures for each finding if not already recorded
+              for (const finding of currentReviewer.findings) {
+                if (!findingFailureIds.has(finding.id)) {
+                  const failure = this.failureTracker?.recordFailure('UNKNOWN', `Correction needed: ${finding.description}`, {
+                    runId: request.runId,
+                    taskId,
+                    snapshotId: currentExecution.snapshotId,
+                    findingId: finding.id,
+                    severity: finding.severity,
+                    stage: 'CODE_REVIEW',
+                  });
+                  if (failure) {
+                    findingFailureIds.set(finding.id, failure.id);
+                  }
+                }
+              }
+
+              // Check if we can attempt correction for all findings
+              const canAttemptAll = currentReviewer.findings.every(finding => {
+                const failureId = findingFailureIds.get(finding.id);
+                return failureId && (this.failureTracker?.canAttemptCorrection(failureId) ?? false);
+              });
+
+              if (!canAttemptAll) {
+                finalOutcome = 'INCONCLUSIVE';
+                return this.createFiprReport(
+                  currentExecution,
+                  currentReviewer,
+                  'INCONCLUSIVE',
+                  ['Max correction attempts reached for one or more findings'],
+                  [],
+                  [request.acceptanceCriteria],
+                  FIPRPhaseEnum.REVIEW,
+                  false,
+                  [],
+                );
+              }
+
+              // Determine correction phase based on finding types
+              // Code defects (CRITICAL/HIGH with code defect keywords) -> FIX phase
+              // Implementation gaps -> IMP phase
+              // If mixed, prioritize FIX for code defects
+              const hasCodeDefect = currentReviewer.findings.some(f => this.isCodeDefectFinding(f));
+              const hasImplementationGap = currentReviewer.findings.some(f => this.isImplementationGapFinding(f));
+              
+              let nextPhase: FIPRPhase;
+              if (hasCodeDefect) {
+                nextPhase = FIPRPhaseEnum.FIX;
+                fiprState.fixAttempts++;
+              } else if (hasImplementationGap) {
+                nextPhase = FIPRPhaseEnum.IMP;
+                fiprState.impAttempts++;
+              } else {
+                // Default to IMP for other findings
+                nextPhase = FIPRPhaseEnum.IMP;
+                fiprState.impAttempts++;
+              }
+
+              // Record correction attempts for each finding
+              for (const finding of currentReviewer.findings) {
+                const failureId = findingFailureIds.get(finding.id);
+                if (failureId) {
+                  this.failureTracker?.attemptCorrection(
+                    failureId,
+                    'retry',
+                    `Retry ${nextPhase} phase for finding: ${finding.description}`,
+                  );
+                }
+              }
+
+              this.updateFiprPhase(taskId, nextPhase);
+
+              // Execute the correction phase
+              const isRetry = true;
+              if (nextPhase === FIPRPhaseEnum.FIX) {
+                currentExecution = await this.executeFixPhase(task, request, isRetry);
+              } else {
+                currentExecution = await this.executeImpPhase(task, request, isRetry);
+              }
+              this.completeFiprPhase(taskId, currentExecution.status);
+
+              if (currentExecution.status !== 'COMPLETED') {
+                return this.createFiprReport(
+                  currentExecution,
+                  currentReviewer,
+                  'INCONCLUSIVE',
+                  [`${nextPhase} correction phase did not complete`],
+                  [],
+                  [request.acceptanceCriteria],
+                  nextPhase,
+                  false,
+                  [],
+                );
+              }
+
+              // For code defect corrections, after FIX we must go through IMP before REVIEW (per FIPR spec: FIX → IMP → REVIEW)
+              if (nextPhase === FIPRPhaseEnum.FIX && hasCodeDefect) {
+                // Execute IMP phase after FIX correction
+                fiprState.impAttempts++;
+                this.updateFiprPhase(taskId, FIPRPhaseEnum.IMP);
+                currentExecution = await this.executeImpPhase(task, request, isRetry);
+                this.completeFiprPhase(taskId, currentExecution.status);
+
+if (currentExecution.status !== 'COMPLETED') {
+                return this.createFiprReport(
+                  currentExecution,
+                  currentReviewer,
+                  'INCONCLUSIVE',
+                  ['IMP correction phase did not complete'],
+                  [],
+                  [request.acceptanceCriteria],
+                  FIPRPhaseEnum.IMP,
+                  false,
+                  [],
+                );
+              }
+            }
+
+            // Continue loop - will go to REVIEW again
+            continue;
+            }
+
+          // Unknown verdict
+          finalOutcome = 'INCONCLUSIVE';
+          break;
+        }
+
+        // Phase 4: DOCUPDATE (after PASS)
+        if (finalOutcome === 'PASS') {
+          this.updateFiprPhase(taskId, FIPRPhaseEnum.DOCUPDATE);
+
+          const evidence = this.requiredEvidence(task, request, currentExecution);
+          finalConfirmedCriteria = evidence.confirmed;
+          finalUnverifiedCriteria = evidence.unverified;
+          finalDivergences = evidence.divergences;
+
+          if (currentReviewer.findings.length > 0) {
+            finalDivergences.push('Reviewer verdict PASS contradicts its non-empty findings');
+          }
+
+          const canConfirm = finalOutcome === 'PASS' && evidence.divergences.length === 0 && evidence.unverified.length === 0;
+          finalConfirmedCriteria = canConfirm ? evidence.confirmed : [];
+          finalUnverifiedCriteria = canConfirm ? [] : (evidence.unverified.length > 0 ? evidence.unverified : [request.acceptanceCriteria]);
+
+          const docUpdateReport = await this.executeDocUpdatePhase(task, request, currentExecution, finalConfirmedCriteria);
+
+          if (docUpdateReport.verdict === 'COMPLETED') {
+            docUpdatePerformed = true;
+            docUpdateFiles = docUpdateReport.updatedFiles;
+          } else {
+            finalOutcome = 'INCONCLUSIVE';
+            finalDivergences.push('DOCUPDATE phase failed: ' + docUpdateReport.errors.join(', '));
+            docUpdatePerformed = false;
+            docUpdateFiles = [];
+          }
+          this.completeFiprPhase(taskId, docUpdateReport.verdict);
+        }
+
+        return this.createFiprReport(
+          currentExecution,
+          currentReviewer,
+          finalOutcome,
+          finalDivergences,
+          finalConfirmedCriteria,
+          finalUnverifiedCriteria,
+          docUpdatePerformed ? FIPRPhaseEnum.DOCUPDATE : FIPRPhaseEnum.REVIEW,
+          docUpdatePerformed,
+          docUpdateFiles,
+        );
+
+      } catch (error) {
+        this.failureTracker?.recordFailure('UNKNOWN', 'FIPR flow execution failed', {
+          runId: request.runId,
+          taskId,
+          stage: 'FIPR_FLOW',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    })();
+
+    // Chain the flow execution for serialization
+    this.pendingExecution = flowExecution
+      .catch((error: Error) => {
+        console.error(`[SequentialTaskOrchestrator] FIPR flow for task ${taskId} failed: ${error.message}`);
+        return undefined;
+      })
+      .then(() => undefined);
+
+    return flowExecution;
+  }
+
+  private requiredEvidence(
+    task: BacklogTask,
+    request: TaskDelegationRequest,
+    execution: CodeExecutionReport,
+  ): { confirmed: string[]; unverified: string[]; divergences: string[] } {
+    const divergences: string[] = [];
+    const passedCommands = new Set(
+      execution.commands
+        .filter(command => command.exitCode === 0)
+        .map(command => command.command),
     );
-    // Ensure errors are caught and logged, but don't break the chain for subsequent tasks
+    if (execution.commands.some(command => command.exitCode !== 0)) {
+      divergences.push('Execution report includes a command with a non-zero exit code');
+    }
+    for (const check of request.requiredChecks) {
+      if (!passedCommands.has(check)) {
+        divergences.push(`Required check is not evidenced as passing: ${check}`);
+      }
+    }
+
+    const criterion = task.acceptanceCriteria.trim();
+    const evidence = execution.acceptanceEvidence.find(
+      item => item.criterion.trim() === criterion,
+    );
+    if (!criterion || !evidence?.evidence.some(item => item.trim().length > 0)) {
+      return {
+        confirmed: [],
+        unverified: criterion ? [criterion] : ['Acceptance criteria are missing'],
+        divergences,
+      };
+    }
+    return { confirmed: [criterion], unverified: [], divergences };
+  }
+
+  private createFiprReport(
+    execution: CodeExecutionReport,
+    reviewer: CodeReviewReport | undefined,
+    outcome: ReviewVerdict,
+    divergences: string[],
+    confirmedCriteria: string[],
+    unverifiedCriteria: string[],
+    fiprPhase: FIPRPhase,
+    docUpdatePerformed: boolean,
+    docUpdateFiles: string[],
+  ): ConsolidatedTaskReport {
+    return {
+      runId: execution.runId,
+      taskId: execution.taskId,
+      executionId: execution.executionId,
+      snapshotId: execution.snapshotId,
+      outcome,
+      confirmedCriteria,
+      unverifiedCriteria,
+      divergences,
+      findings: reviewer?.findings ?? [],
+      fiprPhase,
+      docUpdatePerformed,
+      docUpdateFiles,
+    };
+  }
+
+  /**
+   * Backward-compatible execute method using simple IMP → REVIEW flow (legacy)
+   * This maintains compatibility with existing callers that expect the old behavior.
+   */
+  public async execute(
+    taskId: string,
+    tasks: BacklogTask[],
+    request: TaskDelegationRequest,
+  ): Promise<ConsolidatedTaskReport> {
+    const execution = this.pendingExecution.then(async (): Promise<ConsolidatedTaskReport> => {
+      const backlogSnapshot = structuredClone(tasks);
+      const task = backlogSnapshot.find(item => item.taskId === taskId);
+      if (!task) {
+        this.failureTracker?.recordFailure('UNKNOWN', `Task ${taskId} is missing from the backlog`, {
+          runId: request.runId,
+          taskId,
+          stage: 'ORCHESTRATION',
+        });
+        throw new Error(`Task ${taskId} is missing from the backlog`);
+      }
+      const classification = classifyBacklogTasks(backlogSnapshot)
+        .find(item => item.taskId === taskId);
+      if (!classification) {
+        this.failureTracker?.recordFailure('UNKNOWN', `Task ${taskId} could not be classified`, {
+          runId: request.runId,
+          taskId,
+          stage: 'ORCHESTRATION',
+        });
+        throw new Error(`Task ${taskId} could not be classified`);
+      }
+
+      if (
+        classification.taskId !== task.taskId ||
+        classification.status !== 'ELIGIBLE' ||
+        classification.blockers.length > 0
+      ) {
+        throw new Error(`Task ${task.taskId} is not eligible for delegation`);
+      }
+
+      const phase = phaseNumber(task.phase);
+      if (
+        phase === undefined ||
+        phase > MAX_AUTHORIZED_PHASE ||
+        task.humanApprovalRequired
+      ) {
+        throw new Error(`Task ${task.taskId} is outside the authorized orchestration scope`);
+      }
+
+      if (
+        request.taskId !== task.taskId ||
+        !request.runId.trim() ||
+        !request.baseCommit.trim() ||
+        request.phase !== task.phase ||
+        request.title !== task.title ||
+        request.acceptanceCriteria !== task.acceptanceCriteria ||
+        !request.authorizedScope.trim() ||
+        request.requiredChecks.length === 0
+      ) {
+        throw new Error('Delegation request does not identify the eligible task, run, and base commit');
+      }
+
+      const delegation: TaskDelegationRequest = {
+        ...request,
+        prohibitedActions: [...new Set([...request.prohibitedActions, ...PROHIBITED_ACTIONS])],
+      };
+      if (this.failureTracker && this.failureTracker.getState().runId !== delegation.runId) {
+        throw new Error('Self-correction state belongs to a different run');
+      }
+
+      // Simple IMP phase (single code delegation)
+      let execResult: CodeExecutionReport;
+      try {
+        execResult = await this.agents.delegateToCode(delegation);
+        validateExecutionReport(execResult);
+        assertExecutionIdentity(execResult, delegation);
+      } catch (error) {
+        this.failureTracker?.recordFailure('UNKNOWN', 'Code delegation failed', {
+          runId: delegation.runId,
+          taskId: delegation.taskId,
+          stage: 'CODE_DELEGATION',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
+      if (execResult.status !== 'COMPLETED') {
+        this.failureTracker?.recordFailure(
+          execResult.commands.some(command => command.exitCode !== 0)
+            ? 'DETERMINISTIC_TEST_BUILD'
+            : 'UNKNOWN',
+          'Code execution reported failure',
+          {
+            runId: delegation.runId,
+            taskId: delegation.taskId,
+            executionId: execResult.executionId,
+            snapshotId: execResult.snapshotId,
+            commands: execResult.commands,
+            changedFiles: execResult.changedFiles,
+            stage: 'CODE_EXECUTION',
+          },
+        );
+        return createReport(
+          execResult,
+          undefined,
+          'INCONCLUSIVE',
+          ['Code execution did not complete; independent review was not requested'],
+          [],
+          [],
+          FIPRPhaseEnum.REVIEW,
+          false,
+          [],
+        );
+      }
+
+      // REVIEW phase
+      const reviewRequest: CodeReviewRequest = {
+        runId: delegation.runId,
+        taskId: delegation.taskId,
+        baseCommit: execResult.baseCommit,
+        snapshotId: execResult.snapshotId,
+        changedFiles: [...execResult.changedFiles],
+        commands: [...execResult.commands],
+        acceptanceCriteria: delegation.acceptanceCriteria,
+      };
+      let reviewer: CodeReviewReport;
+      try {
+        reviewer = await this.agents.reviewWithCodeReviewer(reviewRequest);
+        validateReviewReport(reviewer);
+      } catch (error) {
+        this.failureTracker?.recordFailure('UNKNOWN', 'Code Reviewer delegation failed', {
+          runId: delegation.runId,
+          taskId: delegation.taskId,
+          stage: 'CODE_REVIEW',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
+      if (
+        reviewer.runId !== delegation.runId ||
+        reviewer.taskId !== delegation.taskId
+      ) {
+        this.failureTracker?.recordFailure('PERSISTENCE_INTEGRITY', 'Code Reviewer report identity mismatch', {
+          runId: delegation.runId,
+          taskId: delegation.taskId,
+          reviewerRunId: reviewer.runId,
+          reviewerTaskId: reviewer.taskId,
+          stage: 'CODE_REVIEW',
+        });
+        return createReport(
+          execResult,
+          reviewer,
+          'BLOCKED',
+          ['Reviewer report does not match the delegated task and run'],
+          [],
+          [],
+          FIPRPhaseEnum.REVIEW,
+          false,
+          [],
+        );
+      }
+      // Snapshot validation - restored for integrity
+      if (reviewer.snapshotId !== execResult.snapshotId) {
+        this.failureTracker?.recordFailure('PERSISTENCE_INTEGRITY', 'Code Reviewer snapshot mismatch', {
+          runId: delegation.runId,
+          taskId: delegation.taskId,
+          executionSnapshotId: execResult.snapshotId,
+          reviewerSnapshotId: reviewer.snapshotId,
+          stage: 'CODE_REVIEW',
+        });
+        return createReport(
+          execResult,
+          reviewer,
+          'BLOCKED',
+          ['Reviewer examined a different snapshot'],
+          [],
+          [delegation.acceptanceCriteria],
+          FIPRPhaseEnum.REVIEW,
+          false,
+          [],
+        );
+      }
+
+      if (reviewer.verdict === 'CORRECTIONS_NEEDED') {
+        this.failureTracker?.recordFailure('UNKNOWN', 'Independent review found corrections required', {
+          runId: delegation.runId,
+          taskId: delegation.taskId,
+          snapshotId: execResult.snapshotId,
+          findings: reviewer.findings.map(finding => finding.id),
+          stage: 'CODE_REVIEW',
+        });
+      }
+
+      const evidence = requiredEvidence(task, delegation, execResult);
+      const divergences = [...evidence.divergences];
+      if (reviewer.verdict === 'PASS' && reviewer.findings.length > 0) {
+        divergences.push('Reviewer verdict PASS contradicts its non-empty findings');
+      }
+
+      let outcome = reviewer.verdict;
+      if (divergences.length > 0 && reviewer.verdict === 'PASS') {
+        outcome = 'INCONCLUSIVE';
+      }
+      const canConfirm =
+        outcome === 'PASS' &&
+        evidence.divergences.length === 0 &&
+        evidence.unverified.length === 0;
+
+      return createReport(
+        execResult,
+        reviewer,
+        outcome,
+        divergences,
+        canConfirm ? evidence.confirmed : [],
+        canConfirm ? [] : evidence.unverified.length > 0
+          ? evidence.unverified
+          : [delegation.acceptanceCriteria],
+        FIPRPhaseEnum.REVIEW,
+        false,
+        [],
+      );
+    });
+
     this.pendingExecution = execution
       .catch((error: Error) => {
-        // Log error for debugging; chain continues with resolved promise
         console.error(`[SequentialTaskOrchestrator] Task ${taskId} execution failed: ${error.message}`);
         return undefined;
       })
       .then(() => undefined);
     return execution;
+  }
+
+  public getFiprState(taskId: string): FIPRState | undefined {
+    return this.getFiprStateInternal(taskId);
   }
 }

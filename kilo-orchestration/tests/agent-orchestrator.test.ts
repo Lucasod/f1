@@ -1,7 +1,7 @@
 // Test file naming convention:
 // - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
 // - single word for single-concept names (e.g., storage.test.ts)
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   classifyBacklogTasks,
   parseBacklogTasks,
@@ -12,6 +12,13 @@ import type {
   CodeExecutionReport,
   CodeReviewReport,
   TaskDelegationRequest,
+  FIPRPhaseEnum,
+  FIPRState,
+  FIPRTransition,
+  ReviewVerdict,
+  ConsolidatedTaskReport,
+  DocUpdateReport,
+  DocUpdateRequest,
 } from '../src/types.js';
 import { SelfCorrectionEngine } from '../src/correction-engine.js';
 
@@ -477,6 +484,678 @@ describe('Backlog orchestration contract', () => {
     ].join('\n');
 
     expect(() => parseBacklogTasks(markdown)).toThrow('Duplicate task ID in backlog: T-100');
+  });
+});
+
+describe('FIPR flow orchestration', () => {
+  let correctionEngine: SelfCorrectionEngine;
+  let mockAgents: {
+    delegateToCode: ReturnType<typeof vi.fn>;
+    reviewWithCodeReviewer: ReturnType<typeof vi.fn>;
+    performDocUpdate: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    correctionEngine = new SelfCorrectionEngine('run-123');
+    mockAgents = {
+      delegateToCode: vi.fn(),
+      reviewWithCodeReviewer: vi.fn(),
+      performDocUpdate: vi.fn(),
+    };
+  });
+
+  it('enforces correct FIPR phase sequence: FIX -> IMP -> REVIEW -> DOCUPDATE', async () => {
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: ['README.md'],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    // Verify phase history via FIPR state (tracks ALL phases including REVIEW and DOCUPDATE)
+    const fiprState = orchestrator.getFiprState('T-701');
+    expect(fiprState).toBeDefined();
+    expect(fiprState!.phaseHistory.map(h => h.phase)).toEqual(['FIX', 'IMP', 'REVIEW', 'DOCUPDATE']);
+    expect(mockAgents.performDocUpdate).toHaveBeenCalled();
+  });
+
+  it('enters FIX phase first when a task starts', async () => {
+    let firstPhase: FIPRPhaseEnum | undefined;
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      if (!firstPhase) firstPhase = req.fiprPhase!;
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(firstPhase).toBe('FIX');
+  });
+
+  it('delegates to IMP phase after FIX completes', async () => {
+    const phases: FIPRPhaseEnum[] = [];
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      phases.push(req.fiprPhase!);
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(phases[0]).toBe('FIX');
+    expect(phases[1]).toBe('IMP');
+  });
+
+  it('delegates to REVIEW phase after IMP completes with COMPLETED', async () => {
+    const reviewCalled = { current: false };
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+      reviewCalled.current = true;
+      return { ...reviewReport, verdict: 'PASS', findings: [] };
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(reviewCalled.current).toBe(true);
+    expect(mockAgents.delegateToCode).toHaveBeenCalledTimes(2); // FIX and IMP
+  });
+
+  it('executes DOCUPDATE phase after REVIEW returns PASS', async () => {
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => ({
+      ...executionReport,
+      fiprPhase: req.fiprPhase!,
+      snapshotId: `snapshot-${req.fiprPhase}`,
+    }));
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: ['docs/readme.md'],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(mockAgents.performDocUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-123',
+      taskId: 'T-701',
+    }));
+    expect(result.docUpdatePerformed).toBe(true);
+    expect(result.docUpdateFiles).toEqual(['docs/readme.md']);
+    expect(result.outcome).toBe('PASS');
+  });
+
+  describe('CORRECTIONS_NEEDED handling', () => {
+    it('returns to FIX phase for code defect findings', async () => {
+      const phases: FIPRPhaseEnum[] = [];
+      let reviewCallCount = 0;
+
+      mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+        phases.push(req.fiprPhase!);
+        return {
+          ...executionReport,
+          fiprPhase: req.fiprPhase!,
+          snapshotId: `snapshot-${req.fiprPhase}-${phases.length}`,
+        };
+      });
+      mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+        reviewCallCount++;
+        if (reviewCallCount === 1) {
+          return {
+            ...reviewReport,
+            verdict: 'CORRECTIONS_NEEDED',
+            findings: [{
+              id: 'F-1',
+              severity: 'HIGH',
+              description: 'Code defect: missing null check',
+              evidence: ['src/file.ts:42'],
+            }],
+          };
+        }
+        return { ...reviewReport, verdict: 'PASS', findings: [] };
+      });
+      mockAgents.performDocUpdate.mockResolvedValue({
+        runId: 'run-123',
+        taskId: 'T-701',
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      });
+
+      const orchestrator = new SequentialTaskOrchestrator({
+        delegateToCode: mockAgents.delegateToCode,
+        reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+        performDocUpdate: mockAgents.performDocUpdate,
+      }, correctionEngine);
+
+      const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+      expect(phases).toContain('FIX');
+      expect(phases).toContain('IMP');
+      expect(phases.filter(p => p === 'FIX').length).toBe(2); // Initial FIX + correction FIX
+      expect(result.outcome).toBe('PASS');
+    });
+
+    it('returns to IMP phase for implementation gap findings', async () => {
+      const phases: FIPRPhaseEnum[] = [];
+      let reviewCallCount = 0;
+
+      mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+        phases.push(req.fiprPhase!);
+        return {
+          ...executionReport,
+          fiprPhase: req.fiprPhase!,
+          snapshotId: `snapshot-${req.fiprPhase}-${phases.length}`,
+        };
+      });
+      mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+        reviewCallCount++;
+        if (reviewCallCount === 1) {
+          return {
+            ...reviewReport,
+            verdict: 'CORRECTIONS_NEEDED',
+            findings: [{
+              id: 'F-1',
+              severity: 'MEDIUM',
+              description: 'Implementation gap: missing validation for edge case',
+              evidence: ['src/file.ts'],
+            }],
+          };
+        }
+        return { ...reviewReport, verdict: 'PASS', findings: [] };
+      });
+      mockAgents.performDocUpdate.mockResolvedValue({
+        runId: 'run-123',
+        taskId: 'T-701',
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      });
+
+      const orchestrator = new SequentialTaskOrchestrator({
+        delegateToCode: mockAgents.delegateToCode,
+        reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+        performDocUpdate: mockAgents.performDocUpdate,
+      }, correctionEngine);
+
+      const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+      expect(phases).toContain('IMP');
+      expect(phases.filter(p => p === 'IMP').length).toBe(2); // Initial IMP + correction IMP
+      expect(result.outcome).toBe('PASS');
+    });
+
+    it('tracks attempts per finding via SelfCorrectionEngine (max 3)', async () => {
+      let reviewCallCount = 0;
+
+      mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+        return {
+          ...executionReport,
+          fiprPhase: req.fiprPhase!,
+          snapshotId: `snapshot-${req.fiprPhase}-${reviewCallCount}`,
+        };
+      });
+      mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+        reviewCallCount++;
+        // Always return CORRECTIONS_NEEDED - orchestrator will stop after max attempts
+        return {
+          ...reviewReport,
+          verdict: 'CORRECTIONS_NEEDED',
+          findings: [{
+            id: 'F-1',
+            severity: 'HIGH',
+            description: 'Persistent code defect',
+            evidence: ['src/file.ts'],
+          }],
+        };
+      });
+      mockAgents.performDocUpdate.mockResolvedValue({
+        runId: 'run-123',
+        taskId: 'T-701',
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      });
+
+      const orchestrator = new SequentialTaskOrchestrator({
+        delegateToCode: mockAgents.delegateToCode,
+        reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+        performDocUpdate: mockAgents.performDocUpdate,
+      }, correctionEngine);
+
+      const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+      // Should have attempted 3 corrections (max 3) + 1 initial = 4 review calls
+      // After max attempts, orchestrator returns INCONCLUSIVE
+      expect(reviewCallCount).toBe(4);
+      expect(correctionEngine.getFailuresByCategory('UNKNOWN').length).toBeGreaterThan(0);
+      // After max attempts, should return INCONCLUSIVE
+      expect(result.outcome).toBe('INCONCLUSIVE');
+      
+      // Verify phase history includes all phases
+      // For code defects: FIX (initial), IMP (initial), then 3 cycles of REVIEW -> FIX -> IMP
+      const fiprState = orchestrator.getFiprState('T-701');
+      expect(fiprState).toBeDefined();
+      const phases = fiprState!.phaseHistory.map(h => h.phase);
+      expect(phases.filter(p => p === 'FIX').length).toBe(4); // Initial + 3 corrections
+      expect(phases.filter(p => p === 'IMP').length).toBe(4); // Initial + 3 corrections (after each FIX)
+      expect(phases.filter(p => p === 'REVIEW').length).toBe(4); // Initial + 3 corrections
+    });
+
+    it('re-delegates to appropriate phase and then REVIEW again', async () => {
+      let reviewCallCount = 0;
+
+      mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+        return {
+          ...executionReport,
+          fiprPhase: req.fiprPhase!,
+          snapshotId: `snapshot-${req.fiprPhase}-${reviewCallCount}`,
+        };
+      });
+      mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+        reviewCallCount++;
+        if (reviewCallCount === 1) { // After initial FIX + IMP
+          return {
+            ...reviewReport,
+            verdict: 'CORRECTIONS_NEEDED',
+            findings: [{
+              id: 'F-1',
+              severity: 'HIGH',
+              description: 'Code defect',
+              evidence: ['src/file.ts'],
+            }],
+          };
+        }
+        return { ...reviewReport, verdict: 'PASS', findings: [] };
+      });
+      mockAgents.performDocUpdate.mockResolvedValue({
+        runId: 'run-123',
+        taskId: 'T-701',
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      });
+
+      const orchestrator = new SequentialTaskOrchestrator({
+        delegateToCode: mockAgents.delegateToCode,
+        reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+        performDocUpdate: mockAgents.performDocUpdate,
+      }, correctionEngine);
+
+      await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+      // Should have: FIX, IMP, REVIEW, FIX (correction), IMP (after correction), REVIEW, DOCUPDATE
+      const fiprState = orchestrator.getFiprState('T-701');
+      expect(fiprState).toBeDefined();
+      expect(fiprState!.phaseHistory.map(h => h.phase)).toEqual(['FIX', 'IMP', 'REVIEW', 'FIX', 'IMP', 'REVIEW', 'DOCUPDATE']);
+    });
+
+    it('stops after max attempts and returns INCONCLUSIVE', async () => {
+      let reviewCallCount = 0;
+
+      mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+        return {
+          ...executionReport,
+          fiprPhase: req.fiprPhase!,
+          snapshotId: `snapshot-${req.fiprPhase}-${reviewCallCount}`,
+        };
+      });
+      mockAgents.reviewWithCodeReviewer.mockImplementation(async () => {
+        reviewCallCount++;
+        // Always return CORRECTIONS_NEEDED - orchestrator will stop after max attempts
+        return {
+          ...reviewReport,
+          verdict: 'CORRECTIONS_NEEDED',
+          findings: [{
+            id: 'F-1',
+            severity: 'HIGH',
+            description: 'Persistent code defect',
+            evidence: ['src/file.ts'],
+          }],
+        };
+      });
+      mockAgents.performDocUpdate.mockResolvedValue({
+        runId: 'run-123',
+        taskId: 'T-701',
+        verdict: 'COMPLETED',
+        updatedFiles: [],
+        errors: [],
+      });
+
+      const orchestrator = new SequentialTaskOrchestrator({
+        delegateToCode: mockAgents.delegateToCode,
+        reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+        performDocUpdate: mockAgents.performDocUpdate,
+      }, correctionEngine);
+
+      const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+      // Max 3 attempts per failure, so 3 correction cycles + initial = 4 review calls
+      // But should stop at max attempts and return INCONCLUSIVE
+      expect(reviewCallCount).toBe(4);
+      expect(result.outcome).toBe('INCONCLUSIVE');
+      expect(correctionEngine.getState().totalAttempts).toBeLessThanOrEqual(10);
+      
+      // Verify phase history
+      // For code defects: FIX (initial), IMP (initial), then 3 cycles of REVIEW -> FIX -> IMP
+      const fiprState = orchestrator.getFiprState('T-701');
+      expect(fiprState).toBeDefined();
+      const phases = fiprState!.phaseHistory.map(h => h.phase);
+      expect(phases.filter(p => p === 'FIX').length).toBe(4); // Initial + 3 corrections
+      expect(phases.filter(p => p === 'IMP').length).toBe(4); // Initial + 3 corrections (after each FIX)
+      expect(phases.filter(p => p === 'REVIEW').length).toBe(4); // Initial + 3 corrections
+    });
+  });
+
+  it('stops the flow and returns BLOCKED when review returns BLOCKED', async () => {
+    const phases: FIPRPhaseEnum[] = [];
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      phases.push(req.fiprPhase!);
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'BLOCKED',
+      findings: [{
+        id: 'F-1',
+        severity: 'CRITICAL',
+        description: 'Security violation',
+        evidence: ['src/file.ts'],
+      }],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(result.outcome).toBe('BLOCKED');
+    expect(mockAgents.performDocUpdate).not.toHaveBeenCalled();
+    expect(phases).not.toContain('DOCUPDATE');
+  });
+
+  it('stops the flow and returns INCONCLUSIVE when review returns INCONCLUSIVE', async () => {
+    const phases: FIPRPhaseEnum[] = [];
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      phases.push(req.fiprPhase!);
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'INCONCLUSIVE',
+      findings: [{
+        id: 'F-1',
+        severity: 'MEDIUM',
+        description: 'Insufficient evidence',
+        evidence: [],
+      }],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(result.outcome).toBe('INCONCLUSIVE');
+    expect(mockAgents.performDocUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not proceed to review when execution fails, returns INCONCLUSIVE', async () => {
+    const phases: FIPRPhaseEnum[] = [];
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      phases.push(req.fiprPhase!);
+      if (req.fiprPhase === 'FIX') {
+        return { ...executionReport, status: 'FAILED', fiprPhase: 'FIX' as FIPRPhaseEnum };
+      }
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: [],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(result.outcome).toBe('INCONCLUSIVE');
+    expect(mockAgents.reviewWithCodeReviewer).not.toHaveBeenCalled();
+    expect(mockAgents.performDocUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not declare success if DOCUPDATE fails', async () => {
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => ({
+      ...executionReport,
+      fiprPhase: req.fiprPhase!,
+      snapshotId: `snapshot-${req.fiprPhase}`,
+    }));
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'FAILED',
+      updatedFiles: [],
+      errors: ['Failed to write documentation'],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(result.outcome).toBe('INCONCLUSIVE');
+    expect(result.docUpdatePerformed).toBe(false);
+    expect(result.divergences.some(d => d.includes('DOCUPDATE'))).toBe(true);
+  });
+
+  it('tracks phase history and current phase in FIPR state', async () => {
+    const phases: FIPRPhaseEnum[] = [];
+
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => {
+      phases.push(req.fiprPhase!);
+      return {
+        ...executionReport,
+        fiprPhase: req.fiprPhase!,
+        snapshotId: `snapshot-${req.fiprPhase}`,
+      };
+    });
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+    mockAgents.performDocUpdate.mockResolvedValue({
+      runId: 'run-123',
+      taskId: 'T-701',
+      verdict: 'COMPLETED',
+      updatedFiles: ['docs/readme.md'],
+      errors: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    // Check that FIPR state is tracked
+    const fiprState = orchestrator.getFiprState?.('T-701');
+    expect(fiprState).toBeDefined();
+    if (fiprState) {
+      expect(fiprState.currentPhase).toBe('DOCUPDATE');
+      expect(fiprState.phaseHistory.length).toBeGreaterThanOrEqual(3);
+      expect(fiprState.phaseHistory.map(h => h.phase)).toEqual(['FIX', 'IMP', 'REVIEW', 'DOCUPDATE']);
+      expect(fiprState.fixAttempts).toBe(1);
+      expect(fiprState.impAttempts).toBe(1);
+    }
+  });
+
+  it('does not delegate to itself (no self-delegation)', async () => {
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+      performDocUpdate: mockAgents.performDocUpdate,
+    }, correctionEngine);
+
+    // The orchestrator should use the injected agents, not call itself
+    // This test verifies the architecture - the orchestrator is a coordinator
+    // that delegates to external agents via the AgentDelegationPort
+    expect(orchestrator).toBeInstanceOf(SequentialTaskOrchestrator);
+    // Verify the agents port is properly typed and not the orchestrator itself
+    const port = (orchestrator as unknown as { agents: { delegateToCode: Function } }).agents;
+    expect(port.delegateToCode).toBe(mockAgents.delegateToCode);
   });
 });
 

@@ -129,19 +129,6 @@ export interface TaskClassification {
   blockers: string[];
 }
 
-export interface TaskDelegationRequest {
-  runId: string;
-  taskId: string;
-  title: string;
-  phase: string;
-  baseCommit: string;
-  dependencies: string[];
-  acceptanceCriteria: string;
-  authorizedScope: string;
-  requiredChecks: string[];
-  prohibitedActions: string[];
-}
-
 export interface CommandEvidence {
   command: string;
   exitCode: number;
@@ -151,18 +138,6 @@ export interface CommandEvidence {
 export interface AcceptanceEvidence {
   criterion: string;
   evidence: string[];
-}
-
-export interface CodeExecutionReport {
-  runId: string;
-  taskId: string;
-  executionId: string;
-  snapshotId: string;
-  baseCommit: string;
-  status: 'COMPLETED' | 'FAILED';
-  changedFiles: string[];
-  commands: CommandEvidence[];
-  acceptanceEvidence: AcceptanceEvidence[];
 }
 
 export type ReviewVerdict =
@@ -199,6 +174,7 @@ export interface CodeReviewRequest {
 export interface AgentDelegationPort {
   delegateToCode(request: TaskDelegationRequest): Promise<CodeExecutionReport>;
   reviewWithCodeReviewer(request: CodeReviewRequest): Promise<CodeReviewReport>;
+  performDocUpdate?(request: DocUpdateRequest): Promise<DocUpdateReport>;
 }
 
 export interface ConsolidatedTaskReport {
@@ -217,4 +193,103 @@ export interface OrchestrationSnapshot {
   generatedAt: string;
   maxAuthorizedPhase: number;
   classifications: TaskClassification[];
+}
+
+// FIPR Flow Types
+
+export const FIPRPhaseEnum = {
+  FIX: 'FIX',
+  IMP: 'IMP',
+  REVIEW: 'REVIEW',
+  DOCUPDATE: 'DOCUPDATE',
+} as const;
+
+export type FIPRPhase = typeof FIPRPhaseEnum[keyof typeof FIPRPhaseEnum];
+
+export interface FIPRState {
+  runId: string;
+  taskId: string;
+  currentPhase: FIPRPhase;
+  phaseHistory: Array<{
+    phase: FIPRPhase;
+    startedAt: string;
+    completedAt?: string;
+    outcome?: string;
+  }>;
+  fixAttempts: number;
+  impAttempts: number;
+}
+
+export type FIPRTransition =
+  | { from: 'FIX'; to: 'IMP' }
+  | { from: 'IMP'; to: 'REVIEW' }
+  | { from: 'REVIEW'; to: 'DOCUPDATE' }
+  | { from: 'REVIEW'; to: 'FIX' }
+  | { from: 'REVIEW'; to: 'IMP' }
+  | { from: 'REVIEW'; to: 'BLOCKED' }
+  | { from: 'REVIEW'; to: 'INCONCLUSIVE' }
+  | { from: FIPRPhase; to: 'FAILED' };
+
+// Updated TaskDelegationRequest
+export interface TaskDelegationRequest {
+  runId: string;
+  taskId: string;
+  title: string;
+  phase: string;
+  baseCommit: string;
+  dependencies: string[];
+  acceptanceCriteria: string;
+  authorizedScope: string;
+  requiredChecks: string[];
+  prohibitedActions: string[];
+  fiprPhase?: FIPRPhase;
+  isRetry?: boolean;
+}
+
+// Updated CodeExecutionReport
+export interface CodeExecutionReport {
+  runId: string;
+  taskId: string;
+  executionId: string;
+  snapshotId: string;
+  baseCommit: string;
+  status: 'COMPLETED' | 'FAILED';
+  changedFiles: string[];
+  commands: CommandEvidence[];
+  acceptanceEvidence: AcceptanceEvidence[];
+  fiprPhase: FIPRPhase;
+}
+
+// Updated ConsolidatedTaskReport
+export interface ConsolidatedTaskReport {
+  runId: string;
+  taskId: string;
+  executionId: string;
+  snapshotId: string;
+  outcome: ReviewVerdict;
+  confirmedCriteria: string[];
+  unverifiedCriteria: string[];
+  divergences: string[];
+  findings: ReviewFinding[];
+  fiprPhase: FIPRPhase;
+  docUpdatePerformed: boolean;
+  docUpdateFiles?: string[];
+}
+
+// DocUpdate types for DOCUPDATE phase
+export interface DocUpdateRequest {
+  runId: string;
+  taskId: string;
+  baseCommit: string;
+  changedFiles: string[];
+  acceptanceCriteria: string;
+  confirmedCriteria: string[];
+}
+
+export interface DocUpdateReport {
+  runId: string;
+  taskId: string;
+  verdict: 'COMPLETED' | 'FAILED';
+  updatedFiles: string[];
+  errors: string[];
 }

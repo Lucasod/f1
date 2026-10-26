@@ -9,11 +9,10 @@
     "code": {
       "permission": {
         "task": {
-            "*":"deny",
-          "bash": "allow",
+          "*": "deny",
+          "bash": "deny",
           "code-developer": "allow",
-          "code-reviewer": "allow",
-          "code-orchestrator": "allow"
+          "code-reviewer": "allow"
         }
       }
     }
