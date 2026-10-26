@@ -16,7 +16,7 @@ Follow established framework and library conventions when naming identifiers.
 - **Maintain a single source of truth** for each decision, requirement, rule, or technical specification. Other documents must reference the authoritative source instead of reproducing its full content.
 - Use stable, existing IDs to link related decisions, open questions, tasks, conceptual models, and execution logs whenever applicable.
 - Maintain relative links between Markdown documents and other linkable project artifacts whenever supported.
-- The `README.md` should serve as the documentation entry point, providing a concise project overview and links to relevant documents.
+- The `F01/README.md` should serve as the documentation entry point, providing a concise project overview and links to relevant documents.
 - `decisions.md` is the authoritative record of approved decisions, including their rationale and any relevant constraints.
 - `open_questions.md` tracks only unresolved questions, including partially resolved questions with their remaining subquestions, and technical decisions deferred for future work when they still require attention.
 - Fully resolved questions should be removed from `open_questions.md` only after verifying that their confirmed decisions are recorded in `decisions.md` and that no unresolved subquestions remain.

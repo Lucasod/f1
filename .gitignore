@@ -1,11 +1,11 @@
 # Build outputs
-/back/dist/
-/front/dist/
-/kilo-orchestration/dist/
+F01/back/dist/
+F01/front/dist/
+F01/kilo-orchestration/dist/
 
 # Dependencies
-/back/node_modules/
-/front/node_modules/
+F01/back/node_modules/
+F01/front/node_modules/
 /kilo-orchestration/node_modules/
 
 # Python cache

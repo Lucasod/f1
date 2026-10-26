@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb://mongo:27017/fs01_marketplace
+      - MONGO_DB_NAME=fs01_marketplace
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_EXPIRES_IN=24h
+    depends_on:
+      - mongo
+      - redis
+      - elasticsearch
+    volumes:
+      - ./src:/app/src
+      - ./package*.json:/app/package*.json
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - f01_mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=fs01_marketplace
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - f01_redis_data:/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - f01_elasticsearch_data:/usr/share/elasticsearch/data
+
+volumes:
+  f01_mongo_data:
+  f01_redis_data:
+  f01_elasticsearch_data:

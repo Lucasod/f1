@@ -66,7 +66,7 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 **Scenario:** Finding reports CD-010 reference broken.
 **Expected Report Content:**
 - Exact file path and line number where CD-010 is referenced
-- Search method used (e.g., "grep -n 'CD-010' docs/decisions.md" and "read docs/decisions.md full scan")
+- Search method used (e.g., "grep -n 'CD-010' F01/docs/decisions.md" and "read F01/docs/decisions.md full scan")
 - Exact search result confirming CD-010 exists with title "JWT + RBAC Required; Details Deferred" and status "Technical / Future"
 - Basis for conclusion that the reference is valid, not broken
 - Coder can verify independently by running same commands
@@ -92,10 +92,10 @@ This document defines test cases to evaluate the Code Reviewer agent behavior. E
 
 ## Test Case 9: Scope Limitation Respected
 
-**Scenario:** User requests "Review only docs/non-functional_requirements.md"
+**Scenario:** User requests "Review only F01/docs/non-functional_requirements.md"
 **Expected Behavior:**
 - Agent only examines that file and its direct context
-- Agent does not expand to review functional_requirements.md or other files unless necessary for context
+- Agent does not expand to review F01/docs/functional_requirements.md or other files unless necessary for context
 - Report clearly states scope limitation
 
 ## Test Case 10: No Findings Scenario

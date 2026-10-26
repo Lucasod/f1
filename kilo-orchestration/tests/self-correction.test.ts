@@ -219,7 +219,7 @@ describe('SelfCorrectionEngine', () => {
         failure.id,
         'edit',
         'Change a project decision',
-        'kilo-orchestration/src/../../docs/decisions.md',
+        'kilo-orchestration/src/../../F01/docs/decisions.md',
       )).toThrow('not authorized');
     });
 

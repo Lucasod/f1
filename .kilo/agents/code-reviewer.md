@@ -458,13 +458,13 @@ Does NOT declare reference broken based solely on grep result or partial search.
 
 When reviewing FS-01 Marketplace changes, use these as authoritative sources:
 
-- **Decisions:** `docs/decisions.md` — CD-001 through CD-065
-- **Open Questions:** `docs/open_questions.md` — Q-XXX identifiers
-- **Task List:** `docs/task_list.md` — T-XXX identifiers
-- **Functional Requirements:** `docs/functional_requirements.md`
-- **Non-Functional Requirements:** `docs/non-functional_requirements.md`
-- **Conceptual Model:** `docs/conceptual_model.md`
-- **Project Context:** `docs/project_context.md`
+- **Decisions:** `F01/docs/decisions.md` — CD-001 through CD-065
+- **Open Questions:** `F01/docs/open_questions.md` — Q-XXX identifiers
+- **Task List:** `F01/docs/task_list.md` — T-XXX identifiers
+- **Functional Requirements:** `F01/docs/functional_requirements.md`
+- **Non-Functional Requirements:** `F01/docs/non-functional_requirements.md`
+- **Conceptual Model:** `F01/docs/conceptual_model.md`
+- **Project Context:** `F01/docs/project_context.md`
 - **Rules:** `.kilo/rules/universal-rules.md`, `.kilo/rules/project-rules.md`
 
 ### Key Confirmed Decisions Relevant to Reviews
