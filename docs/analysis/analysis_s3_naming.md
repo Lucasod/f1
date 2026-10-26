@@ -126,16 +126,16 @@ reviews/{product_id}/{review_id}/thumbnails/{sequence:02d}.webp
 
 | Regra | Descrição |
 |-------|-----------|
-| **Ownership model** | **Pendente decisão Q-017** (owned vs shared images); Q-017 PARTIALLY_RESOLVED |
+| **Ownership model** | **RESOLVIDO** (CD-071): owned images permitted per review; Q-017 RESOLVED |
 | **Max por review** | 5 imagens |
 | **Thumbnails** | WebP 200x200 |
 | **Moderação** | Post-moderation (Q-017 PARTIALLY_RESOLVED): publish imediato, admin pode ocultar |
 
 ---
 
-## 5.3 Nota sobre Q-017
+## 5.3 Nota sobre Q-017 (RESOLVIDO)
 
-A decisão sobre "owned images" vs "shared images" (Product_Pic) para reviews está pendente em Q-017. A estrutura de pastas `reviews/{product_id}/{review_id}/` suporta ambos os modelos. A implementação do ownership (se review usa product_pics compartilhadas ou tem suas próprias imagens) será definida quando Q-017 for resolvido.
+Q-017 foi resolvido em MP-08 com 7 sub-decisões confirmadas (CD-067..CD-072). Conforme CD-071: **owned images are permitted for reviews** — reviews may include user-uploaded images stored under `reviews/{product_id}/{review_id}/`. A estrutura de pastas já suporta este modelo. Product_Pic remains associated with Product (CD-016); Review images are separate entities owned by the review author.
 
 ---
 
@@ -254,19 +254,19 @@ temp/{upload_id}/part-{part_number:05d}
 |-------|---------|------|------|--------|
 | Incomplete multipart cleanup | `temp/` | AbortMultipartUpload | 1 | MVP |
 | Invoice archival | `invoices/` | Transition to Standard-IA | 30 | MVP |
-| Invoice long-term | `invoices/` | Transition to Glacier | 90 | **NÃO DECIDIDO** — aguarda decisão Q-018 / compliance |
-| Invoice compliance | `invoices/` | Expire (Object Lock retention) | 3650 (10 anos) | **NÃO DECIDIDO** — aguarda decisão Q-018 / compliance |
+| Invoice long-term | `invoices/` | Transition to Glacier | 90 | **DEFERRED** — aguarda decisão explícita de compliance/retention (Q-018) |
+| Invoice compliance | `invoices/` | Expire (Object Lock retention) | 3650 (10 anos) | **DEFERRED** — aguarda decisão explícita de compliance/retention (Q-018) |
 | Temp uploads | `temp/` | Expire | 1 | MVP |
 
 ---
 
 ## 9.1 Notas sobre Lifecycle/Compliance
 
-As regras de Glacier (90 dias) e Object Lock/WORM (10 anos) são classificadas como **NÃO DECIDIDO** (não TECHNICAL_FUTURE) pois:
+As regras de Glacier (90 dias) e Object Lock/WORM (10 anos) são classificadas como **DEFERRED** (não TECHNICAL_FUTURE) pois:
 - CD-038 define Invoice_History como placeholder intencionalmente vazio e **defere todos os detalhes de geração, persistência e history de invoices** para discussão posterior
 - Q-018 (PARTIALLY_RESOLVED) lista: "Generation trigger (on payment? on delivery? on-demand)?" e "Storage (S3? DB?) — TECHNICAL_FUTURE" — **não há decisão sobre retenção longa ou WORM**
 - NFR-DATA-* não especificam requisitos de retenção longa ou WORM
-- **TECHNICAL_FUTURE** implica que está no roadmap técnico; **NÃO DECIDIDO** indica que requer decisão de negócio explícita (Q-018) antes de qualquer implementação
+- **TECHNICAL_FUTURE** implica que está no roadmap técnico; **DEFERRED** indica que requer decisão de negócio explícita (Q-018) antes de qualquer implementação
 - Podem ser adicionadas em P4+ **após decisão explícita** sobre requisitos de compliance/retention
 
 ---
@@ -283,7 +283,7 @@ As regras de Glacier (90 dias) e Object Lock/WORM (10 anos) são classificadas c
 | Lifecycle MVP | ✅ | Seção 9 (apenas regras MVP) |
 | Compliance/Glacier | ⚠️ | Seção 9.1 — **TECHNICAL_FUTURE** |
 | Segurança (IAM, HTTPS) | ✅ | Seção 8 |
-| Review images ownership | ⚠️ | Seção 5.3 — **pendente Q-017** |
+| Review images ownership | ✅ | Seção 5.3 — **RESOLVIDO (CD-071: owned images permitted)** |
 
 ---
 

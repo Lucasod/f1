@@ -204,6 +204,208 @@ components:
           description: CPF (11 digits) XOR CNPJ (14 digits) - exactly one must be present per CD-007
           example: "123.456.789-00"
 
+    AuthRegisterRequest:
+      type: object
+      description: Request to register a new user
+      required:
+        - name
+        - taxIdType
+        - taxIdValue
+        - email
+        - password
+        - role
+      properties:
+        name:
+          type: string
+          description: Full name
+          example: "John Doe"
+        taxIdType:
+          type: string
+          description: Tax ID type (CPF for individuals, CNPJ for companies)
+          enum: [CPF, CNPJ]
+          example: "CPF"
+        taxIdValue:
+          type: string
+          description: Tax ID value (11 digits for CPF, 14 digits for CNPJ, numbers only)
+          example: "12345678900"
+        email:
+          type: string
+          format: email
+          description: Email address
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: Password (min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special)
+          example: "SecureP@ss123"
+        role:
+          type: string
+          description: User role
+          enum: [CONSUMER, VENDOR]
+          example: "CONSUMER"
+
+    AuthLoginRequest:
+      type: object
+      description: Request to login
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: Password
+          example: "SecureP@ss123"
+
+    AuthRefreshRequest:
+      type: object
+      description: Request to refresh access token
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          description: Refresh token from previous login/register
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    AuthRegisterResponse:
+      type: object
+      description: Response after successful registration
+      required:
+        - person
+        - tokens
+      properties:
+        person:
+          type: object
+          required:
+            - id
+            - name
+            - email
+            - roles
+            - createdAt
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique identifier
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            name:
+              type: string
+              description: Full name
+              example: "John Doe"
+            email:
+              type: string
+              format: email
+              description: Email address
+              example: "john.doe@example.com"
+            roles:
+              type: array
+              description: List of roles assigned to the person
+              items:
+                type: string
+                enum: [CONSUMER, VENDOR, ADMIN]
+              example: ["CONSUMER"]
+            createdAt:
+              type: string
+              format: date-time
+              description: Creation timestamp
+              example: "2024-01-15T10:30:00Z"
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+
+    AuthLoginResponse:
+      type: object
+      description: Response after successful login
+      required:
+        - person
+        - tokens
+      properties:
+        person:
+          type: object
+          required:
+            - id
+            - name
+            - email
+            - roles
+            - createdAt
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique identifier
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            name:
+              type: string
+              description: Full name
+              example: "John Doe"
+            email:
+              type: string
+              format: email
+              description: Email address
+              example: "john.doe@example.com"
+            roles:
+              type: array
+              description: List of roles assigned to the person
+              items:
+                type: string
+                enum: [CONSUMER, VENDOR, ADMIN]
+              example: ["CONSUMER"]
+            createdAt:
+              type: string
+              format: date-time
+              description: Creation timestamp
+              example: "2024-01-15T10:30:00Z"
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+
+    AuthRefreshResponse:
+      type: object
+      description: Response after successful token refresh
+      required:
+        - tokens
+      properties:
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+
+    TokenPair:
+      type: object
+      description: Access and refresh token pair
+      required:
+        - accessToken
+        - refreshToken
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (short-lived)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: JWT refresh token (long-lived)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    AuthError:
+      type: string
+      description: Authentication error codes
+      enum:
+        - EMAIL_ALREADY_EXISTS
+        - TAX_ID_ALREADY_EXISTS
+        - WEAK_PASSWORD
+        - INVALID_EMAIL
+        - INVALID_TAX_ID
+        - INVALID_CREDENTIALS
+        - INVALID_TOKEN
+        - TOKEN_EXPIRED
+        - PERSON_NOT_FOUND
+        - MISSING_FIELDS
+        - INVALID_ROLE
+        - MISSING_CREDENTIALS
+        - MISSING_REFRESH_TOKEN
+
     Vendor:
       type: object
       description: Vendor entity representing a store in the marketplace
@@ -1432,6 +1634,15 @@ components:
           pattern: '^[a-z0-9-]+$'
           example: "johns-electronics"
 
+    VendorMeResponse:
+      type: object
+      description: Response with authenticated vendor's details
+      required:
+        - vendor
+      properties:
+        vendor:
+          $ref: '#/components/schemas/Vendor'
+
     VendorDashboardResponse:
       type: object
       description: Vendor dashboard with metrics
@@ -2100,6 +2311,200 @@ components:
             $ref: '#/components/schemas/Error'
 
 paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      description: Creates a new person account with CONSUMER or VENDOR role. Returns person details and JWT tokens.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRegisterResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email or tax ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/login:
+    post:
+      summary: Login user
+      description: Authenticates user with email and password. Returns person details and JWT tokens.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      description: Generates new access and refresh tokens using a valid refresh token.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRefreshResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vendor/onboard:
+    post:
+      summary: Onboard as a vendor
+      description: Creates a vendor profile for the authenticated user. Requires VENDOR or CONSUMER role.
+      operationId: onboardVendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorOnboardRequest'
+      responses:
+        '201':
+          description: Vendor onboarded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Forbidden - requires VENDOR or CONSUMER role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already has a vendor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vendor/me:
+    get:
+      summary: Get own vendor profile
+      description: Returns the authenticated vendor's profile details.
+      operationId: getMyVendor
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vendor profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorMeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Forbidden - not a vendor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      summary: Update own vendor profile
+      description: Updates the authenticated vendor's store name. Ownership verified.
+      operationId: updateMyVendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorUpdateRequest'
+      responses:
+        '200':
+          description: Vendor profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Forbidden - not the vendor owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /cart:
     get:
       summary: Get current cart

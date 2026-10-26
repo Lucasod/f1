@@ -9,7 +9,8 @@
     "code": {
       "permission": {
         "task": {
-          "*": "deny",
+            "*":"deny",
+          "bash": "allow",
           "code-developer": "allow",
           "code-reviewer": "allow",
           "code-orchestrator": "allow"

@@ -1091,7 +1091,7 @@ Corrected `docs/functional_requirements.md` (now 1,935 lines, version 2.0) addre
 - FR-USER-003: Contact fields/cardinality confirmed; allowed types/validation moved to Note referencing Q-004
 - FR-PAY-001/002: Removed hardcoded "BRL" and "$" from acceptance criteria; added Notes referencing FR-PEND-001/Q-026
 - FR-ORDER-004/006: CANCELLED explicitly marked as unconfirmed proposal per CD-058/CD-063; VOIDED noted as not used in MVP
-- FR-RW-001: Verified purchase defined as Order_Item with Order in PAID state (minimum per CD-063); DELIVERED not required; Note references Q-017
+- FR-RW-001: Verified purchase defined as Order_Item with Order in DELIVERED state (per CD-072, MP-08)
 - FR-INV-001: "Order completed" replaced with explicit reference to pending trigger (FR-PEND-005/Q-018)
 
 **Coupon Rules (MP-07E) Preserved:**
@@ -1686,3 +1686,76 @@ Post-correction, all canonical documents align on DELIVERED:
 ---
 
 ## MP Template for Future Entries
+
+---
+
+## MP-18: Implementação T-601 e T-602 — Autenticação e Autorização (Stage 2)
+**Date:** 2026-10-25  
+**Objective:** Implement T-601 (Backend: User registration/login with JWT) and T-602 (Backend: Role guards & permission middleware) using TDD  
+**Scope:** Backend implementation only — credential domain, auth service, routes, and middleware with comprehensive tests  
+
+### TDD Cycle Execution
+
+#### RED Phase — Test Creation
+Created failing tests before implementation:
+- `credential.domain.test.ts` (13 tests): Password hashing, validation, verification, error codes
+- `auth.service.test.ts` (21 tests): Register, login, refreshToken, verifyToken, JWT payload, error codes
+- `auth.routes.test.ts` (18 tests): POST /register, /login, /refresh — status codes, validation, duplicates
+- `auth.middleware.test.ts` (10 tests): authMiddleware, requireRole, requireAnyRole — token validation, role-based access
+
+#### GREEN Phase — Implementation
+Implemented minimal code to pass tests:
+- `credential.domain.ts`: bcrypt hashing with strength validation (min 8 chars, uppercase, lowercase, number, special), verification
+- `auth.service.ts`: AuthService with register, login, refreshToken, verifyToken, token generation (access + refresh)
+- `auth.routes.ts`: Express routes for /api/v1/auth/register, /login, /refresh with proper error mapping
+- `auth.middleware.ts`: JWT verification middleware, requireRole, requireAnyRole, requireConsumer/Vendor/Admin helpers
+- `index.ts`: Integrated auth service and routes into Express app
+
+#### REFACTOR Phase
+- Reduced bcrypt rounds in test environment (NODE_ENV=test → 4 rounds vs 12 production) for faster tests
+- Fixed auth.middleware.test.ts: all middleware calls now pass required AuthService parameter
+- All 102 backend tests pass in ~1.65s
+
+### Files Created/Modified
+| File | Action |
+|------|--------|
+| `back/src/modules/auth/credential.domain.ts` | Created |
+| `back/src/modules/auth/credential.domain.test.ts` | Created |
+| `back/src/modules/auth/auth.service.ts` | Created |
+| `back/src/modules/auth/auth.service.test.ts` | Created |
+| `back/src/modules/auth/auth.routes.ts` | Created |
+| `back/src/modules/auth/auth.routes.test.ts` | Created |
+| `back/src/modules/auth/auth.middleware.ts` | Created |
+| `back/src/modules/auth/auth.middleware.test.ts` | Created (fixed) |
+| `back/src/modules/person/person.domain.ts` | Extended (InMemoryPersonRepository) |
+| `back/src/modules/person/person.domain.test.ts` | Extended |
+| `back/src/index.ts` | Modified (integrated auth) |
+| `back/vitest.config.ts` | Modified (testTimeout: 60000) |
+
+### Test Results
+- **Total:** 102 tests across 7 test files — ALL PASSED
+- Credential Domain: 13 tests
+- Config Validation: 23 tests
+- Health Check: 1 test
+- Person Domain: 16 tests
+- Auth Routes: 18 tests
+- Auth Service: 21 tests
+- Auth Middleware: 10 tests
+
+### Decisions Applied
+- CD-010: JWT + RBAC required (implementation details now defined)
+- CD-017: Review only by verified purchaser (DELIVERED per CD-072) — auth foundation for future review API
+- CD-057: Credential concept with Person association — implemented as 1:1 (CD-060)
+- CD-059: Consumer/Vendor authorization — ownership-based isolation enforced via middleware
+
+### Gates
+- ✅ Tests pass (RED → GREEN → REFACTOR completed)
+- ✅ No mocks used for core behavior — real bcrypt, real JWT, real Express integration
+- ✅ Task T-601 and T-602 marked as completed in task_list.md
+
+### Next Steps
+- T-603: Frontend Auth pages & context
+- T-604: Frontend Role-based UI rendering
+- T-701: Backend Vendor onboarding API (depends on T-602)
+
+---

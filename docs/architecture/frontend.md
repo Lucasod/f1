@@ -6,7 +6,7 @@ Component-based architecture with clear separation of concerns. Server state vs 
 ## Technology Stack
 - React 18 + TypeScript
 - Vite (build tool)
-- React Router v6 (routing)
+- React Router (v7) (routing)
 - TanStack Query (server state) - **Decision for Q-023**
 - Zustand (client state: auth, cart, UI)
 - Tailwind CSS (styling)

@@ -24,7 +24,7 @@ Definir os padrões de chaves, estruturas de dados, TTLs e estratégias de sincr
 | **CD-018** | Cart não é entidade conceitual persistida; Redis/session |
 | **CD-019** | Cart contém produtos de múltiplos vendors (multi-vendor) |
 | **Q-014** | Redis keys, TTL, sync, guest merge = TECHNICAL_FUTURE — **TTLs propostos em P3a** (aguardam NFR-PERF-003) |
-| **NFR-PERF-003** | Cart TTL e session timeout = PENDING — **TTLs propostos em P3a** (30d cart, 24h session) |
+| **NFR-PERF-003** | Cart TTL e session timeout = PENDING — **TTLs propostos em P3a** (30d cart, 24h session) — aguarda confirmação de negócio |
 | **FR-CART-001/002/003** | Multi-vendor cart, Redis persistence, operations |
 
 ---
@@ -288,8 +288,8 @@ vendor:metrics:{vendor_id}
 
 | Key Pattern | TTL | Renovação | Justificativa | Status |
 |-------------|-----|-----------|---------------|--------|
-| `cart:{consumer_id}` | 30 dias | Sliding (cada operação) | Carrinho persistente cross-session | **PROPOSTA P3a** — aguarda NFR-PERF-003 / Q-014 |
-| `session:{session_id}` | 24 horas | Sliding (cada request) | Sessão de autenticação | **PROPOSTA P3a** — aguarda NFR-PERF-003 / Q-014 |
+| `cart:{consumer_id}` | 30 dias | Sliding (cada operação) | Carrinho persistente cross-session | **PROPOSTA P3a** — aguarda NFR-PERF-003 |
+| `session:{session_id}` | 24 horas | Sliding (cada request) | Sessão de autenticação | **PROPOSTA P3a** — aguarda NFR-PERF-003 |
 | `ratelimit:*:{window}` | Window size | Fixed | Rate limiting | Técnico — definido |
 | `search:*:*` | 5 min | Fixed | Resultados de busca | Técnico — definido |
 | `product:{product_id}` | 1 hora | Fixed + Invalidation | Detalhes de produto | Técnico — definido |
@@ -313,7 +313,7 @@ vendor:metrics:{vendor_id}
 |----------|-----------|-----------|
 | Redis key patterns | ✅ | Seção 3.1, 4.1, 5.x |
 | Data structures (Hash, String, Lua) | ✅ | Seções 3.2, 3.4, 5.x |
-| TTLs definidos | ⚠️ | Seção 6 — **TTLs de cart/session são propostas P3a** (aguardam NFR-PERF-003 / Q-014) |
+| TTLs definidos | ⚠️ | Seção 6 — **TTLs de cart/session são propostas P3a** (aguardam NFR-PERF-003) |
 | Multi-vendor cart (CD-019) | ✅ | `items` array com `vendor_id` por item |
 | Guest merge (FR-CART-002) | ✅ | Lua script Seção 3.5 |
 | Cart operations (FR-CART-003) | ✅ | Lua scripts add/remove/get (validação de stock/preço no checkout contra MongoDB) |

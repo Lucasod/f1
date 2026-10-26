@@ -111,13 +111,11 @@
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
 | T-501 | Backend architecture | Layered/clean/hexagonal, module boundaries | T-301, T-402 | Architecture diagram + module map | ✅ covered_by_decision |
-| T-502 | Frontend architecture | Component structure, state, routing (Q-023 TECHNICAL_FUTURE) | T-401 | Architecture diagram + folder structure | ✅ covered_by_decision |
+| T-502 | Frontend architecture | Component structure, state, routing (Q-023 RESOLVED, CD-074) | T-401 | Architecture diagram + folder structure | ✅ covered_by_decision |
 | T-503 | Infrastructure architecture | AWS services, networking, secrets, monitoring | T-401, T-501 | Infrastructure diagram + IaC plan | ✅ covered_by_decision |
 | T-504 | CI/CD pipeline design | Build, test, deploy stages per env | T-503 | Pipeline diagram + tool choices | ✅ covered_by_decision |
 | T-505 | Observability design | Logging, metrics, tracing, alerting | T-503 | Observability stack decided | ✅ covered_by_decision |
 | T-506 | Security hardening plan | TLS, headers, rate limits, secrets | T-503 | Security checklist | ✅ covered_by_decision |
-
-**Note:** Architecture documentation created in `.kilo/architecture/` — backend.md, frontend.md, infrastructure.md, ci-cd.md, observability.md, security.md
 
 ---
 
@@ -125,8 +123,8 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-601 | Backend: User registration/login | JWT issue/refresh, password hash (CD-010) | T-403, T-501 | API works, tests pass | ⏳ pending |
-| T-602 | Backend: Role guards & permission middleware | Protect routes per permission matrix (CD-004: Admin only; Consumer/Vendor separate) | T-601, T-103 | All endpoints guarded | ⏳ pending |
+| T-601 | Backend: User registration/login | JWT issue/refresh, password hash (CD-010) | T-403, T-501 | API works, tests pass | ✅ completed |
+| T-602 | Backend: Role guards & permission middleware | Protect routes per permission matrix (CD-004: Admin only; Consumer/Vendor separate) | T-601, T-103 | All endpoints guarded | ✅ completed |
 | T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E | ⏳ pending |
 | T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ⏳ pending |
 
@@ -186,7 +184,7 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list | T-117, T-903 | Reviews on products | ⏳ pending |
 | T-1102 | Backend: Coupon API | CRUD, validation, application at checkout (T-116) | T-116, T-902 | Coupons work | ⏳ pending |
-| T-1103 | Backend: PDF invoice generation | Template, trigger, S3 storage, link on Order (CD-035..CD-038, T-304) | T-118, T-304 | Invoices generated | ⏳ pending |
+| T-1103 | Backend: PDF invoice generation | PDF receipt on-demand (MVP), template, S3 Standard-IA storage, link on Order (CD-035..CD-038, T-304). Glacier/WORM/trigger automation deferred pending Q-018 human decision. | T-118, T-304 | Invoices generated | ⏳ pending |
 | T-1104 | Backend: Admin dashboard API | Aggregations, metrics, vendor/user mgmt (T-119) | T-119, T-602 | Admin data available | ⏳ pending |
 | T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Reviews visible | ⏳ pending |
 | T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon flow works | ⏳ pending |
@@ -242,7 +240,7 @@ P0 (T-001..T-007)
 - Payment provider (T-111) and split flow (T-112) covered — unblocks Stage 6
 - T-103/T-104 (Auth, Address) covered — unblocks Stage 2 (Auth) and Stage 5 (Checkout)
 - **OpenAPI specification created at `docs/api/openapi.yaml` (3694 lines, 33 paths, 59 schemas)**
-- **P3c architecture complete** — 6 architecture docs created in `.kilo/architecture/` covering backend, frontend, infrastructure, CI/CD, observability, security
+- **P3c architecture complete** — 6 architecture docs created in `docs/architecture/` covering backend, frontend, infrastructure, CI/CD, observability, security
 
 ---
 

@@ -10,13 +10,14 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  edit: allow
-  bash: allow
+  edit: deny
+  bash: deny
+  background: allow
   task:
+    "self": allow
     "*": deny
     "code-developer": allow
     "code-reviewer": allow
-    "code-orchestrator": allow
   webfetch: deny
   websearch: deny
 ---
@@ -24,10 +25,9 @@ permission:
 
 ## PERMISSION CONFIGURATION NOTE
 
-**Current configuration (working tree):** `edit: allow`, `bash: allow`, `task:` delegation allowed to `code-developer`, `code-reviewer`, `code-orchestrator`. `webfetch: deny`, `websearch: deny`.
+**Current configuration (working tree):** `deny`, `bash: deny`, `task:` delegation allowed to `code-developer`, `code-reviewer`, `code-orchestrator`. `webfetch: deny`, `websearch: deny`.
 
-**Description claims:** "read-only except for task delegation" — this is **inconsistent** with the configuration which permits `edit` and `bash`.
-
+**Description claims:** "read-only except for task delegation" — this is **inconsistent** with the configuration which permits `bash`.
 **Base commit (HEAD):** `edit: deny`, `bash: deny`, `task:` delegation to `code-developer`, `code-reviewer` only.
 
 Kilo's permission layer applies the declared configuration. The prompt-level prohibition on modifications still applies; do not claim that tool restrictions prove the absence of every possible runtime or external write path.

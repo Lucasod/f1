@@ -45,6 +45,7 @@ describe('Config Validation', () => {
       expect(config.jwtExpiresIn).toBe('24h');
       expect(config.corsOrigins).toEqual([]);
       expect(config.isProduction).toBe(false);
+      expect(config.commissionPct).toBe(10);
     });
 
     it('should allow empty CORS_ORIGIN in development', async () => {
@@ -73,6 +74,13 @@ describe('Config Validation', () => {
       const { config } = await import('./index');
       
       expect(config.mongoUri).toBe('mongodb://localhost:27017/fs01_marketplace');
+    });
+
+    it('should use custom COMMISSION_PCT from env', async () => {
+      process.env.COMMISSION_PCT = '15.5';
+      const { config } = await import('./index');
+      
+      expect(config.commissionPct).toBe(15.5);
     });
   });
 

@@ -203,7 +203,7 @@
 - DELIVERED: Highest confidence, but delays reviews
 - CONFIRMED: Good balance — vendor acknowledged order
 
-**Recommendation:** **PAID** (current FR-RW-001) — Aligns with CD-063 (Order PAID → OVG PENDING → Vendor confirms). Earliest point where payment is confirmed and vendor must fulfill. DELIVERED can be a future enhancement.
+**Recommendation:** **DELIVERED** (confirmed per CD-072, MP-08) — This analysis was superseded by CD-072 which confirms DELIVERED as the qualifying state for verified purchases.
 
 **Business Decision Required:** Yes — affects review velocity and trust.
 

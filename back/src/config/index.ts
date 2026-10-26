@@ -46,6 +46,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
   corsOrigins,
   isProduction: isProduction(),
+  commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
 };
 
 export function validateConfig(): void {

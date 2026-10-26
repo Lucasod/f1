@@ -718,6 +718,42 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Source:** MP-08 consolidation for T-117/Q-017 (decision 6)  
 **Consequences:** FR-RW-001 acceptance criteria updated to "Order_Item with Order in DELIVERED state"; T-117 fully resolved (covered_by_decision); T-1101/T-1105 unblocked for implementation.
 
+### CD-073: API Versioning and Deprecation Policy
+**Status:** Confirmed (MP-XX)  
+**Subject:** API lifecycle management  
+**Decision:** 
+- API versioning uses URL path prefix: `/api/v1/`, `/api/v2/`, etc. (per Q-022/CD-022)
+- Deprecation policy:
+  1. **Advance notice**: Minimum 90 days before removing a version
+  2. **Sunset header**: Responses for deprecated versions include `Sunset: <HTTP-date>` header per RFC 8594
+  3. **Deprecation header**: Responses include `Deprecation: true` header for deprecated endpoints
+  4. **Link header**: Include `Link: <new-version-url>; rel="successor-version"` for migration path
+  5. **Communication**: Deprecations announced via changelog, developer portal, and email to registered API consumers
+  6. **Version lifecycle**: 
+     - **Current**: Active development, new features added
+     - **Maintenance**: Security/bug fixes only, no new features
+     - **Deprecated**: Sunset header set, migration period active (90+ days)
+     - **Retired**: Removed from production, returns 410 Gone
+  7. **Breaking changes**: Only introduced in new major version (vN+1); never in patch/minor of existing version
+  8. **Documentation**: All versions maintained in OpenAPI spec with `x-deprecated` extension on deprecated operations/schemas
+
+**Justification:** Provides predictable API evolution, consumer migration time, and clear communication. Aligns with industry standards (RFC 8594, OpenAPI 3.0 extensions).
+**Source:** MP-XX closure for AUD-008
+**Consequences:** API governance documented; OpenAPI spec should include deprecation metadata; CI/CD should validate no breaking changes in maintenance versions.
+
+### CD-074: Frontend State Management — TanStack Query + Zustand
+**Status:** Confirmed (MP-XX)
+**Subject:** Frontend state architecture
+**Decision:** 
+- Server state: TanStack Query (v5) — caching, invalidation, optimistic updates, deduping
+- Client state: Zustand (v5) — auth tokens, user profile, cart, UI state
+- URL state: React Router (v7) — filters, pagination, search params
+- Zustand persist middleware for localStorage hydration (auth tokens)
+- QueryClientProvider at app root with configured defaults
+**Justification:** frontend.md explicitly documents this architecture; zustand 5.0.16 already installed and used in authStore; clear separation server/client state; matches React Router for URL state; test failures are test setup issues (localStorage timing, Router context), not architecture issues.
+**Source:** MP-XX resolution for Q-023
+**Consequences:** T-502 formally resolved; unblocks T-603, T-604 (P4 frontend auth); T-704, T-705 (vendor dashboard) will use TanStack Query + Zustand; cart Redis sync (Q-014) via Zustand persist + TanStack Query server state.
+
 ## Diagram Inferences (Preserved as Inferred — Not Confirmed)
 
 ### D-001: Person as Base Entity for All Human Actors
@@ -846,3 +882,27 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-033 | Password hash algorithm and rotation | Technical / Future | CD-057: Credential stores hash; algorithm/rotation deferred |
 | D-034 | Credential status values and MFA | Technical / Future | CD-057: Credential status, MFA, recovery deferred |
 | D-035 | Credential recovery/reset flow | Technical / Future | CD-057: Recovery/reset flow deferred |
+| D-036 | API versioning and deprecation policy | **Resolved (CD-073)** | CD-073: URL path versioning, 90-day sunset, Sunset/Deprecation/Link headers, version lifecycle, RFC 8594 |
+
+### CD-073: API Versioning and Deprecation Policy
+**Status:** Confirmed (MP-XX)
+**Subject:** API lifecycle management
+**Decision:** 
+- API versioning uses URL path prefix: `/api/v1/`, `/api/v2/`, etc. (per Q-022/CD-022, CD-066)
+- Deprecation policy:
+  1. **Advance notice**: Minimum 90 days before removing a version
+  2. **Sunset header**: Responses for deprecated versions include `Sunset: <HTTP-date>` header per RFC 8594
+  3. **Deprecation header**: Responses include `Deprecation: true` header for deprecated endpoints
+  4. **Link header**: Include `Link: <new-version-url>; rel="successor-version"` for migration path
+  5. **Communication**: Deprecations announced via changelog, developer portal, and email to registered API consumers
+  6. **Version lifecycle**: 
+     - **Current**: Active development, new features added
+     - **Maintenance**: Security/bug fixes only, no new features
+     - **Deprecated**: Sunset header set, migration period active (90+ days)
+     - **Retired**: Removed from production, returns 410 Gone
+  7. **Breaking changes**: Only introduced in new major version (vN+1); never in patch/minor of existing version
+  8. **Documentation**: All versions maintained in OpenAPI spec with `x-deprecated` extension on deprecated operations/schemas
+
+**Justification:** Provides predictable API evolution, consumer migration time, and clear communication. Aligns with industry standards (RFC 8594, OpenAPI 3.0 extensions).
+**Source:** MP-XX closure for AUD-008
+**Consequences:** API governance documented; OpenAPI spec should include deprecation metadata; CI/CD should validate no breaking changes in maintenance versions.

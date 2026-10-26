@@ -186,12 +186,12 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 **What:** Cart structure (per-consumer, persistent vs session), Redis keys/TTL, sync with DB, guest cart merge  
 **Why:** Stage 5 explicit requirement (Redis for cart + session cache)  
 **Dependencies:** CD-018, CD-019, Stage 2 (auth), Stage 5 (checkout)  
-**Alternatives:**  
-- Redis hash per user: `cart:{userId}` with TTL 30d  
-- Separate `cart_items` in MongoDB + Redis cache  
-- Guest cart in localStorage → merge on login  
-**Resolution:** Redis schema + sync strategy + TTL policy documented  
-**State:** **PARTIALLY_RESOLVED** — Conceptual decision confirmed (CD-018: cart not persisted conceptually; CD-019: multi-vendor cart). Redis keys, TTL, sync, guest merge are TECHNICAL_FUTURE.
+**Alternatives:** 
+- Redis hash per user: `cart:{userId}` with TTL 30d
+- Separate `cart_items` in MongoDB + Redis cache
+- Guest cart in localStorage → merge on login
+**Resolution:** Redis strategy analyzed and documented: Hash per consumer (`cart:{consumer_id}`), multi-vendor items with vendor_id, guest cart merge via Lua scripts, atomic operations. TTL values (cart, session) remain pending NFR-PERF-003 confirmation.
+**State:** **PARTIALLY_RESOLVED** — Strategy documented (analysis_redis_schemas.md). TTLs (cart, session) pending NFR-PERF-003. Redis keys, sync, guest merge remain TECHNICAL_FUTURE for implementation.
 
 ---
 
@@ -246,8 +246,14 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Simple PDF receipt (non-fiscal) for MVP  
 - NF-e integration via provider (complex)  
 - Generate on-demand, store in S3, link in Order  
-**Resolution:** Invoice scope (fiscal vs receipt) + generation trigger + storage decided  
-**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). Generation trigger, template, storage (S3/DB) are TECHNICAL_FUTURE.
+**Resolution:**  
+- Scope: **RESOLVED** — Commercial receipt (PDF), not NF-e (CD-035)  
+- Generation trigger: **DEFERRED** — On-demand for MVP; automation (on payment/delivery/scheduled) post-MVP  
+- Storage: **RESOLVED** — S3 Standard-IA with naming convention (analysis_s3_naming.md Section 6)  
+- Glacier transition (90 days): **PENDING HUMAN DECISION**  
+- Object Lock/WORM (10 years): **PENDING HUMAN DECISION**  
+- NF-e: **EXCLUDED** per CD-035  
+**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP: PDF receipt on-demand, S3 Standard-IA. Glacier/WORM/automation deferred pending human decision.
 
 ---
 
@@ -304,15 +310,15 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-023: Frontend State Management
-**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?  
-**Why:** Stage 2-7 frontend implementation consistency  
-**Dependencies:** API style, auth flow, cart (Redis sync)  
-**Alternatives:**  
-- TanStack Query for server state + Context for auth/cart  
-- Redux Toolkit for all state  
-- Zustand for client + React Query for server  
-**Resolution:** State architecture decision with library choices approved  
-**State:** **TECHNICAL_FUTURE** — Implementation choice deferred.
+**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?
+**Why:** Stage 2-7 frontend implementation consistency
+**Dependencies:** API style, auth flow, cart (Redis sync)
+**Alternatives:** 
+- TanStack Query for server state + Context for auth/cart
+- Redux Toolkit for all state
+- Zustand for client + React Query for server
+**Resolution:** Frontend state management decision confirmed: TanStack Query (v5) for server state + Zustand (v5) for client state + React Router (v7) for URL state. Decision recorded as CD-074 in decisions.md.
+**State:** **RESOLVED** — Architecture decision formalized; implementation deferred to P4.
 
 ---
 

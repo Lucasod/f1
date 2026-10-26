@@ -27,7 +27,7 @@
   - `kilo.jsonc` (modified)
 - Untracked files (4):
   - `.kilo/agent-manager.json.3590.1792955331822.tmp`
-  - `.kilo/architecture/` (directory)
+  - `docs/architecture/` (directory)
   - `back/src/config/config.test.ts` (new)
   - `docs/api/` (directory)
 
@@ -334,3 +334,48 @@ No commits, staging, or destructive operations performed. All existing changes p
 ## Conclusion
 
 IN_PROGRESS — Phase INIT complete, proceeding to Part 1
+
+---
+
+## RESUMPTION — 2026-10-25T22:50:00Z
+
+### Resumption Context
+- **Run ID:** `orch-continuity-2026-10-25` (continued per user request "continue a tarefa da sessão anterior")
+- **Previous conclusion:** STATUS: BLOCKED (no authorized work within MAX_AUTHORIZED_PHASE=3)
+- **Git status baseline:** Branch `feature/initial-implementation`, HEAD `775eb76`, 9 modified + 4 untracked files (unchanged since run start)
+- **Verification:** Re-read task_list.md, decisions.md, open_questions.md, and run record to confirm current state
+
+### Status Changes Since Previous Run End
+
+| Item | Previous State | Current State | Evidence |
+|------|----------------|---------------|----------|
+| **Q-017 / T-117** (Review moderation) | PARTIALLY_RESOLVED, human gate | **RESOLVED** (covered_by_decision) | MP-08 completed: 7 sub-decisions confirmed (CD-067..CD-072); open_questions.md shows RESOLVED; task_list.md shows covered_by_decision |
+| **Q-026 / T-122** (Currency) | PARTIALLY_RESOLVED, human gate | **RESOLVED** (covered_by_decision) | CD-054 confirmed BRL; open_questions.md shows RESOLVED; task_list.md shows covered_by_decision |
+| **Q-011/Q-012** (Stripe Connect test validation) | PARTIALLY_RESOLVED | **PARTIALLY_RESOLVED** (unchanged) | Provider/flow confirmed (CD-064, CD-065); test mode items (fees, webhook sequence, transfer reversal, idempotency) require execution with test credentials — documented in `docs/analysis/analysis_stripe_validation.md` |
+
+### Current Blockers (Unchanged)
+
+1. **Phase Authorization (FR-001/FR-002):** `MAX_AUTHORIZED_PHASE=3` in `agent-orchestrator.ts:19` (changed from 2→3 pre-existing). `'P3'` removed from `PROHIBITED_ACTIONS` at `agent-orchestrator.ts:25`. All P4 tasks (T-601..T-1107) remain blocked.
+2. **Stripe Test Mode Validation:** Q-011/Q-012 require test credentials to execute validation items. No authorization to connect to Stripe test mode provided.
+3. **Architectural Gap (CR-002/AUD-001):** No live Kilo runtime adapter for `AgentDelegationPort` — tests pass with mocks only.
+
+### Eligible Work Within Current Authorization (MAX_AUTHORIZED_PHASE=3)
+
+| Phase | Tasks | Status | Actionable? |
+|-------|-------|--------|-------------|
+| P3a (T-301..T-306) | MongoDB, ES, Redis, S3, integrity, migration | All `covered_by_decision` | ✅ No — already complete |
+| P3b (T-401..T-405) | API style, endpoints, schemas, auth, versioning | All `covered_by_decision` (0 remaining) | ✅ No — already complete |
+| P3c (T-501..T-506) | Architecture docs (backend, frontend, infra, CI/CD, observability, security) | All `covered_by_decision` (0 remaining) | ✅ No — already complete |
+| P4+ | All implementation tasks | `pending` | ❌ Blocked by phase limit |
+
+**Conclusion:** No new authorized implementation work available. All Phase 3 tasks are complete (`covered_by_decision`). Phase 4+ remains blocked by `MAX_AUTHORIZED_PHASE=3`.
+
+### Checkpoints
+
+- **2026-10-25T22:50:00Z** — Phase: RESUMPTION_VERIFIED, Description: Resumed run, verified state changes (T-117/T-122 now resolved), confirmed no new authorized work, Git status hash: `775eb76`, Verified: Yes
+
+### Next Action
+
+**Await human decision on:** (1) Explicit authorization for P4 phase (change MAX_AUTHORIZED_PHASE or authorize P4 implementation), (2) Stripe Connect test credentials for Q-011/Q-012 validation, (3) CR-002 runtime adapter decision.
+
+No implementation work can proceed without explicit authorization for P4 phase.
