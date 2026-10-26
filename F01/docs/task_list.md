@@ -126,7 +126,7 @@
 | T-601 | Backend: User registration/login | JWT issue/refresh, password hash (CD-010) | T-403, T-501 | API works, tests pass | ✅ completed |
 | T-602 | Backend: Role guards & permission middleware | Protect routes per permission matrix (CD-004: Admin only; Consumer/Vendor separate) | T-601, T-103 | All endpoints guarded | ✅ completed |
 | T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E (manual checklist executed, API-level E2E verified) | ✅ completed |
-| T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ⏳ pending |
+| T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ✅ completed |
 
 ---
 
@@ -135,7 +135,7 @@
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
 | T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
-| T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ⏳ pending |
+| T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ✅ completed |
 | T-703 | Backend: Image upload to S3 | Presigned URLs, multipart, validation (T-304) | T-304, T-602 | Upload works, CDN served | ⏳ pending |
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ⏳ pending |
 | T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ⏳ pending |
@@ -267,6 +267,7 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**T-604:** Frontend Role-based UI rendering — depends on T-603 (now completed).
-**T-702:** Backend Product CRUD API — depends on T-701 (completed), T-106b, T-107, T-602.
+**T-703:** Backend Image upload to S3 — depends on T-304, T-602 (completed).
+**T-704:** Frontend Vendor dashboard — depends on T-502, T-701 (completed), T-702 (now completed).
+**T-705:** Frontend Product catalog — depends on T-502, T-702 (now completed).
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).

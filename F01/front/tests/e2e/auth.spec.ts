@@ -306,7 +306,7 @@ test.describe('T-603 Authentication E2E', () => {
     await gotoAndWait(page, '/vendor/dashboard');
     
     // Should have access (not access denied)
-    await expect(page.locator('text=Vendor Dashboard')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Vendor Dashboard')).toBeVisible();
     await expect(page.locator('h1:has-text("Access Denied")')).not.toBeVisible();
   });
 
@@ -320,7 +320,7 @@ test.describe('T-603 Authentication E2E', () => {
     }
     
     await gotoAndWait(page, '/vendor/products');
-    await expect(page.locator('text=Vendor Products')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Vendor Products')).toBeVisible();
     await expect(page.locator('h1:has-text("Access Denied")')).not.toBeVisible();
   });
 
@@ -362,7 +362,7 @@ test.describe('T-603 Authentication E2E', () => {
       
       await gotoAndWait(page, '/admin/dashboard');
       
-      await expect(page.locator('text=Admin Dashboard')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Admin Dashboard')).toBeVisible();
       await expect(page.locator('h1:has-text("Access Denied")')).not.toBeVisible();
     });
 
@@ -380,7 +380,7 @@ test.describe('T-603 Authentication E2E', () => {
       
       await gotoAndWait(page, '/vendor/dashboard');
       
-      await expect(page.locator('text=Vendor Dashboard')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Vendor Dashboard')).toBeVisible();
       await expect(page.locator('h1:has-text("Access Denied")')).not.toBeVisible();
     });
   });

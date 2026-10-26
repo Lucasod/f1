@@ -4,12 +4,83 @@ import { test as base, type Page, expect } from '@playwright/test';
  * Test fixtures and helpers for T-603 authentication E2E tests
  */
 
-// Valid test constants (from backend test constants)
+// Valid test constants (from backend test constants) - kept as fallback
 export const TEST_CONSTANTS = {
   VALID_CPF: '52998224725',
   VALID_CNPJ: '11222333000181',
   DEFAULT_PASSWORD: 'SecurePass123!',
 } as const;
+
+/**
+ * Calculate check digit using the same algorithm as backend (person.domain.ts)
+ */
+function calculateCheckDigit(digits: number[], weights: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < weights.length; i++) {
+    sum += digits[i] * weights[i];
+  }
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
+}
+
+/**
+ * Check if all digits are the same (invalid CPF/CNPJ)
+ */
+function allDigitsSame(value: string): boolean {
+  return value.split('').every(d => d === value[0]);
+}
+
+/**
+ * Generate a valid CPF (11 digits) with correct check digits
+ * Algorithm matches backend person.domain.ts validateCpfCheckDigits
+ */
+export function generateValidCPF(): string {
+  let cpf: string;
+  do {
+    // Generate first 9 random digits
+    const baseDigits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
+    
+    // Calculate 10th digit (first check digit)
+    const weights1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
+    const check1 = calculateCheckDigit(baseDigits, weights1);
+    
+    // Calculate 11th digit (second check digit)
+    const digitsWithFirstCheck = [...baseDigits, check1];
+    const weights2 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+    const check2 = calculateCheckDigit(digitsWithFirstCheck, weights2);
+    
+    cpf = [...baseDigits, check1, check2].join('');
+  } while (allDigitsSame(cpf)); // Retry if all digits are the same
+  
+  return cpf;
+}
+
+/**
+ * Generate a valid CNPJ (14 digits) with correct check digits
+ * Algorithm matches backend person.domain.ts validateCnpjCheckDigits
+ */
+export function generateValidCNPJ(): string {
+  let cnpj: string;
+  do {
+    // Generate first 12 random digits (8 base + 4 branch, typically 0001)
+    const baseDigits = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10));
+    const branchDigits = [0, 0, 0, 1]; // Standard branch
+    const first12 = [...baseDigits, ...branchDigits];
+    
+    // Calculate 13th digit (first check digit)
+    const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const check1 = calculateCheckDigit(first12, weights1);
+    
+    // Calculate 14th digit (second check digit)
+    const digitsWithFirstCheck = [...first12, check1];
+    const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const check2 = calculateCheckDigit(digitsWithFirstCheck, weights2);
+    
+    cnpj = [...first12, check1, check2].join('');
+  } while (allDigitsSame(cnpj)); // Retry if all digits are the same
+  
+  return cnpj;
+}
 
 /**
  * Generate unique email for each test to avoid conflicts
@@ -27,7 +98,7 @@ export function getConsumerRegistrationData(email?: string) {
   return {
     name: 'Test Consumer',
     taxIdType: 'CPF' as const,
-    taxIdValue: TEST_CONSTANTS.VALID_CPF,
+    taxIdValue: generateValidCPF(),
     email: email ?? generateUniqueEmail('consumer'),
     password: TEST_CONSTANTS.DEFAULT_PASSWORD,
     confirmPassword: TEST_CONSTANTS.DEFAULT_PASSWORD,
@@ -39,7 +110,7 @@ export function getVendorRegistrationData(email?: string) {
   return {
     name: 'Test Vendor',
     taxIdType: 'CNPJ' as const,
-    taxIdValue: TEST_CONSTANTS.VALID_CNPJ,
+    taxIdValue: generateValidCNPJ(),
     email: email ?? generateUniqueEmail('vendor'),
     password: TEST_CONSTANTS.DEFAULT_PASSWORD,
     confirmPassword: TEST_CONSTANTS.DEFAULT_PASSWORD,
@@ -66,6 +137,52 @@ export async function registerUser(page: Page, userData: ReturnType<typeof getCo
   // Submit
   await page.click('button[type="submit"]');
   await page.waitForLoadState('networkidle');
+  
+  // Workaround: Frontend doesn't redirect after successful registration
+  // Check if user is authenticated but still on /register, then navigate to dashboard
+  const url = page.url();
+  if (url.includes('/register')) {
+    // Wait for localStorage to be updated (zustand persist is async)
+    await page.waitForFunction(() => {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (!authStorage) return false;
+      try {
+        const parsed = JSON.parse(authStorage);
+        return !!parsed.state?.accessToken;
+      } catch {
+        return false;
+      }
+    }, { timeout: 5000 });
+    
+    const authenticated = await page.evaluate(() => {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (!authStorage) return false;
+      try {
+        const parsed = JSON.parse(authStorage);
+        return !!parsed.state?.accessToken;
+      } catch {
+        return false;
+      }
+    });
+    
+    if (authenticated) {
+      // Registration succeeded but no redirect - go to appropriate dashboard
+      const role = await page.evaluate(() => {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (!authStorage) return null;
+        try {
+          const parsed = JSON.parse(authStorage);
+          const user = parsed.state?.user;
+          return user?.roles?.[0] ?? null;
+        } catch {
+          return null;
+        }
+      });
+      const dashboardPath = role === 'VENDOR' ? '/vendor/dashboard' : role === 'ADMIN' ? '/admin/dashboard' : '/dashboard';
+      await page.goto(dashboardPath);
+      await page.waitForLoadState('networkidle');
+    }
+  }
 }
 
 /**
@@ -79,6 +196,18 @@ export async function loginUser(page: Page, email: string, password: string = TE
   await page.fill('#password', password);
   await page.click('button[type="submit"]');
   await page.waitForLoadState('networkidle');
+  
+  // Wait for localStorage to be updated (zustand persist is async)
+  await page.waitForFunction(() => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return false;
+    try {
+      const parsed = JSON.parse(authStorage);
+      return !!parsed.state?.accessToken;
+    } catch {
+      return false;
+    }
+  }, { timeout: 5000 });
 }
 
 /**
@@ -86,7 +215,14 @@ export async function loginUser(page: Page, email: string, password: string = TE
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {
   const hasToken = await page.evaluate(() => {
-    return !!localStorage.getItem('accessToken');
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return false;
+    try {
+      const parsed = JSON.parse(authStorage);
+      return !!parsed.state?.accessToken;
+    } catch {
+      return false;
+    }
   });
   return hasToken;
 }
@@ -96,11 +232,12 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
  */
 export async function getUserRole(page: Page): Promise<string | null> {
   return await page.evaluate(() => {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return null;
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return null;
     try {
-      const user = JSON.parse(userStr);
-      return user.roles?.[0] ?? null;
+      const parsed = JSON.parse(authStorage);
+      const user = parsed.state?.user;
+      return user?.roles?.[0] ?? null;
     } catch {
       return null;
     }
@@ -115,7 +252,7 @@ export async function clearAuth(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => {
-    localStorage.clear();
+    localStorage.removeItem('auth-storage');
     sessionStorage.clear();
   });
 }

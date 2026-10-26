@@ -681,6 +681,82 @@ Decisions validated against confirmed requirements:
 
 ---
 
+---
+
+## MP-14: Playwright E2E Reliability Fix + T-702 Product CRUD API — FS-01 Marketplace
+
+**Date:** 2026-10-26
+**Objective:** Fix Playwright E2E test reliability for T-603 and implement T-702 Backend Product CRUD API
+**Scope:** Test infrastructure fix, backend Product/Category CRUD implementation, independent review
+
+### Results
+
+**Playwright E2E Reliability Fix (T-603):**
+- **Root cause:** Fixed CPF/CNPJ constants shared with backend unit tests caused `TAX_ID_ALREADY_EXISTS` collisions; strict mode selector violations in 3 tests
+- **Resolution:**
+  1. Added `generateValidCPF()` and `generateValidCNPJ()` in `fixtures.ts` using backend's check digit algorithm
+  2. Updated registration data to use unique valid tax IDs per test
+  3. Fixed auth state detection to read from Zustand's `auth-storage` localStorage key
+  4. Fixed strict mode violations by scoping selectors to `page.getByRole('main')`
+- **Evidence:** Two consecutive runs, both **19/19 PASS** (previously 3 pass, 16 skipped)
+- **Coverage:** All 19 auth E2E scenarios now execute: registration, login, session persistence, role-based access control, 403 vs 404 differentiation
+
+**T-702 Backend Product CRUD API:**
+- **Created files:**
+  - `F01/back/src/modules/product/product.domain.ts` — Product & Category entities, repositories, ProductError enum
+  - `F01/back/src/modules/product/product.service.ts` — ProductService with CRUD, ownership, stock, status, category management
+  - `F01/back/src/modules/product/product.routes.ts` — 16 REST endpoints (9 product + 7 category)
+  - `F01/back/src/modules/product/product.routes.test.ts` — 76 tests
+- **Modified:** `F01/back/src/index.ts` — Registered product/category routes
+- **Acceptance criteria (FR-PROD-001..006):**
+  - ✅ FR-PROD-001: Vendor creates product with name, description, price, quantity, category
+  - ✅ FR-PROD-002: Product inactivation prevents new sales, retains history
+  - ✅ FR-PROD-003: Product.quantity as stock indicator
+  - ✅ FR-PROD-004: Category hierarchy with parent_id, slug, path; cycle prevention
+  - ✅ FR-PROD-005: Product images array (S3 deferred per Q-018)
+  - ✅ FR-PROD-006: No variants — each variation separate Product (CD-062)
+- **Authorization (CD-059):**
+  - ✅ Vendor manages own products only (ownership check)
+  - ✅ Admin bypasses ownership checks
+  - ✅ Consumer forbidden from product write endpoints (403)
+  - ✅ Category management: ADMIN only
+
+**Code Review Corrections (from first review `CORRECTIONS_NEEDED` to re-review `PASS`):**
+| CR | Severity | Fix |
+|----|----------|-----|
+| CR-001 | CRITICAL | Split routers: `createProductRoutes` at `/api/v1/products`, `createCategoryRoutes` at `/api/v1/categories` |
+| CR-002 | HIGH | InMemoryProductRepository.update() cleans old vendor/category indexes on ID change |
+| CR-003 | MEDIUM | Added `CATEGORY_HAS_CHILDREN`, `CATEGORY_HAS_PRODUCTS` error codes; deleteCategory uses correct codes |
+| CR-004 | LOW | Moved ProductError enum to domain; all domain throws use enum values |
+| CR-005 | LOW | Removed readonly from mutable properties (id/createdAt remain readonly) |
+| CR-006 | LOW | Category.depth returns 0 for root categories |
+| CR-008 | LOW | VALID_STATUSES constant defined for status validation |
+
+**Test Results:**
+- Backend: 234/234 PASS (76 new product tests)
+- Frontend: 64/64 PASS
+- Playwright E2E: 19/19 PASS (2 consecutive runs)
+
+### Documentation Updates
+- `F01/docs/task_list.md`: T-604 → `✅ completed`, T-702 → `✅ completed`
+- `F01/docs/agent_runs/orch-p4-continue-2026-10-26.md`: Full execution record
+
+### Verification Summary
+- All backend tests: 234/234 pass
+- All frontend tests: 64/64 pass
+- Playwright E2E: 19/19 pass (2 consecutive runs)
+- Builds: backend (tsc) ✅, frontend (tsc + vite) ✅
+- P4 authorized (MAX_AUTHORIZED_PHASE = 4), P5 blocked
+
+### Next Steps
+1. T-703 (Backend: Image upload to S3) — depends on T-304, T-602
+2. T-704 (Frontend: Vendor dashboard) — depends on T-701, T-702
+3. T-705 (Frontend: Product catalog) — depends on T-702
+4. MP-07 Stage D: Stripe Connect test mode validation
+5. P5 remains blocked (MAX_AUTHORIZED_PHASE = 4)
+
+---
+
 ## MP-06-R4: Consolidação Final do Stripe Connect (Separate Charges and Transfers)
 **Date:** 2026-10-23
 **Objective:** Finalize and consolidate CD-064 (Payment Provider) and CD-065 (Distribution Flow) with corrected financial separation, fulfillment trigger alignment, and async payment handling
