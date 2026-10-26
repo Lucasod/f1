@@ -1,0 +1,16 @@
+{
+  "worktrees": {},
+  "sessions": {},
+  "tabOrder": {
+    "local": [
+      "pending:6ec62313-6d97-4942-96e6-7330c3e7d7bc",
+      "ses_e8f36e405ffeFDCYhP8TEIr89r",
+      "ses_e8b88cb2bffeAMwRtzkqRsXr72"
+    ]
+  },
+  "sessionsCollapsed": true,
+  "activeTarget": {
+    "projectId": "prj-12d1072c7f50",
+    "kind": "local"
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "question": "Q-023",
+  "current_state": "TECHNICAL_FUTURE",
+  "blocking_classification": "technical_decision",
+  "frontend_architecture_proposal": {
+    "source": "docs/architecture/frontend.md",
+    "server_state": "TanStack Query (caching, invalidation, optimistic updates)",
+    "client_state": "Zustand (auth tokens, user profile, cart, UI state)",
+    "url_state": "React Router (filters, pagination, search params)",
+    "stack": [
+      "React 18 + TypeScript",
+      "Vite",
+      "React Router v6",
+      "TanStack Query",
+      "Zustand",
+      "Tailwind CSS",
+      "Playwright (E2E)",
+      "Vitest (unit)"
+    ]
+  },
+  "package_json_reality": {
+    "zustand": "5.0.16 (present)",
+    "tanstack_react_query": "ABSENT (@tanstack/react-query not in dependencies or devDependencies)",
+    "react_router": "7.18.4 (present, v7 but frontend.md says v6)",
+    "testing": "Vitest + Testing Library + jsdom + Playwright"
+  },
+  "test_failures_analysis": {
+    "total_failing": 7,
+    "authStore_test_ts": {
+      "count": 3,
+      "tests": [
+        "should persist tokens to localStorage (login)",
+        "should register user and store tokens",
+        "should refresh access token using refresh token"
+      ],
+      "root_cause": "zustand persist middleware with createJSONStorage(() => localStorage) does not synchronously flush to localStorage in jsdom test environment; tests check localStorage immediately after async action but persist is batched/deferred",
+      "category": "test_setup_issue"
+    },
+    "App_test_tsx": {
+      "count": 4,
+      "tests": [
+        "renders welcome message when not authenticated",
+        "renders user dashboard when authenticated as consumer",
+        "renders vendor dashboard link when authenticated as vendor",
+        "renders admin dashboard link when authenticated as admin"
+      ],
+      "root_cause": "HomePage uses useNavigate() from react-router but renderWithProvider only wraps with AuthProvider, missing Router context (MemoryRouter/BrowserRouter)",
+      "category": "missing_test_wrapper"
+    }
+  },
+  "alternatives_comparison": {
+    "A1_TanStack_Query_plus_Zustand": {
+      "description": "frontend.md proposal - TanStack Query for server state, Zustand for client state",
+      "pros": [
+        "Matches documented architecture",
+        "Clear separation server/client state",
+        "Zustand already installed (5.0.16)",
+        "TanStack Query industry standard for server state",
+        "Optimistic updates, caching, invalidation built-in",
+        "Lightweight, minimal boilerplate"
+      ],
+      "cons": [
+        "Requires installing @tanstack/react-query",
+        "Two libraries to learn/maintain",
+        "Need QueryClientProvider setup"
+      ],
+      "alignment": "HIGH - exactly what frontend.md specifies"
+    },
+    "A2_Redux_Toolkit": {
+      "description": "Single store for all state (server + client) using RTK Query",
+      "pros": [
+        "Single state management solution",
+        "RTK Query handles server state well",
+        "DevTools, TypeScript support excellent",
+        "Opinionated, reduces decision fatigue"
+      ],
+      "cons": [
+        "Heavier bundle size",
+        "Overkill for client state (auth, cart, UI)",
+        "Does not match frontend.md architecture",
+        "Would require removing Zustand and rewriting authStore",
+        "Steeper learning curve for team"
+      ],
+      "alignment": "LOW - contradicts documented architecture"
+    },
+    "A3_Zustand_plus_React_Query": {
+      "description": "Zustand for client state, React Query (v4/v5, same as TanStack Query) for server state",
+      "pros": [
+        "Same as A1 (React Query = TanStack Query v4+)",
+        "Zustand already present"
+      ],
+      "cons": [
+        "Naming confusion (React Query rebranded to TanStack Query)",
+        "Same as A1"
+      ],
+      "alignment": "HIGH - essentially same as A1"
+    },
+    "A4_Context_plus_hooks": {
+      "description": "React Context for global state, custom hooks for data fetching",
+      "pros": [
+        "Zero dependencies",
+        "Built-in React APIs"
+      ],
+      "cons": [
+        "No caching, invalidation, deduping for server state",
+        "Manual optimistic updates",
+        - "Performance issues with frequent updates (Context re-renders all consumers)",
+        - "No devtools, no persistence middleware",
+        - "Does not match frontend.md",
+        - "Cart sync with Redis (Q-014) would be manual"
+      ],
+      "alignment": "NONE - contradicts architecture document"
+    }
+  },
+  "recommendation": {
+    "decision": "A1 / A3 - TanStack Query for server state + Zustand for client state",
+    "rationale": [
+      "frontend.md explicitly documents this as the decision for Q-023",
+      "Zustand 5.0.16 already installed and used in authStore",
+      "authStore already uses zustand persist middleware for localStorage",
+      "Clear architectural separation: server state (API data, caching) vs client state (auth, cart, UI)",
+      "Matches React Router v6+ for URL state",
+      "Test failures are test setup issues, not architecture issues"
+    ],
+    "required_actions": [
+      "Install @tanstack/react-query (latest v5)",
+      "Add QueryClientProvider in app/providers",
+      "Configure QueryClient with defaults (staleTime, retry, etc.)",
+      "Fix authStore test: await act() or waitFor for persist flush, or mock persist storage",
+      "Fix App.test.tsx: wrap renderWithProvider with MemoryRouter",
+      "Generate API client from OpenAPI spec (already exists at docs/api/openapi.yaml)"
+    ],
+    "test_fixes_needed": {
+      "authStore_test_ts": "Use vi.waitFor or act() to wait for persist middleware to flush to localStorage, or test store state directly instead of localStorage",
+      "App_test_tsx": "Import { MemoryRouter } from 'react-router' and wrap component in renderWithProvider"
+    }
+  },
+  "consequences": {
+    "implementation_consistency": "Aligns code with documented architecture; single source of truth",
+    "test_setup": "Two test fixes unblock 7 failing tests; fixes are test-only, no production code changes",
+    "p4_frontend_readiness": "Unblocks T-603 (Frontend: Auth pages & context) and T-604 (Frontend: Role-based UI rendering) which depend on T-502 (Frontend architecture) and working test baseline",
+    "cart_redis_sync": "Zustand persist can hydrate from Redis-backed API on initializeAuth; TanStack Query handles server-state cart sync",
+    "vendor_dashboard": "T-704 (Frontend: Vendor dashboard) will use TanStack Query for data fetching, Zustand for UI state"
+  },
+  "documents_to_update": [
+    {
+      "file": "docs/decisions.md",
+      "action": "Add CD-074: Frontend State Management — TanStack Query + Zustand confirmed"
+    },
+    {
+      "file": "docs/open_questions.md",
+      "action": "Update Q-023 state from TECHNICAL_FUTURE to RESOLVED with decision reference"
+    },
+    {
+      "file": "docs/task_list.md",
+      "action": "Mark T-502 (Frontend architecture) as covered_by_decision; unblocks T-603, T-604"
+    }
+  ],
+  "code_changes_needed_in_this_phase": {
+    "decision_recording_only": true,
+    "no_implementation_changes": "This phase only records the decision. Implementation (install @tanstack/react-query, add QueryClientProvider, fix tests) belongs to P4 implementation phase after human authorization for P4.",
+    "note": "MAX_AUTHORIZED_PHASE=3 unchanged; P4 implementation requires explicit human authorization"
+  },
+  "human_approval_needed": {
+    "required": true,
+    "what_specifically": [
+      "Confirm Q-023 resolution: TanStack Query + Zustand as documented in frontend.md",
+      "Authorize P4 implementation to proceed with: npm install @tanstack/react-query, add QueryClientProvider, fix 7 failing tests",
+      "Confirm MAX_AUTHORIZED_PHASE can advance to 4 for frontend implementation tasks"
+    ]
+  },
+  "p3_blocker": {
+    "blocks_p3_exit": true,
+    "reason": "T-502 (Frontend architecture) is a P3c task marked covered_by_decision but the decision Q-023 is not yet formally recorded in decisions.md. P3 cannot be considered complete while a documented architecture decision remains unresolved in the decision log."
+  }
+}

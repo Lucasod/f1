@@ -1,0 +1,62 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "instructions": [
+    ".kilo/rules/universal-rules.md",
+    ".kilo/rules/project-rules.md",
+    ".kilo/rules/autonomous-execution.md"
+  ],
+  "agent": {
+    "code": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "bash": "deny",
+          "code-developer": "allow",
+          "code-reviewer": "allow"
+        }
+      }
+    }
+  },
+  "indexing": {
+    "fileExtensions": [
+      ".cjs",
+      ".conf",
+      ".css",
+      ".html",
+      ".js",
+      ".json",
+      ".jsx",
+      ".lua",
+      ".md",
+      ".mdx",
+      ".mjs",
+      ".scss",
+      ".sh",
+      ".sql",
+      ".tf",
+      ".ts",
+      ".tsx",
+      ".yaml",
+      ".yml"
+    ],
+    "enabled": false
+  },
+  "mcp": {
+    "mongodb-mcp-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mongodb-mcp-server@1.13.0",
+        "--readOnly"
+      ],
+      "environment": {
+        "MDB_MCP_CONNECTION_STRING": "{{MDB_MCP_CONNECTION_STRING}}",
+        "MDB_MCP_API_CLIENT_ID": "{{MDB_MCP_API_CLIENT_ID}}",
+        "MDB_MCP_API_CLIENT_SECRET": "{{MDB_MCP_API_CLIENT_SECRET}}",
+        "MDB_MCP_READ_ONLY": "true"
+      },
+      "enabled": true
+    }
+  }
+}

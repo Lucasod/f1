@@ -1,0 +1,171 @@
+export enum VendorStatus {
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended'
+}
+
+export interface VendorData {
+  id?: string;
+  personId: string;
+  storeName: string;
+  slug: string;
+  status?: VendorStatus;
+  commissionPct: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function validateSlug(slug: string): boolean {
+  return /^[a-z0-9-]+$/.test(slug);
+}
+
+export class Vendor {
+  public readonly id: string;
+  public readonly personId: string;
+  public readonly storeName: string;
+  public readonly slug: string;
+  public readonly status: VendorStatus;
+  public readonly commissionPct: number;
+  public readonly createdAt: Date;
+  public readonly updatedAt: Date;
+
+  private constructor(data: VendorData) {
+    this.id = data.id || generateId();
+    this.personId = data.personId;
+    this.storeName = data.storeName;
+    this.slug = data.slug;
+    this.status = data.status || VendorStatus.ACTIVE;
+    this.commissionPct = data.commissionPct;
+    this.createdAt = data.createdAt || new Date();
+    this.updatedAt = data.updatedAt || new Date();
+  }
+
+  static create(data: Omit<VendorData, 'id' | 'createdAt' | 'updatedAt' | 'status'> & { commissionPct?: number }): Vendor {
+    if (!data.personId || data.personId.trim().length === 0) {
+      throw new Error('PERSON_ID_REQUIRED');
+    }
+
+    if (!data.storeName || data.storeName.trim().length === 0) {
+      throw new Error('STORE_NAME_REQUIRED');
+    }
+
+    if (!data.slug || data.slug.trim().length === 0) {
+      throw new Error('SLUG_REQUIRED');
+    }
+
+    if (!validateSlug(data.slug)) {
+      throw new Error('INVALID_SLUG_FORMAT');
+    }
+
+    const commissionPct = data.commissionPct ?? 10;
+    if (commissionPct < 0 || commissionPct > 100) {
+      throw new Error('INVALID_COMMISSION_PCT');
+    }
+
+    return new Vendor({
+      ...data,
+      commissionPct,
+      status: VendorStatus.ACTIVE
+    });
+  }
+
+  suspend(): void {
+    if (this.status === VendorStatus.SUSPENDED) {
+      return;
+    }
+    (this as any).status = VendorStatus.SUSPENDED;
+    (this as any).updatedAt = new Date();
+  }
+
+  activate(): void {
+    if (this.status === VendorStatus.SUSPENDED) {
+      throw new Error('CANNOT_ACTIVATE_SUSPENDED');
+    }
+    (this as any).status = VendorStatus.ACTIVE;
+    (this as any).updatedAt = new Date();
+  }
+
+  updateStoreName(newStoreName: string): void {
+    if (!newStoreName || newStoreName.trim().length === 0) {
+      throw new Error('STORE_NAME_REQUIRED');
+    }
+    (this as any).storeName = newStoreName;
+    (this as any).updatedAt = new Date();
+  }
+}
+
+export interface VendorRepository {
+  save(vendor: Vendor): Promise<Vendor>;
+  findById(id: string): Promise<Vendor | null>;
+  findBySlug(slug: string): Promise<Vendor | null>;
+  findByPersonId(personId: string): Promise<Vendor | null>;
+  update(vendor: Vendor): Promise<Vendor>;
+  delete(id: string): Promise<void>;
+}
+
+export class InMemoryVendorRepository implements VendorRepository {
+  private vendors: Map<string, Vendor> = new Map();
+  private slugIndex: Map<string, string> = new Map();
+  private personIndex: Map<string, string> = new Map();
+
+  async save(vendor: Vendor): Promise<Vendor> {
+    const existingSlugId = this.slugIndex.get(vendor.slug.toLowerCase());
+    if (existingSlugId && existingSlugId !== vendor.id) {
+      throw new Error('SLUG_ALREADY_EXISTS');
+    }
+    this.slugIndex.set(vendor.slug.toLowerCase(), vendor.id);
+
+    const existingPersonVendor = this.personIndex.get(vendor.personId);
+    if (existingPersonVendor && existingPersonVendor !== vendor.id) {
+      throw new Error('PERSON_ALREADY_HAS_VENDOR');
+    }
+    this.personIndex.set(vendor.personId, vendor.id);
+
+    this.vendors.set(vendor.id, vendor);
+    return vendor;
+  }
+
+  async findById(id: string): Promise<Vendor | null> {
+    return this.vendors.get(id) || null;
+  }
+
+  async findBySlug(slug: string): Promise<Vendor | null> {
+    const vendorId = this.slugIndex.get(slug.toLowerCase());
+    if (!vendorId) return null;
+    return this.vendors.get(vendorId) || null;
+  }
+
+  async findByPersonId(personId: string): Promise<Vendor | null> {
+    const vendorId = this.personIndex.get(personId);
+    if (!vendorId) return null;
+    return this.vendors.get(vendorId) || null;
+  }
+
+  async update(vendor: Vendor): Promise<Vendor> {
+    const existingSlugId = this.slugIndex.get(vendor.slug.toLowerCase());
+    if (existingSlugId && existingSlugId !== vendor.id) {
+      throw new Error('SLUG_ALREADY_EXISTS');
+    }
+    this.slugIndex.set(vendor.slug.toLowerCase(), vendor.id);
+    this.vendors.set(vendor.id, vendor);
+    return vendor;
+  }
+
+  async delete(id: string): Promise<void> {
+    const vendor = this.vendors.get(id);
+    if (vendor) {
+      this.slugIndex.delete(vendor.slug.toLowerCase());
+      this.personIndex.delete(vendor.personId);
+      this.vendors.delete(id);
+    }
+  }
+
+  clear(): void {
+    this.vendors.clear();
+    this.slugIndex.clear();
+    this.personIndex.clear();
+  }
+}
