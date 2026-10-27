@@ -25,12 +25,12 @@ function validateSlug(slug: string): boolean {
 export class Vendor {
   public readonly id: string;
   public readonly personId: string;
-  public readonly storeName: string;
+  public storeName: string;
   public readonly slug: string;
-  public readonly status: VendorStatus;
+  public status: VendorStatus;
   public readonly commissionPct: number;
   public readonly createdAt: Date;
-  public readonly updatedAt: Date;
+  public updatedAt: Date;
 
   private constructor(data: VendorData) {
     this.id = data.id || generateId();
@@ -76,24 +76,27 @@ export class Vendor {
     if (this.status === VendorStatus.SUSPENDED) {
       return;
     }
-    (this as any).status = VendorStatus.SUSPENDED;
-    (this as any).updatedAt = new Date();
+    this.status = VendorStatus.SUSPENDED;
+    this.updatedAt = new Date();
   }
 
-  activate(): void {
-    if (this.status === VendorStatus.SUSPENDED) {
+  activate(force: boolean = false): void {
+    if (this.status === VendorStatus.ACTIVE) {
+      return;
+    }
+    if (this.status === VendorStatus.SUSPENDED && !force) {
       throw new Error('CANNOT_ACTIVATE_SUSPENDED');
     }
-    (this as any).status = VendorStatus.ACTIVE;
-    (this as any).updatedAt = new Date();
+    this.status = VendorStatus.ACTIVE;
+    this.updatedAt = new Date();
   }
 
   updateStoreName(newStoreName: string): void {
     if (!newStoreName || newStoreName.trim().length === 0) {
       throw new Error('STORE_NAME_REQUIRED');
     }
-    (this as any).storeName = newStoreName;
-    (this as any).updatedAt = new Date();
+    this.storeName = newStoreName;
+    this.updatedAt = new Date();
   }
 }
 

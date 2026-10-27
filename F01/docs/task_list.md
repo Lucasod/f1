@@ -136,15 +136,15 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
 | T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ✅ completed |
-| T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed_with_limitations |
+| T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed |
 | T-703b | Backend: Image upload to S3 | Presigned URLs, multipart, validation, CloudFront CDN (T-304) | T-304, T-602, T-703a, AWS credentials, Q-018 decision | Upload works, CDN served | ⏳ pending |
 
-> **Note on T-703a (completed_with_limitations):** The local storage implementation has 5 documented limitations per audit report (`F01/docs/analysis/analysis_local_storage_vs_s3.md`):
-> 1. Docker volume persistence not validated across container restarts
-> 2. OpenAPI spec diverges from implementation (still references S3 presigned URLs)
-> 3. Only main image supported (no thumbnail generation/variants)
-> 4. No image dimension validation (only MIME type and size)
-> 5. No automated cleanup for orphaned uploads
+> **Note on T-703a (completed):** All 5 limitations from the audit report (`F01/docs/analysis/analysis_local_storage_vs_s3.md`) have been addressed:
+> 1. ✅ Docker volume persistence validated across container restarts
+> 2. ✅ OpenAPI spec aligned with implementation (removed S3 presigned URL references)
+> 3. ✅ Gallery images supported (multiple images per product, thumbnail generation)
+> 4. ✅ Image dimension validation implemented (minimum 800x800px, configurable)
+> 5. ✅ Automated cleanup for orphaned uploads implemented (scheduled + on-demand)
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ✅ completed |
 | T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ✅ completed_with_limitations |
 
@@ -160,11 +160,12 @@
 
 ---
 
-> **Note on T-704:** The task was marked completed but had several bugs that were fixed in this execution:
+> **Note on T-704:** The vendor dashboard was completed with the following fixes and enhancements:
 > - Added missing routes in App.tsx for `/vendor/products/new` and `/vendor/products/:productId/edit`
 > - Fixed ProductForm to allow image upload in create mode (two-step: create product, then upload image using returned productId)
 > - Fixed VendorDashboard.handleDeleteProduct to call productApi.delete() and refresh dashboard
 > - Fixed ProductForm.handleRemoveImage with robust key extraction
+> - **Implemented vendor suspension/reactivation endpoints (FR-VEND-002)**: POST `/api/v1/vendors/:vendorId/suspend` (ADMIN only) and POST `/api/v1/vendors/:vendorId/reactivate` (ADMIN only) with proper state transitions, audit logging, and downstream effects on product visibility
 > - Updated E2E tests to reflect current behavior (vendor needs onboarding before dashboard shows products)
 
 ---
@@ -294,18 +295,21 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**T-705:** Frontend Product catalog — ✅ COMPLETED_WITH_LIMITATIONS (consumer browsing, search, filter, sort with "In-Stock First" per CD-013, debounced search, screen reader announcements, Error Boundary; product detail page placeholder, cart integration blocked by T-901, SSR not implemented in Vite SPA)
+**T-703b:** Backend Image upload to S3 — depends on T-703a (completed), AWS credentials, Q-018 decision (3 human decisions: Glacier transition, Object Lock/WORM, generation trigger).
 
-**T-703b:** Backend Image upload to S3 — depends on T-703a (completed_with_limitations), AWS credentials, Q-018 decision (3 human decisions: Glacier transition, Object Lock/WORM, generation trigger).
+**T-703a limitations:** All 5 documented limitations have been addressed and validated:
+1. ✅ Docker volume persistence validated across container restarts
+2. ✅ OpenAPI spec aligned with implementation
+3. ✅ Gallery images supported (multiple images per product)
+4. ✅ Image dimension validation (minimum 800x800px)
+5. ✅ Automated orphan cleanup (scheduled + on-demand)
 
-**T-703a limitations:** 5 documented — Docker volume persistence not validated, OpenAPI spec alignment, only main image (no thumbnails), no dimension validation, no orphan cleanup.
-
-**MP-07 Stage C:** Review moderation (T-117) — IN PROGRESS, needs human decision on 3 remaining sub-questions.
+**MP-07 Stage C:** Review moderation (T-117) — IN PROGRESS, needs human decision on 7 sub-questions.
 
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).
 
 **Next available independent tasks:**
-- T-703a limitations remediation (if prioritized)
 - Vendor onboarding form (part of T-704 scope, not yet implemented)
+- T-901 Cart API (blocked by NFR-PERF-003 / Q-014 Redis TTL)
 
 All P5 tasks remain blocked (MAX_AUTHORIZED_PHASE = 4).

@@ -31,6 +31,25 @@ const productService = new ProductService(productRepo, categoryRepo, vendorRepo,
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
 
+// Run orphaned file cleanup on startup
+async function runStartupCleanup() {
+  try {
+    // Get all products to collect referenced image URLs
+    const products = await productService.listProducts();
+    const referencedUrls: string[] = [];
+    for (const product of products) {
+      if (product.images && product.images.length > 0) {
+        referencedUrls.push(...product.images);
+      }
+    }
+    
+    const result = await storageAdapter.cleanupOrphanedFiles(referencedUrls);
+    console.log(`Startup cleanup: removed ${result.deletedCount} orphaned files`);
+  } catch (error) {
+    console.error('Startup cleanup failed:', error);
+  }
+}
+
 app.use(helmet());
 app.use(cors({
   origin: config.corsOrigins.length > 0 ? config.corsOrigins : true,
@@ -66,7 +85,16 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 export { app };
 
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
-  app.listen(config.port, () => {
-    console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
-  });
+  // Run startup cleanup before listening (IIFE for top-level await in CommonJS)
+  (async () => {
+    if (config.enableStartupCleanup) {
+      await runStartupCleanup();
+    } else {
+      console.log('Startup cleanup disabled (ENABLE_STARTUP_CLEANUP=false)');
+    }
+    
+    app.listen(config.port, () => {
+      console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
+    });
+  })();
 }

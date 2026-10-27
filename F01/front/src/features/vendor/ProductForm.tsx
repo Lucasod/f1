@@ -23,10 +23,10 @@ export function ProductForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImageFiles, setPendingImageFiles] = useState<File[]>([]);
 
   useEffect(() => {
     loadCategories();
@@ -64,9 +64,7 @@ export function ProductForm() {
         images: product.images || [],
         status: product.status,
       });
-      if (product.images.length > 0) {
-        setImagePreview(product.images[0]);
-      }
+      setImagePreviews(product.images || []);
     } catch (err) {
       setError('Error loading product');
     } finally {
@@ -94,35 +92,57 @@ export function ProductForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setValidationErrors(prev => ({ ...prev, image: 'Invalid file type. Use JPEG, PNG, or WebP.' }));
-      return;
+  const validateImageFiles = (files: FileList | File[]): string | null => {
+    const fileArray = Array.from(files);
+    for (const file of fileArray) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        return 'Invalid file type. Use JPEG, PNG, or WebP.';
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        return 'File too large. Maximum 10MB per image.';
+      }
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setValidationErrors(prev => ({ ...prev, image: 'File too large. Maximum 10MB.' }));
+    if (fileArray.length > 11) {
+      return 'Maximum 11 images allowed (1 main + 10 gallery).';
+    }
+    return null;
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    const validationError = validateImageFiles(files);
+    if (validationError) {
+      setValidationErrors(prev => ({ ...prev, image: validationError }));
       return;
     }
     setValidationErrors(prev => ({ ...prev, image: '' }));
+
+    const fileArray = Array.from(files);
+    const objectUrls = fileArray.map(file => URL.createObjectURL(file));
+    
     if (isEdit && productId) {
-      setUploadingImage(true);
+      setUploadingImages(true);
       try {
-        const result = await productApi.uploadImage(productId, file);
-        setFormData(prev => ({ ...prev, images: [...(prev.images || []), result.image.url] }));
-        setImagePreview(result.image.url);
+        const result = await productApi.uploadImages(productId, fileArray);
+        setFormData(prev => ({ 
+          ...prev, 
+          images: [...(prev.images || []).filter(img => !img.startsWith('blob:')), ...result.images.map(img => img.url)] 
+        }));
+        setImagePreviews(prev => [...prev.filter(img => !img.startsWith('blob:')), ...result.images.map(img => img.url)]);
       } catch (err) {
         setValidationErrors(prev => ({ ...prev, image: err instanceof Error ? err.message : 'Upload error' }));
       } finally {
-        setUploadingImage(false);
+        setUploadingImages(false);
       }
     } else {
-      setPendingImageFile(file);
-      const objectUrl = URL.createObjectURL(file);
-      setFormData(prev => ({ ...prev, images: [...(prev.images || []), objectUrl] }));
-      setImagePreview(objectUrl);
+      setPendingImageFiles(prev => [...prev, ...fileArray]);
+      setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...objectUrls] }));
+      setImagePreviews(prev => [...prev, ...objectUrls]);
     }
+    // Reset input to allow re-uploading same file
+    event.target.value = '';
   };
 
   const extractImageKey = (imageUrl: string): string => {
@@ -136,9 +156,21 @@ export function ProductForm() {
 
   const handleRemoveImage = async (imageUrl: string) => {
     if (!isEdit || !productId) {
+      // Remove from local state
       setFormData(prev => ({ ...prev, images: (prev.images || []).filter(img => img !== imageUrl) }));
-      if (imagePreview === imageUrl) {
-        setImagePreview(formData.images?.[1] || null);
+      setImagePreviews(prev => prev.filter(img => img !== imageUrl));
+      // Revoke object URL if it's a blob
+      if (imageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(imageUrl);
+        setPendingImageFiles(prev => {
+          const idx = prev.findIndex(f => URL.createObjectURL(f) === imageUrl);
+          if (idx >= 0) {
+            const newFiles = [...prev];
+            newFiles.splice(idx, 1);
+            return newFiles;
+          }
+          return prev;
+        });
       }
       return;
     }
@@ -146,9 +178,7 @@ export function ProductForm() {
       const key = extractImageKey(imageUrl);
       await productApi.deleteImage(productId, key);
       setFormData(prev => ({ ...prev, images: (prev.images || []).filter(img => img !== imageUrl) }));
-      if (imagePreview === imageUrl) {
-        setImagePreview(formData.images?.[1] || null);
-      }
+      setImagePreviews(prev => prev.filter(img => img !== imageUrl));
     } catch (err) {
       setError('Error removing image');
     }
@@ -177,14 +207,14 @@ export function ProductForm() {
         const response = await productApi.create(submitData as CreateProductInput);
         createdProductId = response.product?.id;
       }
-      if (!isEdit && createdProductId && pendingImageFile) {
-        setUploadingImage(true);
+      if (!isEdit && createdProductId && pendingImageFiles.length > 0) {
+        setUploadingImages(true);
         try {
-          await productApi.uploadImage(createdProductId, pendingImageFile);
+          await productApi.uploadImages(createdProductId, pendingImageFiles);
         } catch (err) {
-          console.error('Failed to upload image after product creation:', err);
+          console.error('Failed to upload images after product creation:', err);
         } finally {
-          setUploadingImage(false);
+          setUploadingImages(false);
         }
       }
       navigate('/vendor/dashboard');
@@ -324,32 +354,52 @@ export function ProductForm() {
 
         <div>
           <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
-            Product Image
+            Product Images (Max 11: 1 Main + 10 Gallery)
           </label>
-          {imagePreview && (
-            <div className="mb-4 flex items-center gap-4">
-              <img src={imagePreview} alt={formData.name || 'Product'} className="h-24 w-24 rounded-lg object-cover" />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage(imagePreview)}
-                className="text-red-600 hover:text-red-900 text-sm"
-                disabled={uploadingImage}
-              >
-                Remove image
-              </button>
+          {imagePreviews.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-4">
+              {imagePreviews.map((preview, index) => (
+                <div key={preview} className="relative group">
+                  <img 
+                    src={preview} 
+                    alt={`${formData.name || 'Product'} image ${index + 1}`} 
+                    className="h-24 w-24 rounded-lg object-cover border border-gray-200"
+                  />
+                  {index === 0 && (
+                    <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      Main
+                    </span>
+                  )}
+                  {index > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-gray-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      Gallery {index}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(preview)}
+                    className="absolute bottom-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={uploadingImages}
+                    aria-label={`Remove image ${index + 1}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
           )}
           <input
             type="file"
             id="image"
             accept="image/jpeg,image/png,image/webp"
+            multiple
             onChange={handleImageUpload}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            disabled={isSubmitting || uploadingImage}
+            disabled={isSubmitting || uploadingImages}
           />
-          {uploadingImage && <p className="mt-1 text-sm text-blue-600">Uploading image...</p>}
+          {uploadingImages && <p className="mt-1 text-sm text-blue-600">Uploading images...</p>}
           {validationErrors.image && <p className="mt-1 text-sm text-red-600">{validationErrors.image}</p>}
-          <p className="mt-1 text-xs text-gray-500">JPEG, PNG, or WebP. Maximum 10MB.</p>
+          <p className="mt-1 text-xs text-gray-500">JPEG, PNG, or WebP. Maximum 10MB per image. First image becomes main, rest become gallery.</p>
         </div>
 
         <div>

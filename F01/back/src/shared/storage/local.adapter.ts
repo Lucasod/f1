@@ -1,11 +1,17 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { StorageAdapter, ValidationResult } from './storage.interface';
 import { config } from '../../config';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MIN_DIMENSIONS = 800; // Not enforced at upload without image processing lib
+const MIN_DIMENSION = 800; // Minimum width/height in pixels
+
+export interface CleanupResult {
+  deletedCount: number;
+  deletedFiles: string[];
+}
 
 export class LocalStorageAdapter implements StorageAdapter {
   constructor(
@@ -43,20 +49,6 @@ export class LocalStorageAdapter implements StorageAdapter {
     if (buffer.length === 0) {
       return { valid: false, error: 'Empty file' };
     }
-    return { valid: true };
-  }
-
-  async validateFile(buffer: Buffer, contentType: string): Promise<ValidationResult> {
-    const mimeResult = this.validateMimeType(contentType);
-    if (!mimeResult.valid) return mimeResult;
-
-    const sizeResult = this.validateFileSize(buffer);
-    if (!sizeResult.valid) return sizeResult;
-
-    // Additional validation: check file signature (magic bytes)
-    const signatureResult = this.validateSignature(buffer, contentType);
-    if (!signatureResult.valid) return signatureResult;
-
     return { valid: true };
   }
 
@@ -99,6 +91,48 @@ export class LocalStorageAdapter implements StorageAdapter {
     return { valid: false, error: 'File content does not match declared type' };
   }
 
+  private async validateDimensions(buffer: Buffer, contentType: string): Promise<ValidationResult> {
+    try {
+      const metadata = await sharp(buffer).metadata();
+      const width = metadata.width;
+      const height = metadata.height;
+
+      if (width === undefined || height === undefined) {
+        return { valid: false, error: 'Could not determine image dimensions' };
+      }
+
+      if (width < MIN_DIMENSION || height < MIN_DIMENSION) {
+        return {
+          valid: false,
+          error: `Image dimensions must be at least ${MIN_DIMENSION}x${MIN_DIMENSION}px (received: ${width}x${height}px)`
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      // If sharp fails to process the image, it's likely not a valid image
+      return { valid: false, error: 'Invalid image format or corrupted file' };
+    }
+  }
+
+  async validateFile(buffer: Buffer, contentType: string): Promise<ValidationResult> {
+    const mimeResult = this.validateMimeType(contentType);
+    if (!mimeResult.valid) return mimeResult;
+
+    const sizeResult = this.validateFileSize(buffer);
+    if (!sizeResult.valid) return sizeResult;
+
+    // Additional validation: check file signature (magic bytes)
+    const signatureResult = this.validateSignature(buffer, contentType);
+    if (!signatureResult.valid) return signatureResult;
+
+    // Validate image dimensions
+    const dimensionResult = await this.validateDimensions(buffer, contentType);
+    if (!dimensionResult.valid) return dimensionResult;
+
+    return { valid: true };
+  }
+
   async save(file: Buffer, key: string, contentType: string): Promise<{ url: string; key: string }> {
     const validation = await this.validateFile(file, contentType);
     if (!validation.valid) {
@@ -132,7 +166,14 @@ export class LocalStorageAdapter implements StorageAdapter {
     }
 
     // Clean up empty directories (CR-008)
-    await this.cleanupEmptyDirs(path.dirname(filePath));
+    try {
+      await this.cleanupEmptyDirs(path.dirname(filePath));
+    } catch (error) {
+      console.error('Cleanup empty dirs error:', { 
+        dirPath: path.dirname(filePath), 
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   getUrl(key: string): string {
@@ -154,7 +195,89 @@ export class LocalStorageAdapter implements StorageAdapter {
         await this.cleanupEmptyDirs(path.dirname(dirPath));
       }
     } catch (error) {
-      // Ignore errors (directory might not exist, or not empty)
+      // Log errors but don't throw
+      console.error('Cleanup empty dirs error:', { 
+        dirPath, 
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
+   * Scan storage directory for files not referenced by any Product.images[]
+   * and remove orphaned files.
+   * 
+   * @param referencedUrls - Array of URLs that are currently referenced by products
+   * @returns Object with count of deleted files and list of deleted file keys
+   */
+  async cleanupOrphanedFiles(referencedUrls: string[]): Promise<CleanupResult> {
+    const deletedFiles: string[] = [];
+
+    // Convert referenced URLs to keys for comparison
+    const referencedKeys = new Set<string>();
+    for (const url of referencedUrls) {
+      // Extract key from URL (remove publicUrlBase prefix)
+      const prefix = `${this.publicUrlBase}/`;
+      if (url.startsWith(prefix)) {
+        const key = url.slice(prefix.length);
+        referencedKeys.add(key);
+      }
+    }
+
+    // Recursively scan storage directory
+    try {
+      await this.scanAndCleanup(this.storageRoot, referencedKeys, deletedFiles);
+    } catch (error) {
+      console.error('Cleanup error:', { 
+        dirPath: this.storageRoot, 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+
+    return {
+      deletedCount: deletedFiles.length,
+      deletedFiles
+    };
+  }
+
+  private async scanAndCleanup(dirPath: string, referencedKeys: Set<string>, deletedFiles: string[]): Promise<void> {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const relativePath = path.relative(this.storageRoot, fullPath);
+        
+        if (entry.isDirectory()) {
+          // Recursively scan subdirectories
+          await this.scanAndCleanup(fullPath, referencedKeys, deletedFiles);
+          
+          // Clean up empty directories after scanning
+          try {
+            const remainingEntries = await fs.readdir(fullPath);
+            if (remainingEntries.length === 0) {
+              await fs.rmdir(fullPath);
+            }
+          } catch {
+            // Ignore errors
+          }
+        } else if (entry.isFile()) {
+          // Check if file is referenced
+          if (!referencedKeys.has(relativePath)) {
+            // Orphaned file - delete it
+            await fs.unlink(fullPath);
+            deletedFiles.push(relativePath);
+          }
+        }
+      }
+    } catch (error) {
+      // Add structured logging for cleanup errors
+      console.error('Cleanup error:', { 
+        dirPath, 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 }

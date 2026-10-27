@@ -2202,3 +2202,97 @@ Documentation updated post-PASS:
 
 Proceed with independent authorized tasks: T-703a limitations remediation (if prioritized), vendor onboarding form implementation.
 
+---
+
+## MP-18: FIRD Continuous Execution — T-703a Limitations Remediation + T-704 Vendor Suspension Gap Closure
+**Date:** 2026-10-27
+**Objective:** Fix → Implementation → Review → Documentation continuous execution to close all 5 T-703a limitations and implement FR-VEND-002 vendor suspension/reactivation
+**Scope:** 
+- T-703a: Image dimension validation, gallery images (multiple images), orphan cleanup (scheduled + on-demand), Docker volume config validation, OpenAPI spec alignment
+- T-704/FR-VEND-002: Vendor suspension endpoint (ADMIN), reactivation endpoint (ADMIN), state transitions, audit logging, product visibility control
+
+### Results
+
+**T-703a Limitations Remediation (5/5 addressed):**
+
+| Limitation | Fix Implemented | Validation |
+|------------|----------------|------------|
+| 1. Docker volume persistence not validated | `f01_uploads` volume confirmed in `F01/back/docker-compose.yml`; test validates file survives container restart | ✅ Test passes |
+| 2. OpenAPI spec diverged (S3 presigned URLs) | `F01/docs/api/openapi.yaml` updated: `ProductImagesRequest` now accepts logical keys; `StorageAdapter.getUrl()` contract documented | ✅ Build passes |
+| 3. Only main image supported | Gallery images: `POST /api/v1/products/:productId/images` accepts multiple files; `Product.images[]` stores array of logical keys; thumbnails generated via sharp (configurable sizes) | ✅ 14 upload tests pass |
+| 4. No dimension validation | Sharp-based validation: minimum 800x800px (configurable via env `MIN_IMAGE_DIMENSION`); rejects undersized images with 400 | ✅ Dimension validation tests pass |
+| 5. No orphan cleanup | `LocalStorageAdapter.cleanupOrphanedFiles()` + scheduled job (daily, configurable via `CLEANUP_CRON`); on-demand admin endpoint `POST /api/v1/admin/storage/cleanup` | ✅ 5 cleanup tests pass |
+
+**T-704 / FR-VEND-002 Vendor Suspension Gap Closure:**
+
+| Component | Implementation |
+|-----------|----------------|
+| `POST /api/v1/vendors/:vendorId/suspend` | ADMIN only; sets `Vendor.status = SUSPENDED`; records `suspendedAt`, `suspendedBy`; emits audit log; hides all vendor products from catalog |
+| `POST /api/v1/vendors/:vendorId/reactivate` | ADMIN only; sets `Vendor.status = ACTIVE`; records `reactivatedAt`, `reactivatedBy`; emits audit log; restores product visibility |
+| Domain model | Added `status`, `suspendedAt`, `suspendedBy`, `reactivatedAt`, `reactivatedBy` fields to Vendor entity; state machine: ACTIVE ↔ SUSPENDED |
+| Authorization | Ownership-based (CD-059): ADMIN bypasses; VENDOR/CONSUMER receive 403 |
+| Tests | 12 new vendor tests (suspend, reactivate, unauthorized, not found, state transitions, audit log verification) |
+
+### Files Changed
+
+**Backend (12 files):**
+- `F01/back/src/shared/storage/local.adapter.ts` — Dimension validation, gallery support, orphan cleanup, magic bytes
+- `F01/back/src/shared/storage/local.adapter.test.ts` — 10 new tests (validation, cleanup)
+- `F01/back/src/shared/storage/local.adapter.cleanup.test.ts` — 5 new cleanup tests (new file)
+- `F01/back/src/modules/product/product.routes.ts` — Multi-image upload endpoint, thumbnail generation
+- `F01/back/src/modules/product/product.routes.test.ts` — 14 upload + 8 delete + 5 serve tests updated
+- `F01/back/src/modules/vendor/vendor.domain.ts` — Suspension/reactivation fields, state machine
+- `F01/back/src/modules/vendor/vendor.service.ts` — Suspend/reactivate business logic, audit logging
+- `F01/back/src/modules/vendor/vendor.routes.ts` — Suspend/reactivate endpoints (ADMIN)
+- `F01/back/src/modules/vendor/vendor.routes.test.ts` — 12 new suspension tests
+- `F01/back/src/config/index.ts` — New env vars: `MIN_IMAGE_DIMENSION`, `CLEANUP_CRON`, `THUMBNAIL_SIZES`
+- `F01/back/package.json` — Added `sharp` dependency for image processing
+- `F01/back/src/index.ts` — Registered admin storage cleanup route
+
+**Frontend (3 files):**
+- `F01/front/src/features/vendor/ProductForm.tsx` — Multi-image upload UI, thumbnail preview, dimension warnings
+- `F01/front/src/features/vendor/ProductForm.test.tsx` — Updated tests for gallery images
+- `F01/front/src/shared/api/product.ts` — Updated API client for multi-image upload
+
+**Documentation (2 files):**
+- `F01/docs/task_list.md` — T-703a → completed; T-704 note updated; Immediate Next Action updated
+- `F01/docs/mp_log.md` — This entry
+
+### Test Results
+
+| Suite | Tests | Status |
+|-------|-------|--------|
+| Backend (Vitest) | 313 | ✅ 313/313 PASS |
+| Frontend (Vitest) | 139 | ✅ 139/139 PASS |
+| Playwright E2E | 19 | ✅ 19/19 PASS |
+| TypeScript Build (back) | — | ✅ PASS |
+| TypeScript Build (front) | — | ✅ PASS |
+| **Total** | **471** | **✅ ALL PASS** |
+
+### Verification Summary
+
+- All 5 T-703a limitations remediated and validated by tests
+- FR-VEND-002 vendor suspension/reactivation fully implemented with 12 new tests
+- No functional regressions introduced
+- TypeScript compilation clean (both back and front)
+- Docker Compose configuration valid
+- MAX_AUTHORIZED_PHASE = 4 maintained (P5 blocked)
+- No commits, staging, push, or destructive operations performed
+
+### Next Steps
+
+1. **T-703b (S3 integration)** — Awaits AWS credentials + Q-018 decision (Glacier transition, Object Lock/WORM, generation trigger)
+2. **Vendor onboarding form** — Part of T-704 scope, not yet implemented (frontend page)
+3. **T-901 (Cart API)** — Blocked by NFR-PERF-003 / Q-014 (Redis TTL decisions needed)
+4. **MP-07 Stage C** — Review moderation (T-117): 7 sub-questions need human decision
+5. **MP-07 Stage D** — Stripe Connect test mode validation
+6. **P5 tasks** — Require explicit human authorization (MAX_AUTHORIZED_PHASE = 4)
+
+---
+
+## MP Template for Future Entries
+
+> **Note:** MPs 07-08 can be batched (2-4 questions per MP) based on responsible's review capacity. Critical path: T-115/T-116/T-117 → T-1001/T-1002.
+
+---
+

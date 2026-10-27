@@ -6,6 +6,14 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
+function getEnableStartupCleanup(): boolean {
+  // Default: true in production, false in development
+  if (process.env.ENABLE_STARTUP_CLEANUP !== undefined) {
+    return process.env.ENABLE_STARTUP_CLEANUP === 'true';
+  }
+  return isProduction();
+}
+
 function validateRequiredInProduction(value: string | undefined, name: string): string {
   const trimmed = value?.trim();
   if (isProduction() && (!trimmed || trimmed.length === 0)) {
@@ -71,6 +79,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
   corsOrigins,
   isProduction: isProduction(),
+  enableStartupCleanup: getEnableStartupCleanup(),
   commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
   get storageRoot() { return getStorageRoot(); },
   get storagePublicUrlBase() { return getPublicUrlBase(); },

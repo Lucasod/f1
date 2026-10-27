@@ -61,6 +61,12 @@ export interface UpdateProductInput {
   status?: Product['status'];
 }
 
+export interface UploadImageResponse {
+  image?: { key: string; url: string };
+  images?: Array<{ key: string; url: string }>;
+  error?: string;
+}
+
 export const productApi = {
   async list(filters?: ProductListParams): Promise<ProductListResponse> {
     const params = new URLSearchParams();
@@ -114,11 +120,29 @@ export const productApi = {
       body: formData,
     });
     
-    const data = await response.json();
+    const data: UploadImageResponse = await response.json();
     if (!response.ok) {
       throw new Error(data.error || 'UPLOAD_FAILED');
     }
-    return data;
+    // Backward compatibility: return single image format
+    return { image: data.image || data.images?.[0]! };
+  },
+
+  async uploadImages(productId: string, files: File[]): Promise<{ images: Array<{ key: string; url: string }> }> {
+    const formData = new FormData();
+    files.forEach(file => formData.append('images', file));
+    
+    const response = await fetch(`/api/v1/products/${productId}/images`, {
+      method: 'POST',
+      headers: apiClient.getAuthHeaders(),
+      body: formData,
+    });
+    
+    const data: UploadImageResponse = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'UPLOAD_FAILED');
+    }
+    return { images: data.images || (data.image ? [data.image] : []) };
   },
 
   async deleteImage(productId: string, imageKey: string): Promise<void> {

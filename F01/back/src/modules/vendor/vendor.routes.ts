@@ -17,6 +17,7 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
   // Middleware to check if user can onboard (VENDOR or CONSUMER role, not ADMIN)
   const canOnboardVendor = requireRole(PersonRole.VENDOR, PersonRole.CONSUMER);
   const authMw = authMiddleware(authService);
+  const requireAdmin = requireRole(PersonRole.ADMIN);
 
   // POST /api/v1/vendor/onboard
   router.post('/onboard', authMw as RequestHandler, canOnboardVendor as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -103,6 +104,56 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
         switch (error.message) {
           case VendorError.STORE_NAME_REQUIRED:
             return res.status(400).json({ error: VendorError.STORE_NAME_REQUIRED, message: 'Store name is required' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+// PATCH /api/v1/vendor/vendors/:vendorId/suspend - Admin only endpoint to suspend a vendor
+  router.patch('/vendors/:vendorId/suspend', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const vendorId = Array.isArray(req.params.vendorId) ? req.params.vendorId[0] : req.params.vendorId;
+
+      if (!vendorId || vendorId.trim().length === 0) {
+        return res.status(400).json({ error: 'VENDOR_ID_REQUIRED', message: 'Vendor ID is required' });
+      }
+
+      const vendor = await vendorService.suspendVendor(vendorId);
+
+      return res.json({ vendor: vendorToResponse(vendor) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case VendorError.VENDOR_NOT_FOUND:
+            return res.status(404).json({ error: VendorError.VENDOR_NOT_FOUND, message: 'Vendor not found' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // PATCH /api/v1/vendor/vendors/:vendorId/activate - Admin only endpoint to reactivate a vendor
+  router.patch('/vendors/:vendorId/activate', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const vendorId = Array.isArray(req.params.vendorId) ? req.params.vendorId[0] : req.params.vendorId;
+
+      if (!vendorId || vendorId.trim().length === 0) {
+        return res.status(400).json({ error: 'VENDOR_ID_REQUIRED', message: 'Vendor ID is required' });
+      }
+
+      const vendor = await vendorService.activateVendor(vendorId);
+
+      return res.json({ vendor: vendorToResponse(vendor) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case VendorError.VENDOR_NOT_FOUND:
+            return res.status(404).json({ error: VendorError.VENDOR_NOT_FOUND, message: 'Vendor not found' });
+          case VendorError.VENDOR_ALREADY_ACTIVE:
+            return res.status(400).json({ error: VendorError.VENDOR_ALREADY_ACTIVE, message: 'Vendor is already active' });
+          case VendorError.CANNOT_ACTIVATE_SUSPENDED:
+            return res.status(400).json({ error: VendorError.CANNOT_ACTIVATE_SUSPENDED, message: 'Cannot activate suspended vendor without admin override' });
         }
       }
       next(error);

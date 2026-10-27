@@ -11,6 +11,8 @@ export enum VendorError {
   INVALID_SLUG_FORMAT = 'INVALID_SLUG_FORMAT',
   VENDOR_NOT_FOUND = 'VENDOR_NOT_FOUND',
   INVALID_COMMISSION_PCT = 'INVALID_COMMISSION_PCT',
+  CANNOT_ACTIVATE_SUSPENDED = 'CANNOT_ACTIVATE_SUSPENDED',
+  VENDOR_ALREADY_ACTIVE = 'VENDOR_ALREADY_ACTIVE',
 }
 
 export interface OnboardVendorInput {
@@ -91,6 +93,20 @@ export class VendorService {
       vendor.updateStoreName(input.storeName);
     }
 
+    return this.vendorRepo.update(vendor);
+  }
+
+  async activateVendor(id: string): Promise<Vendor> {
+    const vendor = await this.vendorRepo.findById(id);
+    if (!vendor) {
+      throw new Error(VendorError.VENDOR_NOT_FOUND);
+    }
+
+    if (vendor.status === VendorStatus.ACTIVE) {
+      throw new Error(VendorError.VENDOR_ALREADY_ACTIVE);
+    }
+
+    vendor.activate(true); // force = true for admin reactivation
     return this.vendorRepo.update(vendor);
   }
 }

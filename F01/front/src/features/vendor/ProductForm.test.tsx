@@ -13,6 +13,7 @@ vi.mock('@/shared/api/product', () => ({
     create: vi.fn(),
     update: vi.fn(),
     uploadImage: vi.fn(),
+    uploadImages: vi.fn(),
     deleteImage: vi.fn(),
   },
 }));
@@ -202,8 +203,8 @@ describe('ProductForm', () => {
         expect(screen.getByLabelText(/category/i)).toHaveValue('cat-1');
       });
       
-      // Should show existing image
-      expect(screen.getByAltText('Existing Product')).toBeInTheDocument();
+      // Should show existing image with new alt text format
+      expect(screen.getByAltText('Existing Product image 1')).toBeInTheDocument();
     });
 
     it('should update product successfully', async () => {
@@ -235,13 +236,14 @@ describe('ProductForm', () => {
       renderForm('/vendor/products/prod-1/edit');
       
       await waitFor(() => {
-        expect(screen.getByAltText('Existing Product')).toBeInTheDocument();
+        expect(screen.getByAltText('Existing Product image 1')).toBeInTheDocument();
       });
       
-      await userEvent.click(screen.getByRole('button', { name: /remove image/i }));
+      // New remove button uses aria-label
+      await userEvent.click(screen.getByRole('button', { name: /remove image 1/i }));
       
       await waitFor(() => {
-        expect(screen.queryByAltText('Existing Product')).not.toBeInTheDocument();
+        expect(screen.queryByAltText('Existing Product image 1')).not.toBeInTheDocument();
       });
     });
   });

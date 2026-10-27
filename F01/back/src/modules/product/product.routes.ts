@@ -3,7 +3,7 @@ import multer, { FileFilterCallback } from 'multer';
 import { AuthService } from '../auth/auth.service';
 import { ProductService } from './product.service';
 import { PersonRepository } from '../person/person.domain';
-import { VendorRepository } from '../vendor/vendor.domain';
+import { VendorRepository, VendorStatus } from '../vendor/vendor.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
 import { ProductStatus, VALID_STATUSES, ProductError } from './product.domain';
@@ -15,6 +15,7 @@ import * as path from 'path';
 // Extend AuthenticatedRequest to include multer's file property
 interface MulterAuthenticatedRequest extends AuthenticatedRequest {
   file?: Express.Multer.File;
+  files?: Express.Multer.File[];
 }
 
 function getQueryString(val: any): string | undefined {
@@ -47,6 +48,7 @@ export function createProductRoutes({ authService, productService, personRepo, v
   const upload = multer({
     limits: {
       fileSize: 10 * 1024 * 1024, // 10MB
+      files: 11, // 1 main + 10 gallery
     },
     fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -57,6 +59,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       }
     },
   });
+
+  // Support both single 'image' field (backward compat) and multiple 'images' field (gallery)
+  const uploadImages = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'images', maxCount: 11 }
+  ]);
 
   // ============ Product Routes ============
 
@@ -95,6 +103,13 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot create products (unless admin)
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+      if (vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor.id;
       
       const product = await productService.createProduct(vendorId, {
@@ -248,6 +263,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot update products (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId; // Admin can use personId for cross-vendor operations
 
       const updated = await productService.updateProduct(productId, vendorId, {
@@ -298,6 +319,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot delete products (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId; // Admin can use personId for cross-vendor operations
 
       await productService.deleteProduct(productId, vendorId, isAdmin);
@@ -334,6 +361,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot update stock (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId; // Admin can use personId for cross-vendor operations
 
       const updated = await productService.updateProductStock(productId, vendorId, quantity, isAdmin);
@@ -366,6 +399,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot inactivate products (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId; // Admin can use personId for cross-vendor operations
 
       const updated = await productService.inactivateProduct(productId, vendorId, isAdmin);
@@ -396,6 +435,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot activate products (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId; // Admin can use personId for cross-vendor operations
 
       const updated = await productService.activateProduct(productId, vendorId, isAdmin);
@@ -414,12 +459,18 @@ export function createProductRoutes({ authService, productService, personRepo, v
     }
   }) as RequestHandler);
 
-  // POST /api/v1/products/:productId/images - Upload product image (VENDOR role, ownership check)
-  router.post('/:productId/images', authMw as RequestHandler, requireVendorOrAdmin as RequestHandler, upload.single('image'), (async (req: MulterAuthenticatedRequest, res: Response, next: NextFunction) => {
+  // POST /api/v1/products/:productId/images - Upload product image(s) (VENDOR role, ownership check)
+  // Supports both single image (field: 'image') and multiple images (field: 'images') for gallery
+  router.post('/:productId/images', authMw as RequestHandler, requireVendorOrAdmin as RequestHandler, uploadImages, (async (req: MulterAuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const productId = getParam(req.params.productId);
       
-      if (!req.file) {
+      // upload.fields() returns files as { fieldName: File[] }
+      const filesObj = req.files as { [fieldName: string]: Express.Multer.File[] } | undefined;
+      const files = filesObj?.images;
+      const singleFile = filesObj?.image?.[0] || req.file;
+      
+      if ((!files || files.length === 0) && !singleFile) {
         return res.status(400).json({ error: 'IMAGE_REQUIRED', message: 'No image file provided' });
       }
 
@@ -431,6 +482,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot upload images (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId;
 
       // Verify product exists and ownership
@@ -443,22 +500,54 @@ export function createProductRoutes({ authService, productService, personRepo, v
         return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
       }
 
-      // Generate logical key following S3 naming convention
-      const ext = req.file.mimetype === 'image/jpeg' ? 'jpg' : 
-                  req.file.mimetype === 'image/png' ? 'png' : 'webp';
-      const imageKey = `products/${vendorId}/${productId}/main.${ext}`;
+      // Get files to process (support both single and multiple)
+      const filesToProcess = files && files.length > 0 ? files : [singleFile!];
 
-      // Save via storage adapter
-      const { url, key } = await storageAdapter.save(req.file.buffer, imageKey, req.file.mimetype);
+      // Validate max 11 images (1 main + 10 gallery)
+      if (filesToProcess.length > 11) {
+        return res.status(400).json({ error: 'INVALID_IMAGE', message: 'Maximum 11 images allowed (1 main + 10 gallery)' });
+      }
 
-      // Add image to product
-      product.addImage(url);
-      await productService.updateProduct(productId, vendorId, { images: product.images }, isAdmin);
+      // Process each file
+      const uploadedImages: Array<{ key: string; url: string }> = [];
+      const newImageUrls: string[] = [];
 
-      return res.status(201).json({ image: { key, url } });
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        
+        // Generate logical key following S3 naming convention
+        const ext = file.mimetype === 'image/jpeg' ? 'jpg' : 
+                    file.mimetype === 'image/png' ? 'png' : 'webp';
+        
+        let imageKey: string;
+        if (i === 0) {
+          // First image is main
+          imageKey = `products/${vendorId}/${productId}/main.${ext}`;
+        } else {
+          // Subsequent images are gallery with sequence 01-10
+          const sequence = String(i).padStart(2, '0');
+          imageKey = `products/${vendorId}/${productId}/gallery/${sequence}.${ext}`;
+        }
+
+        // Save via storage adapter
+        const { url, key } = await storageAdapter.save(file.buffer, imageKey, file.mimetype);
+        uploadedImages.push({ key, url });
+        newImageUrls.push(url);
+      }
+
+      // Add images to product (maintain order: main first, then gallery)
+      const allImages = [...newImageUrls, ...product.images];
+      await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
+
+      // Return array for multiple, single object for backward compatibility with single upload
+      if (files && files.length > 0) {
+        return res.status(201).json({ images: uploadedImages });
+      } else {
+        return res.status(201).json({ image: uploadedImages[0] });
+      }
     } catch (error) {
       if (error instanceof Error) {
-        if (error.message.includes('Invalid file type') || error.message.includes('File size') || error.message.includes('File content') || error.message.includes('path traversal') || error.message.includes('Empty file')) {
+        if (error.message.includes('Invalid file type') || error.message.includes('File size') || error.message.includes('File content') || error.message.includes('path traversal') || error.message.includes('Empty file') || error.message.includes('dimension')) {
           return res.status(400).json({ error: 'INVALID_IMAGE', message: error.message });
         }
         if (error.message === ProductError.PRODUCT_NOT_FOUND) {
@@ -486,6 +575,12 @@ export function createProductRoutes({ authService, productService, personRepo, v
       if (!vendor && !isAdmin) {
         return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
       }
+      
+      // Check vendor status - suspended vendors cannot delete images (unless admin)
+      if (vendor && vendor.status === VendorStatus.SUSPENDED && !isAdmin) {
+        return res.status(403).json({ error: 'VENDOR_SUSPENDED', message: 'Suspended vendor cannot perform this action' });
+      }
+      
       const vendorId = vendor?.id || personId;
 
       // Verify product exists and ownership
