@@ -39,7 +39,7 @@
       ".yaml",
       ".yml"
     ],
-    "enabled": false
+    "enabled": true
   },
   "mcp": {
     "mongodb-mcp-server": {
