@@ -146,7 +146,7 @@
 > 4. No image dimension validation (only MIME type and size)
 > 5. No automated cleanup for orphaned uploads
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ✅ completed |
-| T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ✅ completed |
+| T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ✅ completed_with_limitations |
 
 > **Note on T-705:** The consumer product catalog was implemented with the following features:
 > - Product listing page with pagination and infinite scroll
@@ -294,7 +294,7 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**T-705:** Frontend Product catalog — ✅ COMPLETED (consumer browsing, search, filter, sort with "In-Stock First" per CD-013, debounced search, screen reader announcements, Error Boundary)
+**T-705:** Frontend Product catalog — ✅ COMPLETED_WITH_LIMITATIONS (consumer browsing, search, filter, sort with "In-Stock First" per CD-013, debounced search, screen reader announcements, Error Boundary; product detail page placeholder, cart integration blocked by T-901, SSR not implemented in Vite SPA)
 
 **T-703b:** Backend Image upload to S3 — depends on T-703a (completed_with_limitations), AWS credentials, Q-018 decision (3 human decisions: Glacier transition, Object Lock/WORM, generation trigger).
 

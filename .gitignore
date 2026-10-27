@@ -11,3 +11,7 @@ F01/front/node_modules/
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Test execution artifacts
+F01/front/playwright-report/
+F01/back/test-storage/uploads/

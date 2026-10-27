@@ -48,4 +48,4 @@
 
 - Official internship statement (requirements & deliverables)
 - F01/README.md (project description, objectives, technologies, features, status)
-- F01/docs/modeling/conceptual-model.drawio (current conceptual diagram)
+- F01/docs/modeling/conceptual-model.drawio (removed — see conceptual_model.md for current structured model; decisions.md is authoritative source)
