@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
+import multer, { FileFilterCallback } from 'multer';
 import { AuthService } from '../auth/auth.service';
 import { ProductService } from './product.service';
 import { PersonRepository } from '../person/person.domain';
@@ -6,6 +7,15 @@ import { VendorRepository } from '../vendor/vendor.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
 import { ProductStatus, VALID_STATUSES, ProductError } from './product.domain';
+import { StorageAdapter } from '../../shared/storage/storage.interface';
+import { config } from '../../config';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Extend AuthenticatedRequest to include multer's file property
+interface MulterAuthenticatedRequest extends AuthenticatedRequest {
+  file?: Express.Multer.File;
+}
 
 function getQueryString(val: any): string | undefined {
   if (Array.isArray(val)) return val[0];
@@ -22,15 +32,31 @@ export interface ProductRoutesConfig {
   productService: ProductService;
   personRepo: PersonRepository;
   vendorRepo: VendorRepository;
+  storageAdapter: StorageAdapter;
 }
 
-export function createProductRoutes({ authService, productService, personRepo, vendorRepo }: ProductRoutesConfig): Router {
+export function createProductRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }: ProductRoutesConfig): Router {
   const router = Router();
 
   const authMw = authMiddleware(authService);
   const requireVendor = requireRole(PersonRole.VENDOR);
   const requireVendorOrAdmin = requireRole(PersonRole.VENDOR, PersonRole.ADMIN);
   const requireAdmin = requireRole(PersonRole.ADMIN);
+
+  // Multer configuration for image uploads
+  const upload = multer({
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB
+    },
+    fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.'));
+      }
+    },
+  });
 
   // ============ Product Routes ============
 
@@ -382,6 +408,193 @@ export function createProductRoutes({ authService, productService, personRepo, v
             return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
         }
       }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // POST /api/v1/products/:productId/images - Upload product image (VENDOR role, ownership check)
+  router.post('/:productId/images', authMw as RequestHandler, requireVendorOrAdmin as RequestHandler, upload.single('image'), (async (req: MulterAuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const productId = getParam(req.params.productId);
+      
+      if (!req.file) {
+        return res.status(400).json({ error: 'IMAGE_REQUIRED', message: 'No image file provided' });
+      }
+
+      const personId = req.user.sub;
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+
+      // Resolve vendor ID from person ID
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (!vendor && !isAdmin) {
+        return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
+      }
+      const vendorId = vendor?.id || personId;
+
+      // Verify product exists and ownership
+      const product = await productService.getProductById(productId);
+      if (!product) {
+        return res.status(404).json({ error: ProductError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+      }
+
+      if (!isAdmin && product.vendorId !== vendorId) {
+        return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
+      }
+
+      // Generate logical key following S3 naming convention
+      const ext = req.file.mimetype === 'image/jpeg' ? 'jpg' : 
+                  req.file.mimetype === 'image/png' ? 'png' : 'webp';
+      const imageKey = `products/${vendorId}/${productId}/main.${ext}`;
+
+      // Save via storage adapter
+      const { url, key } = await storageAdapter.save(req.file.buffer, imageKey, req.file.mimetype);
+
+      // Add image to product
+      product.addImage(url);
+      await productService.updateProduct(productId, vendorId, { images: product.images }, isAdmin);
+
+      return res.status(201).json({ image: { key, url } });
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid file type') || error.message.includes('File size') || error.message.includes('File content') || error.message.includes('path traversal') || error.message.includes('Empty file')) {
+          return res.status(400).json({ error: 'INVALID_IMAGE', message: error.message });
+        }
+        if (error.message === ProductError.PRODUCT_NOT_FOUND) {
+          return res.status(404).json({ error: ProductError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+        }
+        if (error.message === ProductError.PRODUCT_OWNERSHIP_VIOLATION) {
+          return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // DELETE /api/v1/products/:productId/images/:imageKey(*) - Delete product image (VENDOR role, ownership check)
+  router.delete('/:productId/images/:imageKey(*)', authMw as RequestHandler, requireVendorOrAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const productId = getParam(req.params.productId);
+      const imageKey = getParam(req.params.imageKey);
+
+      const personId = req.user.sub;
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+
+      // Resolve vendor ID
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (!vendor && !isAdmin) {
+        return res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this user' });
+      }
+      const vendorId = vendor?.id || personId;
+
+      // Verify product exists and ownership
+      const product = await productService.getProductById(productId);
+      if (!product) {
+        return res.status(404).json({ error: ProductError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+      }
+
+      if (!isAdmin && product.vendorId !== vendorId) {
+        return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
+      }
+
+      // Check if image exists in product
+      const imageUrl = storageAdapter.getUrl(imageKey);
+      if (!product.images.includes(imageUrl)) {
+        return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found for this product' });
+      }
+
+      // Delete from storage
+      await storageAdapter.delete(imageKey);
+
+      // Remove from product
+      product.removeImage(imageUrl);
+      await productService.updateProduct(productId, vendorId, { images: product.images }, isAdmin);
+
+      return res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === ProductError.PRODUCT_NOT_FOUND) {
+          return res.status(404).json({ error: ProductError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+        }
+        if (error.message === ProductError.PRODUCT_OWNERSHIP_VIOLATION) {
+          return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // Multer error handler - registered at router level to catch all multer errors (CR-006)
+  router.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
+    if (err && (err as any).name === 'MulterError') {
+      const multerErr = err as any;
+      if (multerErr.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'INVALID_IMAGE', message: 'File size exceeds maximum of 10MB' });
+      }
+      if (multerErr.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ error: 'INVALID_IMAGE', message: 'Too many files' });
+      }
+      if (multerErr.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ error: 'INVALID_IMAGE', message: 'Unexpected file field' });
+      }
+    }
+    if (err && err.message && err.message.includes('Invalid file type')) {
+      return res.status(400).json({ error: 'INVALID_IMAGE', message: err.message });
+    }
+    next(err);
+  });
+
+  return router;
+}
+
+export function createUploadRoutes({ storageAdapter }: { storageAdapter: StorageAdapter }): Router {
+  const router = Router();
+
+  // GET /api/v1/uploads/:key(*) - Serve uploaded image (public)
+  router.get('/:key(*)', (async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const key = getParam(req.params.key);
+      // Use adapter's sanitizeKey for consistent path traversal prevention (CR-002)
+      let safeKey: string;
+      try {
+        safeKey = storageAdapter.sanitizeKey(key);
+      } catch {
+        return res.status(400).json({ error: 'INVALID_KEY', message: 'Invalid image key' });
+      }
+
+      const filePath = path.join(config.storageRoot, safeKey);
+      
+      // Check if file exists
+      try {
+        await fs.promises.access(filePath);
+      } catch {
+        return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found' });
+      }
+
+      // Determine content type from extension
+      const ext = path.extname(key).toLowerCase();
+      const contentTypeMap: Record<string, string> = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+      };
+      const contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
+
+      const fileStream = fs.createReadStream(filePath);
+      
+      // Handle stream errors (CR-007)
+      fileStream.on('error', (streamErr) => {
+        console.error('File stream error:', streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'STREAM_ERROR', message: 'Error reading file' });
+        }
+      });
+      
+      fileStream.pipe(res);
+    } catch (error) {
       next(error);
     }
   }) as RequestHandler);

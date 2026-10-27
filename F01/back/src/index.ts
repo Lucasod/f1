@@ -11,6 +11,7 @@ import { createVendorRoutes } from './modules/vendor/vendor.routes';
 import { ProductService } from './modules/product/product.service';
 import { InMemoryProductRepository, InMemoryCategoryRepository } from './modules/product/product.domain';
 import { createProductRoutes, createCategoryRoutes } from './modules/product/product.routes';
+import { LocalStorageAdapter } from './shared/storage/local.adapter';
 
 validateConfig();
 
@@ -26,6 +27,9 @@ const categoryRepo = new InMemoryCategoryRepository();
 const authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
 const vendorService = new VendorService(vendorRepo, personRepo, config);
 const productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+
+// Initialize storage adapter
+const storageAdapter = new LocalStorageAdapter();
 
 app.use(helmet());
 app.use(cors({
@@ -45,10 +49,10 @@ app.use('/api/v1/auth', createAuthRoutes({ authService }));
 app.use('/api/v1/vendor', createVendorRoutes({ authService, vendorService, personRepo }));
 
 // Product routes
-app.use('/api/v1/products', createProductRoutes({ authService, productService, personRepo, vendorRepo }));
+app.use('/api/v1/products', createProductRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
 
 // Category routes
-app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo }));
+app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });

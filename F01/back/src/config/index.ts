@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 dotenv.config();
 
 function isProduction(): boolean {
@@ -32,6 +33,30 @@ function validateCorsOrigins(origins: string[]): void {
   }
 }
 
+/**
+ * Resolve the storage root path consistently across the application.
+ * In Docker: /app/storage/uploads (mounted volume)
+ * In development: project-relative path that works from anywhere
+ * Reads STORAGE_ROOT env var at call time to allow test overrides.
+ */
+function getStorageRoot(): string {
+  // If explicitly set via env, use it (for Docker and tests)
+  if (process.env.STORAGE_ROOT) {
+    return process.env.STORAGE_ROOT;
+  }
+  // Default: resolve from project root (where package.json is)
+  // This file is at F01/back/src/config/index.ts, so go up 3 levels to F01/
+  const projectRoot = path.resolve(__dirname, '..', '..', '..');
+  return path.join(projectRoot, 'storage', 'uploads');
+}
+
+/**
+ * Resolve the public URL base for uploaded files
+ */
+function getPublicUrlBase(): string {
+  return process.env.STORAGE_PUBLIC_URL || '/api/v1/uploads';
+}
+
 const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
 validateCorsOrigins(corsOrigins);
 
@@ -47,6 +72,8 @@ export const config = {
   corsOrigins,
   isProduction: isProduction(),
   commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
+  get storageRoot() { return getStorageRoot(); },
+  get storagePublicUrlBase() { return getPublicUrlBase(); },
 };
 
 export function validateConfig(): void {

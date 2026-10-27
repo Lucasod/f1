@@ -136,8 +136,9 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
 | T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ✅ completed |
-| T-703 | Backend: Image upload to S3 | Presigned URLs, multipart, validation (T-304) | T-304, T-602 | Upload works, CDN served | ⏳ pending |
-| T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ⏳ pending |
+| T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed |
+| T-703b | Backend: Image upload to S3 | Presigned URLs, multipart, validation, CloudFront CDN (T-304) | T-304, T-602, T-703a, AWS credentials, Q-018 decision | Upload works, CDN served | ⏳ pending |
+| T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ✅ completed |
 | T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ⏳ pending |
 
 ---
@@ -267,7 +268,6 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**T-703:** Backend Image upload to S3 — depends on T-304, T-602 (completed).
-**T-704:** Frontend Vendor dashboard — depends on T-502, T-701 (completed), T-702 (now completed).
-**T-705:** Frontend Product catalog — depends on T-502, T-702 (now completed).
+**T-705:** Frontend Product catalog — depends on T-502, T-702 (completed).
+**T-703b:** Backend Image upload to S3 — depends on T-703a (completed), AWS credentials, Q-018 decision.
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).

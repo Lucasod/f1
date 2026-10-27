@@ -681,6 +681,79 @@ Decisions validated against confirmed requirements:
 
 ---
 
+## MP-15: T-703a Local Image Storage Implementation — FS-01 Marketplace
+
+**Date:** 2026-10-27
+**Objective:** Implement T-703a (local persistent image storage) per validated analysis; defer S3 integration (T-703b)
+**Scope:** StorageAdapter pattern, LocalStorageAdapter, image upload endpoints, Docker volume, TDD
+
+### Results
+
+**Analysis Validation (Pre-Implementation):**
+- **Product.images[] contract**: Array of string URLs (domain: line 48, service: addImage/removeImage, routes: accept images[])
+- **OpenAPI**: `ProductImagesRequest` expects "presigned S3 image URLs" format URI
+- **S3 naming convention** (T-304/analysis_s3_naming.md): Logical keys `products/{vendor_id}/{product_id}/main.{ext}`
+- **Dependencies**: T-304 ✅ (S3 naming documented), T-602 ✅ (auth/authorization implemented)
+- **No existing storage abstraction** → Created minimal `StorageAdapter` interface
+- **No upload volume** → Added `f01_uploads` Docker volume
+- **Limits from S3 analysis**: 10MB, JPEG/PNG/WebP, min 800x800
+- **No AWS credentials** → Local implementation not blocked
+
+**Implementation (TDD):**
+
+| Component | Description |
+|-----------|-------------|
+| `StorageAdapter` interface | Minimal contract: save, delete, getUrl, validateFile |
+| `LocalStorageAdapter` | Implements interface: 10MB limit, MIME validation, magic byte signatures, path traversal protection |
+| Image upload endpoint | POST `/api/v1/products/:productId/images` (multipart, VENDOR/ADMIN, ownership check) |
+| Image delete endpoint | DELETE `/api/v1/products/:productId/images/:imageKey` (VENDOR/ADMIN, ownership check) |
+| Image serve endpoint | GET `/api/v1/uploads/:key` (public, correct Content-Type, Cache-Control) |
+| Docker volume | `f01_uploads:/app/storage/uploads` in backend compose |
+
+**Test Coverage (29 new tests):**
+- **Upload (14)**: Valid JPEG/PNG/WebP (201), correct response, product.images[] update, file saved, consumer 403, admin 201, unauth 401, no file 400, large file 400, invalid MIME 400, MIME mismatch 400, non-existent product 404, other vendor 403, no vendor profile 404
+- **Delete (8)**: Vendor delete 204, images[] removal, file deleted, consumer 403, admin 204, unauth 401, non-existent 404, other vendor 403
+- **Serve (5)**: Existing 200, Content-Type, Cache-Control, non-existent 404, path traversal 400
+
+**Verification Results:**
+- Backend: 263/263 tests pass (+29 new)
+- Frontend: 64/64 tests pass
+- Playwright E2E: 19/19 tests pass
+- TypeScript build: PASS
+- Docker Compose config: VALID
+
+**T-703 Status:**
+- **T-703a (Local storage)**: ✅ Completed — All acceptance criteria met
+- **T-703b (S3 integration)**: ⏳ Pending — Requires AWS credentials, Q-018 decision (Glacier/WORM/trigger), CloudFront setup
+
+**Security:**
+- File signature validation (magic bytes) prevents MIME spoofing
+- Path traversal protection in keys and serve endpoint
+- Ownership enforcement: Vendor only manages own products
+- 10MB limit prevents DoS via large uploads
+- Empty file rejection
+
+**Documentation Updates:**
+- `task_list.md`: T-703 split into T-703a ✅ / T-703b ⏳
+- `project_context.md`: No changes needed (still references S3 as target)
+- `mp_log.md`: This entry added
+
+### Next Steps
+1. T-704 (Frontend Vendor dashboard) — Can proceed (depends on T-701, T-702)
+2. T-705 (Frontend Product catalog) — Can proceed (depends on T-702)
+3. T-703b (S3 integration) — Awaits AWS credentials + Q-018 decision
+4. MP-07 Stage D: Stripe Connect test mode validation
+
+### Verification Summary
+- All backend tests: 263/263 pass
+- All frontend tests: 64/64 pass
+- Playwright E2E: 19/19 pass
+- Builds: backend (tsc) ✅, frontend (tsc + vite) ✅
+- Docker Compose: f01_uploads volume configured
+- P4 authorized (MAX_AUTHORIZED_PHASE = 4), P5 blocked
+
+---
+
 ---
 
 ## MP-14: Playwright E2E Reliability Fix + T-702 Product CRUD API — FS-01 Marketplace

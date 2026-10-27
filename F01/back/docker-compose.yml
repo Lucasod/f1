@@ -23,6 +23,7 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - ./package-lock.json:/app/package-lock.json
+      - f01_uploads:/app/storage/uploads
 
   mongo:
     image: mongo:7
@@ -55,3 +56,4 @@ volumes:
   f01_mongo_data:
   f01_redis_data:
   f01_elasticsearch_data:
+  f01_uploads:

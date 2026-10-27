@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { promises as fs } from 'fs';
+import path from 'path';
 import { InMemoryPersonRepository } from '../person/person.domain';
 import { InMemoryProductRepository, InMemoryCategoryRepository, ProductStatus } from './product.domain';
 import { AuthService } from '../auth/auth.service';
 import { ProductService } from './product.service';
-import { createProductRoutes, createCategoryRoutes } from './product.routes';
+import { createProductRoutes, createCategoryRoutes, createUploadRoutes } from './product.routes';
 import { createAuthRoutes } from '../auth/auth.routes';
 import { PersonRole } from '../person/person.domain';
 import { InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { VendorService } from '../vendor/vendor.service';
 import { createVendorRoutes } from '../vendor/vendor.routes';
 import { config } from '../../config';
+import { LocalStorageAdapter } from '../../shared/storage/local.adapter';
 
 // Valid test CPF/CNPJ values (these pass validation)
 const VALID_CPF_1 = '52998224725';
@@ -28,6 +31,7 @@ describe('Product Routes', () => {
   let authService: AuthService;
   let vendorService: VendorService;
   let productService: ProductService;
+  let storageAdapter: LocalStorageAdapter;
   const testPassword = 'SecurePass123!';
   
   let vendorToken: string;
@@ -39,8 +43,18 @@ describe('Product Routes', () => {
   let vendorPersonId: string;
   let vendor2PersonId: string;
   let categoryId: string;
+  let productId: string;
+  const storageRoot = path.join(process.cwd(), 'test-storage', 'uploads');
 
   beforeEach(async () => {
+    // Set storage root for serve endpoint
+    process.env.STORAGE_ROOT = storageRoot;
+    
+    // Clean up test storage directory
+    try {
+      await fs.rm(storageRoot, { recursive: true, force: true });
+    } catch {}
+    
     personRepo = new InMemoryPersonRepository();
     vendorRepo = new InMemoryVendorRepository();
     productRepo = new InMemoryProductRepository();
@@ -48,6 +62,7 @@ describe('Product Routes', () => {
     authService = new AuthService(personRepo, 'test-secret-key', '24h', '30d');
     vendorService = new VendorService(vendorRepo, personRepo, config);
     productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+    storageAdapter = new LocalStorageAdapter(storageRoot, '/api/v1/uploads');
 
     app = express();
     app.use(express.json());
@@ -61,8 +76,10 @@ describe('Product Routes', () => {
       authService, 
       productService,
       personRepo,
-      vendorRepo
+      vendorRepo,
+      storageAdapter
     }));
+    app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
     app.use('/api/v1/categories', createCategoryRoutes({ 
       authService, 
       productService,
@@ -160,6 +177,20 @@ describe('Product Routes', () => {
       });
     expect(categoryResponse.status).toBe(201);
     categoryId = categoryResponse.body.category.id;
+
+    // Create a test product for image tests
+    const productResponse = await request(app)
+      .post('/api/v1/products')
+      .set('Authorization', `Bearer ${vendorToken}`)
+      .send({
+        categoryId,
+        name: 'Test Product for Images',
+        description: 'Product for image testing',
+        price: 99.99,
+        quantity: 10
+      });
+    expect(productResponse.status).toBe(201);
+    productId = productResponse.body.product.id;
   });
 
   describe('POST /api/v1/products - Create product', () => {
@@ -414,8 +445,8 @@ describe('Product Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.products).toBeDefined();
       expect(Array.isArray(response.body.products)).toBe(true);
-      expect(response.body.products.length).toBe(3);
-      expect(response.body.total).toBe(3);
+      expect(response.body.products.length).toBe(4); // 3 from this describe + 1 global
+      expect(response.body.total).toBe(4);
       expect(response.body.page).toBe(1);
       expect(response.body.limit).toBe(20);
     });
@@ -425,7 +456,8 @@ describe('Product Routes', () => {
         .get('/api/v1/products?status=active');
 
       expect(response.status).toBe(200);
-      expect(response.body.products.length).toBe(2);
+      // 2 active from this describe + 1 active global = 3
+      expect(response.body.products.length).toBe(3);
       expect(response.body.products.every((p: any) => p.status === ProductStatus.ACTIVE)).toBe(true);
     });
 
@@ -434,7 +466,8 @@ describe('Product Routes', () => {
         .get(`/api/v1/products?vendorId=${vendorId}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.products.length).toBe(2);
+      // 2 from vendor1 in this describe + 1 global = 3
+      expect(response.body.products.length).toBe(3);
       expect(response.body.products.every((p: any) => p.vendorId === vendorId)).toBe(true);
     });
 
@@ -443,7 +476,8 @@ describe('Product Routes', () => {
         .get(`/api/v1/products?categoryId=${categoryId}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.products.length).toBe(3);
+      // All 4 products use the same category
+      expect(response.body.products.length).toBe(4);
       expect(response.body.products.every((p: any) => p.categoryId === categoryId)).toBe(true);
     });
 
@@ -455,7 +489,7 @@ describe('Product Routes', () => {
       expect(response.body.products.length).toBe(2);
       expect(response.body.page).toBe(1);
       expect(response.body.limit).toBe(2);
-      expect(response.body.total).toBe(3);
+      expect(response.body.total).toBe(4);
     });
   });
 
@@ -484,9 +518,11 @@ describe('Product Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.products).toBeDefined();
       expect(Array.isArray(response.body.products)).toBe(true);
-      expect(response.body.products.length).toBe(1);
-      expect(response.body.products[0].id).toBe(productId);
-      expect(response.body.products[0].vendorId).toBe(vendorId);
+      // 1 from this describe's beforeEach + 1 global = 2
+      expect(response.body.products.length).toBe(2);
+      // The product from this describe's beforeEach should be included
+      expect(response.body.products.some((p: any) => p.id === productId)).toBe(true);
+      expect(response.body.products.every((p: any) => p.vendorId === vendorId)).toBe(true);
     });
 
     it('should return 403 for consumer role', async () => {
@@ -1286,6 +1322,533 @@ describe('Product Routes', () => {
         expect(response.status).toBe(400);
         expect(response.body.error).toBe('CATEGORY_HAS_CHILDREN');
       });
+    });
+  });
+
+  // ============ Image Upload Tests ============
+  
+  // Helper functions to generate valid image buffers
+  function createJpegBuffer(size: number = 100): Buffer {
+    // Minimal valid JPEG: SOI marker + APP0 + EOI
+    const header = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
+    const footer = Buffer.from([0xFF, 0xD9]);
+    const padding = Buffer.alloc(Math.max(0, size - header.length - footer.length), 0x00);
+    return Buffer.concat([header, padding, footer]);
+  }
+
+  function createPngBuffer(size: number = 100): Buffer {
+    // Minimal valid PNG: PNG signature + IHDR + IDAT + IEND
+    const signature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    // IHDR chunk (13 bytes data + 4 bytes length + 4 bytes type + 4 bytes CRC = 25 bytes)
+    const ihdr = Buffer.from([
+      0x00, 0x00, 0x00, 0x0D, // length
+      0x49, 0x48, 0x44, 0x52, // IHDR
+      0x00, 0x00, 0x00, 0x01, // width: 1
+      0x00, 0x00, 0x00, 0x01, // height: 1
+      0x08, 0x02, 0x00, 0x00, 0x00, // bit depth, color type, compression, filter, interlace
+      0x90, 0x77, 0x53, 0xDE // CRC
+    ]);
+    // IDAT chunk (minimal compressed data)
+    const idat = Buffer.from([
+      0x00, 0x00, 0x00, 0x0C, // length
+      0x49, 0x44, 0x41, 0x54, // IDAT
+      0x08, 0xD7, 0x63, 0xF8, 0x0F, 0x00, 0x01, 0x01, 0x01, 0x00, 0x05, 0x00, // compressed data
+      0x1D, 0x0A, 0x3B, 0x47 // CRC
+    ]);
+    // IEND chunk
+    const iend = Buffer.from([
+      0x00, 0x00, 0x00, 0x00, // length
+      0x49, 0x45, 0x4E, 0x44, // IEND
+      0xAE, 0x42, 0x60, 0x82 // CRC
+    ]);
+    const base = Buffer.concat([signature, ihdr, idat, iend]);
+    const padding = Buffer.alloc(Math.max(0, size - base.length), 0x00);
+    return Buffer.concat([base, padding]);
+  }
+
+  function createWebpBuffer(size: number = 100): Buffer {
+    // Minimal valid WebP: RIFF header + WEBP + VP8L chunk
+    const riff = Buffer.from([0x52, 0x49, 0x46, 0x46]); // RIFF
+    const fileSize = Buffer.alloc(4); // placeholder for file size
+    fileSize.writeUInt32LE(0, 0);
+    const webp = Buffer.from([0x57, 0x45, 0x42, 0x50]); // WEBP
+    // VP8L chunk (lossless)
+    const vp8l = Buffer.from([
+      0x56, 0x50, 0x38, 0x4C, // VP8L
+      0x00, 0x00, 0x00, 0x00, // chunk size placeholder
+      0x2F, // signature byte (lossless, 1x1)
+      0x00, 0x00, 0x00, // width/height placeholder
+      0x00 // padding
+    ]);
+    const base = Buffer.concat([riff, fileSize, webp, vp8l]);
+    const padding = Buffer.alloc(Math.max(0, size - base.length), 0x00);
+    return Buffer.concat([base, padding]);
+  }
+
+  describe('POST /api/v1/products/:productId/images - Upload product image', () => {
+    let testProductId: string;
+
+    beforeEach(async () => {
+      // Create a fresh product for each test
+      const productResponse = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          categoryId,
+          name: 'Image Test Product',
+          description: 'Product for image upload testing',
+          price: 49.99,
+          quantity: 5
+        });
+      testProductId = productResponse.body.product.id;
+    });
+
+    it('should allow vendor to upload valid JPEG image (201)', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(201);
+      expect(response.body.image).toBeDefined();
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.jpg$/);
+      expect(response.body.image.url).toMatch(/^\/api\/v1\/uploads\/products\/[^/]+\/[^/]+\/main\.jpg$/);
+    });
+
+    it('should allow vendor to upload valid PNG image (201)', async () => {
+      const pngBuffer = createPngBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', pngBuffer, 'test.png');
+
+      expect(response.status).toBe(201);
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.png$/);
+      expect(response.body.image.url).toMatch(/^\/api\/v1\/uploads\/products\/[^/]+\/[^/]+\/main\.png$/);
+    });
+
+    it('should allow vendor to upload valid WebP image (201)', async () => {
+      const webpBuffer = createWebpBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', webpBuffer, 'test.webp');
+
+      expect(response.status).toBe(201);
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.webp$/);
+    });
+
+    it('should add image reference to product.images[]', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const uploadResponse = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(uploadResponse.status).toBe(201);
+      
+      // Verify product now has the image
+      const productResponse = await request(app)
+        .get(`/api/v1/products/${testProductId}`);
+      
+      expect(productResponse.status).toBe(200);
+      expect(productResponse.body.product.images).toBeDefined();
+      expect(Array.isArray(productResponse.body.product.images)).toBe(true);
+      expect(productResponse.body.product.images.length).toBe(1);
+      expect(productResponse.body.product.images[0]).toBe(uploadResponse.body.image.url);
+    });
+
+    it('should save image file to storage', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const uploadResponse = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(uploadResponse.status).toBe(201);
+      
+      // Verify file exists in storage
+      const filePath = path.join(storageRoot, uploadResponse.body.image.key);
+      const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+      expect(fileExists).toBe(true);
+      
+      // Verify file content matches
+      const savedBuffer = await fs.readFile(filePath);
+      expect(savedBuffer.length).toBe(jpegBuffer.length);
+      expect(savedBuffer[0]).toBe(0xFF);
+      expect(savedBuffer[1]).toBe(0xD8);
+    });
+
+    it('should return 403 for consumer role', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${consumerToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should allow admin to upload (201)', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(201);
+      expect(response.body.image).toBeDefined();
+    });
+
+    it('should return 401 for unauthenticated request', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 400 when no file provided', async () => {
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('IMAGE_REQUIRED');
+    });
+
+    it('should return 400 for file too large (10MB limit)', async () => {
+      // Create a buffer larger than 10MB
+      const largeBuffer = Buffer.alloc(11 * 1024 * 1024, 0xFF);
+      // Add JPEG signature so it passes initial multer check
+      largeBuffer[0] = 0xFF;
+      largeBuffer[1] = 0xD8;
+      largeBuffer[2] = 0xFF;
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', largeBuffer, 'large.jpg');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('INVALID_IMAGE');
+      expect(response.body.message).toMatch(/File size exceeds maximum of 10MB/);
+    });
+
+    it('should return 400 for invalid MIME type', async () => {
+      // Create a text file buffer
+      const textBuffer = Buffer.from('This is not an image', 'utf-8');
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', textBuffer, 'test.txt');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('INVALID_IMAGE');
+    });
+
+    it('should return 400 for MIME mismatch with content (PNG bytes with JPEG MIME)', async () => {
+      const pngBuffer = createPngBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', pngBuffer, 'test.jpg'); // .jpg extension but PNG content
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('INVALID_IMAGE');
+      expect(response.body.message).toMatch(/File content does not match declared type/);
+    });
+
+    it('should return 404 for non-existent product', async () => {
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post('/api/v1/products/non-existent-product-id/images')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('PRODUCT_NOT_FOUND');
+    });
+
+    it('should return 403 for other vendor\'s product', async () => {
+      // Create product owned by vendor2
+      const productResponse = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId,
+          name: 'Vendor2 Product',
+          description: 'Owned by vendor2',
+          price: 29.99,
+          quantity: 3
+        });
+      const vendor2ProductId = productResponse.body.product.id;
+      
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${vendor2ProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('PRODUCT_OWNERSHIP_VIOLATION');
+    });
+
+    it('should return 404 for vendor without vendor profile', async () => {
+      // Register a new vendor user but don't onboard them
+      const newVendorRegister = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'No Profile Vendor',
+          taxIdType: 'CNPJ',
+          taxIdValue: '12345678000195',
+          email: 'noprofile@vendor.com',
+          password: testPassword,
+          role: PersonRole.VENDOR
+        });
+      const noProfileToken = newVendorRegister.body.tokens.accessToken;
+      
+      const jpegBuffer = createJpegBuffer(1024);
+      
+      const response = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${noProfileToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/v1/products/:productId/images/:imageKey - Delete product image', () => {
+    let testProductId: string;
+    let imageKey: string;
+    let imageUrl: string;
+
+    beforeEach(async () => {
+      // Create a product and upload an image first
+      const productResponse = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          categoryId,
+          name: 'Delete Image Test Product',
+          description: 'Product for image delete testing',
+          price: 79.99,
+          quantity: 8
+        });
+      testProductId = productResponse.body.product.id;
+
+      const jpegBuffer = createJpegBuffer(1024);
+      const uploadResponse = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+      
+      imageKey = uploadResponse.body.image.key;
+      imageUrl = uploadResponse.body.image.url;
+    });
+
+    it('should allow vendor to delete own product image (204)', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(204);
+    });
+
+    it('should remove image from product.images[]', async () => {
+      // Verify image exists before deletion
+      let productResponse = await request(app)
+        .get(`/api/v1/products/${testProductId}`);
+      expect(productResponse.body.product.images).toContain(imageUrl);
+
+      // Delete the image
+      await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      // Verify image removed
+      productResponse = await request(app)
+        .get(`/api/v1/products/${testProductId}`);
+      expect(productResponse.body.product.images).not.toContain(imageUrl);
+      expect(productResponse.body.product.images.length).toBe(0);
+    });
+
+    it('should delete image file from storage', async () => {
+      // Verify file exists before deletion
+      const filePath = path.join(storageRoot, imageKey);
+      let fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+      expect(fileExists).toBe(true);
+
+      // Delete the image
+      await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      // Verify file deleted
+      fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+      expect(fileExists).toBe(false);
+    });
+
+    it('should return 403 for consumer role', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
+        .set('Authorization', `Bearer ${consumerToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should allow admin to delete (204)', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(204);
+    });
+
+    it('should return 401 for unauthenticated request', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/${imageKey}`);
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 404 for non-existent product', async () => {
+      const response = await request(app)
+        .delete('/api/v1/products/non-existent-id/images/' + imageKey)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('PRODUCT_NOT_FOUND');
+    });
+
+    it('should return 404 for non-existent image key', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/products/${testProductId}/images/non-existent-key.jpg`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('IMAGE_NOT_FOUND');
+    });
+
+    it('should return 403 for other vendor\'s product', async () => {
+      // Create product owned by vendor2 with an image
+      const productResponse = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId,
+          name: 'Vendor2 Product for Delete',
+          description: 'Owned by vendor2',
+          price: 39.99,
+          quantity: 6
+        });
+      const vendor2ProductId = productResponse.body.product.id;
+
+      const jpegBuffer = createJpegBuffer(1024);
+      const uploadResponse = await request(app)
+        .post(`/api/v1/products/${vendor2ProductId}/images`)
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+      
+      const vendor2ImageKey = uploadResponse.body.image.key;
+
+      // Vendor1 tries to delete vendor2's image
+      const response = await request(app)
+        .delete(`/api/v1/products/${vendor2ProductId}/images/${vendor2ImageKey}`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('PRODUCT_OWNERSHIP_VIOLATION');
+    });
+  });
+
+  describe('GET /api/v1/uploads/:key - Serve uploaded image', () => {
+    let testProductId: string;
+    let imageKey: string;
+    let imageUrl: string;
+
+    beforeEach(async () => {
+      // Create a product and upload an image first
+      const productResponse = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          categoryId,
+          name: 'Serve Image Test Product',
+          description: 'Product for image serving testing',
+          price: 59.99,
+          quantity: 12
+        });
+      testProductId = productResponse.body.product.id;
+
+      const jpegBuffer = createJpegBuffer(1024);
+      const uploadResponse = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .attach('image', jpegBuffer, 'test.jpg');
+      
+      imageKey = uploadResponse.body.image.key;
+      imageUrl = uploadResponse.body.image.url;
+    });
+
+    it('should serve existing image (200)', async () => {
+      const response = await request(app)
+        .get(`/api/v1/uploads/${imageKey}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBeDefined();
+    });
+
+    it('should return correct Content-Type header for JPEG', async () => {
+      const response = await request(app)
+        .get(`/api/v1/uploads/${imageKey}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('image/jpeg');
+    });
+
+    it('should set Cache-Control header', async () => {
+      const response = await request(app)
+        .get(`/api/v1/uploads/${imageKey}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['cache-control']).toBe('public, max-age=31536000');
+    });
+
+    it('should return 404 for non-existent key', async () => {
+      const response = await request(app)
+        .get('/api/v1/uploads/non-existent-key.jpg');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('IMAGE_NOT_FOUND');
+    });
+
+    it('should return 400 for path traversal attempt', async () => {
+      const response = await request(app)
+        .get('/api/v1/uploads/../../../etc/passwd');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('INVALID_KEY');
     });
   });
 });
