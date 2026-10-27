@@ -190,8 +190,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Redis hash per user: `cart:{userId}` with TTL 30d
 - Separate `cart_items` in MongoDB + Redis cache
 - Guest cart in localStorage → merge on login
-**Resolution:** Redis strategy analyzed and documented: Hash per consumer (`cart:{consumer_id}`), multi-vendor items with vendor_id, guest cart merge via Lua scripts, atomic operations. TTL values (cart, session) remain pending NFR-PERF-003 confirmation.
-**State:** **PARTIALLY_RESOLVED** — Strategy documented (analysis_redis_schemas.md). TTLs (cart, session) pending NFR-PERF-003. Redis keys, sync, guest merge remain TECHNICAL_FUTURE for implementation.
+**Resolution:** Redis strategy analyzed and documented: Hash per consumer (`cart:{consumer_id}`), multi-vendor items with vendor_id, guest cart merge via Lua scripts, atomic operations. TTL values (cart, session) remain pending NFR-PERF-003 confirmation.  
+**State:** **PARTIALLY_RESOLVED (blocks T-901 pending NFR-PERF-003)** — Strategy documented (analysis_redis_schemas.md). TTLs (cart, session) pending NFR-PERF-003. Redis keys, sync, guest merge remain TECHNICAL_FUTURE for implementation.
 
 ---
 
@@ -250,8 +250,9 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Scope: **RESOLVED** — Commercial receipt (PDF), not NF-e (CD-035)  
 - Generation trigger: **DEFERRED** — On-demand for MVP; automation (on payment/delivery/scheduled) post-MVP  
 - Storage: **RESOLVED** — S3 Standard-IA with naming convention (analysis_s3_naming.md Section 6)  
-- Glacier transition (90 days): **PENDING HUMAN DECISION**  
-- Object Lock/WORM (10 years): **PENDING HUMAN DECISION**  
+- Glacier transition (90 days): **PENDING HUMAN DECISION (blocks T-703b, T-1103)**  
+- Object Lock/WORM (10 years): **PENDING HUMAN DECISION (blocks T-703b, T-1103)**  
+- Generation trigger automation: **PENDING HUMAN DECISION (blocks T-1103)**  
 - NF-e: **EXCLUDED** per CD-035  
 **State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP: PDF receipt on-demand, S3 Standard-IA. Glacier/WORM/automation deferred pending human decision.
 
@@ -310,15 +311,15 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-023: Frontend State Management
-**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?
-**Why:** Stage 2-7 frontend implementation consistency
-**Dependencies:** API style, auth flow, cart (Redis sync)
+**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?  
+**Why:** Stage 2-7 frontend implementation consistency  
+**Dependencies:** API style, auth flow, cart (Redis sync)  
 **Alternatives:** 
 - TanStack Query for server state + Context for auth/cart
 - Redux Toolkit for all state
 - Zustand for client + React Query for server
-**Resolution:** Frontend state management decision confirmed: TanStack Query (v5) for server state + Zustand (v5) for client state + React Router (v7) for URL state. Decision recorded as CD-074 in decisions.md.
-**State:** **RESOLVED** — Architecture decision formalized; implementation deferred to P4.
+**Resolution:** Frontend state management decision confirmed: TanStack Query (v5) for server state + Zustand (v5) for client state + React Router (v7) for URL state. Decision recorded as CD-074 in decisions.md.  
+**State:** **PARTIALLY_RESOLVED** — Architecture decision formalized (CD-074); TanStack Query (React Query) not yet installed in F01/front package.json; implementation deferred to P4.
 
 ---
 

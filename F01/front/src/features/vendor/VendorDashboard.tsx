@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { vendorApi, Vendor } from '@/shared/api/vendor';
 import { productApi, Product } from '@/shared/api/product';
@@ -18,41 +18,33 @@ export function VendorDashboard() {
     error: null,
   });
 
-  useEffect(() => {
-    let mounted = true;
+  const loadDashboard = useCallback(async () => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    async function loadDashboard() {
-      try {
-        setState(prev => ({ ...prev, isLoading: true, error: null }));
+      const [vendorRes, productsRes] = await Promise.all([
+        vendorApi.getMe(),
+        productApi.getMyProducts(),
+      ]);
 
-        const [vendorRes, productsRes] = await Promise.all([
-          vendorApi.getMe(),
-          productApi.getMyProducts(),
-        ]);
-
-        if (mounted) {
-          setState({
-            vendor: vendorRes.vendor,
-            products: productsRes.products,
-            isLoading: false,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (mounted) {
-          setState(prev => ({
-            ...prev,
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Error loading dashboard',
-          }));
-        }
-      }
+      setState({
+        vendor: vendorRes.vendor,
+        products: productsRes.products,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Error loading dashboard',
+      }));
     }
-
-    loadDashboard();
-
-    return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const getStatusLabel = (status: Product['status']) => {
     const labels: Record<Product['status'], string> = {
@@ -72,6 +64,16 @@ export function VendorDashboard() {
       discontinued: 'bg-red-100 text-red-800',
     };
     return classes[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      await productApi.delete(productId);
+      await loadDashboard();
+    } catch (error) {
+      console.error('Failed to delete product:', error);
+      window.location.reload();
+    }
   };
 
   if (state.isLoading) {
@@ -115,12 +117,12 @@ export function VendorDashboard() {
   const inactiveProducts = state.products.filter(p => p.status === 'inactive').length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{state.vendor.storeName}</h1>
-          <p className="text-gray-500 mt-1">Vendor Dashboard</p>
+          <h2 className="text-gray-500 mt-1 text-xl font-medium">Vendor Dashboard</h2>
         </div>
         <Link
           to="/vendor/products/new"
@@ -140,19 +142,19 @@ export function VendorDashboard() {
 
       {/* Products Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-{state.products.length === 0 ? (
-           <div className="p-12 text-center">
-             <div className="text-4xl mb-4">📦</div>
-             <h2 className="text-xl font-semibold text-gray-900 mb-2">No products yet</h2>
-             <p className="text-gray-500 mb-6">Start by adding your first product.</p>
-             <Link
-               to="/vendor/products/new"
-               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-             >
-               + Add Product
-             </Link>
-           </div>
-         ) : (
+        {state.products.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="text-4xl mb-4">📦</div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">No products yet</h2>
+            <p className="text-gray-500 mb-6">Start by adding your first product.</p>
+            <Link
+              to="/vendor/products/new"
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              + Add Product
+            </Link>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -223,7 +225,7 @@ export function VendorDashboard() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -239,10 +241,4 @@ function MetricCard({ title, value, icon, className = '' }: { title: string; val
       </div>
     </div>
   );
-}
-
-function handleDeleteProduct(_productId: string) {
-  // This would call productApi.delete(productId) and refresh the list
-  // For now, just reload the page
-  window.location.reload();
 }

@@ -37,7 +37,7 @@
 6. Integrate payments and commissions with Stripe Connect or Razorpay (test mode)
 7. Implement reviews, coupons, PDF invoices, admin dashboard, separate frontend/backend deploy
 
-> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4/P5 remain blocked pending explicit human authorization; MAX_AUTHORIZED_PHASE = 3 unchanged.
+> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4/P5 remain blocked pending explicit human authorization; MAX_AUTHORIZED_PHASE = 4 (P5 blocked, explicit human authorization granted for P4 on 2026-10-27).
 
 ## Scope Boundaries
 

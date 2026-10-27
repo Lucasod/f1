@@ -26,8 +26,8 @@ export function ProductForm() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
 
-  // Load categories and product data (if edit)
   useEffect(() => {
     loadCategories();
     if (isEdit) {
@@ -37,8 +37,6 @@ export function ProductForm() {
 
   const loadCategories = async () => {
     try {
-      // Fetch categories from a simple list endpoint
-      // For now, use a minimal fetch since we don't have categories API in frontend yet
       const response = await fetch('/api/v1/categories', {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
       });
@@ -53,12 +51,10 @@ export function ProductForm() {
 
   const loadProduct = async () => {
     if (!productId) return;
-    
     setIsLoading(true);
     try {
       const response = await productApi.getById(productId);
       const product = response.product;
-      
       setFormData({
         categoryId: product.categoryId,
         name: product.name,
@@ -68,13 +64,12 @@ export function ProductForm() {
         images: product.images || [],
         status: product.status,
       });
-      
       if (product.images.length > 0) {
         setImagePreview(product.images[0]);
       }
-} catch (err) {
-        setError('Error loading product');
-      } finally {
+    } catch (err) {
+      setError('Error loading product');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -88,7 +83,6 @@ export function ProductForm() {
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-    
     if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.description.trim()) newErrors.description = 'Description is required';
     const priceNum = parseFloat(String(formData.price));
@@ -96,16 +90,13 @@ export function ProductForm() {
     const qtyNum = parseInt(String(formData.quantity));
     if (formData.quantity === 0 || isNaN(qtyNum) || !Number.isInteger(qtyNum) || qtyNum < 0) newErrors.quantity = 'Quantity must be a non-negative integer';
     if (!formData.categoryId) newErrors.categoryId = 'Category is required';
-    
     setValidationErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !productId) return;
-    
-    // Validate file
+    if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setValidationErrors(prev => ({ ...prev, image: 'Invalid file type. Use JPEG, PNG, or WebP.' }));
       return;
@@ -114,32 +105,50 @@ export function ProductForm() {
       setValidationErrors(prev => ({ ...prev, image: 'File too large. Maximum 10MB.' }));
       return;
     }
-    
     setValidationErrors(prev => ({ ...prev, image: '' }));
-    setUploadingImage(true);
-    
-try {
+    if (isEdit && productId) {
+      setUploadingImage(true);
+      try {
         const result = await productApi.uploadImage(productId, file);
         setFormData(prev => ({ ...prev, images: [...(prev.images || []), result.image.url] }));
         setImagePreview(result.image.url);
-    } catch (err) {
-      setValidationErrors(prev => ({ ...prev, image: err instanceof Error ? err.message : 'Upload error' }));
-    } finally {
-      setUploadingImage(false);
+      } catch (err) {
+        setValidationErrors(prev => ({ ...prev, image: err instanceof Error ? err.message : 'Upload error' }));
+      } finally {
+        setUploadingImage(false);
+      }
+    } else {
+      setPendingImageFile(file);
+      const objectUrl = URL.createObjectURL(file);
+      setFormData(prev => ({ ...prev, images: [...(prev.images || []), objectUrl] }));
+      setImagePreview(objectUrl);
     }
   };
 
+  const extractImageKey = (imageUrl: string): string => {
+    const uploadsPrefix = '/api/v1/uploads/';
+    const index = imageUrl.indexOf(uploadsPrefix);
+    if (index !== -1) {
+      return imageUrl.substring(index + uploadsPrefix.length);
+    }
+    return imageUrl;
+  };
+
   const handleRemoveImage = async (imageUrl: string) => {
-    if (!productId) return;
-    
-try {
-        // Extract key from URL
-        const key = imageUrl.replace('/api/v1/uploads/', '');
-        await productApi.deleteImage(productId, key);
-        setFormData(prev => ({ ...prev, images: (prev.images || []).filter(img => img !== imageUrl) }));
-        if (imagePreview === imageUrl) {
-          setImagePreview(formData.images?.[1] || null);
-        }
+    if (!isEdit || !productId) {
+      setFormData(prev => ({ ...prev, images: (prev.images || []).filter(img => img !== imageUrl) }));
+      if (imagePreview === imageUrl) {
+        setImagePreview(formData.images?.[1] || null);
+      }
+      return;
+    }
+    try {
+      const key = extractImageKey(imageUrl);
+      await productApi.deleteImage(productId, key);
+      setFormData(prev => ({ ...prev, images: (prev.images || []).filter(img => img !== imageUrl) }));
+      if (imagePreview === imageUrl) {
+        setImagePreview(formData.images?.[1] || null);
+      }
     } catch (err) {
       setError('Error removing image');
     }
@@ -147,27 +156,36 @@ try {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    
     if (!validate()) return;
     if (!hasRole('VENDOR') && !hasRole('ADMIN')) {
       setError('Unauthorized access');
       return;
     }
-    
     setIsSubmitting(true);
     setError(null);
-    
     try {
       const submitData = {
         ...formData,
         price: parseFloat(String(formData.price)),
         quantity: parseInt(String(formData.quantity)),
+        images: (formData.images || []).filter(img => !img.startsWith('blob:')),
       };
-      
+      let createdProductId: string | undefined;
       if (isEdit && productId) {
         await productApi.update(productId, submitData as UpdateProductInput);
       } else {
-        await productApi.create(submitData as CreateProductInput);
+        const response = await productApi.create(submitData as CreateProductInput);
+        createdProductId = response.product?.id;
+      }
+      if (!isEdit && createdProductId && pendingImageFile) {
+        setUploadingImage(true);
+        try {
+          await productApi.uploadImage(createdProductId, pendingImageFile);
+        } catch (err) {
+          console.error('Failed to upload image after product creation:', err);
+        } finally {
+          setUploadingImage(false);
+        }
       }
       navigate('/vendor/dashboard');
     } catch (err) {
@@ -178,6 +196,11 @@ try {
   };
 
   const handleCancel = () => {
+    (formData.images || []).forEach(img => {
+      if (img.startsWith('blob:')) {
+        URL.revokeObjectURL(img);
+      }
+    });
     navigate('/vendor/dashboard');
   };
 
@@ -199,6 +222,7 @@ try {
         <button
           onClick={handleCancel}
           className="px-4 py-2 text-gray-600 hover:text-gray-900"
+          disabled={isSubmitting}
         >
           Cancel
         </button>
@@ -211,7 +235,6 @@ try {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Name */}
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
             Product Name *
@@ -228,7 +251,6 @@ try {
           {validationErrors.name && <p className="mt-1 text-sm text-red-600">{validationErrors.name}</p>}
         </div>
 
-        {/* Description */}
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
             Description *
@@ -245,7 +267,6 @@ try {
           {validationErrors.description && <p className="mt-1 text-sm text-red-600">{validationErrors.description}</p>}
         </div>
 
-        {/* Price and Quantity */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
             <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
@@ -282,7 +303,6 @@ try {
           </div>
         </div>
 
-        {/* Category */}
         <div>
           <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-1">
             Category *
@@ -302,12 +322,10 @@ try {
           {validationErrors.categoryId && <p className="mt-1 text-sm text-red-600">{validationErrors.categoryId}</p>}
         </div>
 
-        {/* Image Upload */}
         <div>
           <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
             Product Image
           </label>
-          
           {imagePreview && (
             <div className="mb-4 flex items-center gap-4">
               <img src={imagePreview} alt={formData.name || 'Product'} className="h-24 w-24 rounded-lg object-cover" />
@@ -315,12 +333,12 @@ try {
                 type="button"
                 onClick={() => handleRemoveImage(imagePreview)}
                 className="text-red-600 hover:text-red-900 text-sm"
+                disabled={uploadingImage}
               >
                 Remove image
               </button>
             </div>
           )}
-          
           <input
             type="file"
             id="image"
@@ -334,7 +352,6 @@ try {
           <p className="mt-1 text-xs text-gray-500">JPEG, PNG, or WebP. Maximum 10MB.</p>
         </div>
 
-        {/* Status */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select
@@ -350,7 +367,6 @@ try {
           </select>
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
           <button
             type="button"
@@ -358,7 +374,7 @@ try {
             className="px-4 py-2 text-gray-600 hover:text-gray-900"
             disabled={isSubmitting}
           >
-Cancel
+            Cancel
           </button>
           <button
             type="submit"

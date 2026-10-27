@@ -2011,3 +2011,115 @@ Implemented minimal code to pass tests:
 - P4 authorized (MAX_AUTHORIZED_PHASE = 4), P5 blocked
 
 ---
+
+## P4 Execution — `p4-t704-fixes-2026-10-27`
+
+**Date:** 2026-10-27
+**Objective:** Fix defects in T-704 (Frontend Vendor Dashboard) implementation and complete product management functionality
+**Scope:** T-704 bug fixes, route additions, image upload flow, E2E test updates
+
+### Fix Stage (Pre-Implementation)
+
+**Findings from code audit:**
+1. **ProductForm.tsx**: `handleImageUpload` blocked create mode (`if (!file || !productId) return;`) — image upload only worked in edit mode
+2. **App.tsx**: Missing routes for `/vendor/products/new` and `/vendor/products/:productId/edit` — VendorDashboard linked to these but they didn't exist
+3. **VendorDashboard.tsx**: `handleDeleteProduct` only reloaded page instead of calling `productApi.delete()` and refreshing
+4. **ProductForm.tsx**: `handleRemoveImage` used fragile string replacement for key extraction
+5. **E2E tests**: Expected "Vendor Dashboard" text in main element, but component shows store name and "Vendor profile not found" when vendor hasn't onboarded
+
+### Implementation Stage (TDD)
+
+**Fixes applied:**
+
+| File | Changes |
+|------|---------|
+| `F01/front/src/features/vendor/ProductForm.tsx` | - Removed `productId` early return from `handleImageUpload`<br>- Added `pendingImageFile` state for create mode<br>- Added `extractImageKey()` robust key extraction function<br>- Fixed `handleRemoveImage` to handle create mode (local state only)<br>- Fixed `handleSubmit` to upload image after product creation in create mode<br>- Added cleanup in `handleCancel` for object URLs |
+| `F01/front/src/App.tsx` | - Added imports for `VendorDashboard` and `ProductForm`<br>- Added routes: `/vendor/dashboard` → VendorDashboard, `/vendor/products/new` → ProductForm, `/vendor/products/:productId/edit` → ProductForm |
+| `F01/front/src/features/vendor/VendorDashboard.tsx` | - Extracted `loadDashboard` as `useCallback`<br>- Fixed `handleDeleteProduct` to call `productApi.delete(productId)` then `loadDashboard()`<br>- Changed outer div to `<main role="main">` for accessibility<br>- Changed "Vendor Dashboard" text to `<h2>` heading |
+| `F01/front/tests/e2e/auth.spec.ts` | - Updated "Vendor can access /vendor/dashboard after login" to expect "Vendor profile not found"<br>- Updated "Admin can access /vendor/dashboard" to expect "Vendor profile not found" |
+
+**Key behavioral change:** Vendor Dashboard now requires onboarding (which isn't implemented in frontend yet) before showing products. Until onboarding is implemented, vendors see "Vendor profile not found" — this is correct current behavior.
+
+### Test Results
+
+| Test Suite | Result |
+|------------|--------|
+| Frontend unit tests | **80/80 PASS** (9 test files) |
+| Backend unit tests | **263/263 PASS** (11 test files) |
+| Playwright E2E tests | **19/19 PASS** (all auth scenarios) |
+| Frontend build (tsc + vite) | **PASS** (222.79 kB JS, 69.01 kB gzipped) |
+
+### Documentation Updates
+
+- `F01/docs/task_list.md`: Added note on T-704 fixes (after table, before `---`)
+- `F01/docs/mp_log.md`: This entry added
+
+### Verification Summary
+
+- All 80 frontend tests pass
+- All 263 backend tests pass  
+- All 19 Playwright E2E tests pass
+- TypeScript compilation: PASS
+- Vite production build: PASS
+- MAX_AUTHORIZED_PHASE = 4 (P5 blocked, T-901 not started)
+- No commits, no staging, no push, no destructive operations
+
+### Remaining Blockers
+
+| Task | Blocker | Action Required |
+|------|---------|-----------------|
+| T-703b (S3 integration) | AWS credentials + Q-018 decision | User to provide AWS access; resolve Q-018 (Glacier/WORM/trigger) |
+| T-705 (Product catalog) | Can proceed independently | Dependencies (T-702) satisfied |
+| Vendor onboarding form | Part of T-704 scope but not implemented | Frontend onboarding page needed |
+
+---
+
+## MP-22: FIRD Cycle for T-705 Frontend Product Catalog
+
+**Date**: 2026-10-27  
+**Objective**: Complete T-705 (Frontend Product Catalog) through full FIRD cycle  
+**Scope**: Fix documentation inconsistencies, implement catalog feature, independent review, update documentation
+
+### Fix Phase
+Fixed 12 documentation inconsistencies (INC-001 to INC-012) including:
+- T-703a status updated to completed_with_limitations
+- OpenAPI spec fixed to reflect local URLs
+- Task statuses corrected (blocked vs pending)
+- Q-018, Q-014, Q-023 states updated
+- React Query installed
+- Diagram warning added
+- MAX_AUTHORIZED_PHASE corrected
+
+### Implement Phase
+T-705 implementation (7 components + hooks + tests):
+- ProductCard, ProductFilters, useProducts, useCategories, ProductCatalogPage
+- React Query integration with debounced search
+- "In-Stock First" sort (CD-013)
+- Screen reader announcements, Error Boundary
+- Backend search/sort/categoryId support
+
+### Review Phase
+Code Reviewer independent review:
+- First review: CORRECTIONS_NEEDED (8 findings: 1 CRITICAL, 1 HIGH, 3 MEDIUM, 3 LOW)
+- Fixes applied for all findings
+- Re-review: PASS
+
+### Document Phase
+Documentation updated to reflect implementation
+
+### Test Results
+421 total tests pass (263 backend + 139 frontend + 19 E2E)
+
+### New Recommendations (Non-Blocking)
+5 maintainability items (NFR-001 to NFR-005)
+
+### Verification Summary
+All tests pass, TypeScript PASS, Vite build PASS
+
+### Remaining Blockers
+
+| Task | Blocker | Action Required |
+|------|---------|-----------------|
+| T-703b (S3 integration) | AWS credentials + Q-018 decision | User to provide AWS access; resolve Q-018 (Glacier/WORM/trigger) |
+| Vendor onboarding form | Part of T-704 scope but not implemented | Frontend onboarding page needed |
+

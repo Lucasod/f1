@@ -387,7 +387,7 @@ export interface ProductRepository {
   findById(id: string): Promise<Product | null>;
   findByVendorId(vendorId: string): Promise<Product[]>;
   findByCategoryId(categoryId: string): Promise<Product[]>;
-  findAll(filters?: { status?: string; vendorId?: string }): Promise<Product[]>;
+  findAll(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]>;
   update(product: Product): Promise<Product>;
   delete(id: string): Promise<void>;
 }
@@ -435,7 +435,7 @@ export class InMemoryProductRepository implements ProductRepository {
     return products;
   }
 
-  async findAll(filters?: { status?: string; vendorId?: string }): Promise<Product[]> {
+  async findAll(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]> {
     let products = Array.from(this.products.values());
 
     if (filters?.status) {
@@ -444,6 +444,39 @@ export class InMemoryProductRepository implements ProductRepository {
 
     if (filters?.vendorId) {
       products = products.filter(p => p.vendorId === filters.vendorId);
+    }
+
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      products = products.filter(p => 
+        p.name.toLowerCase().includes(searchLower) ||
+        p.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    if (filters?.sortBy) {
+      switch (filters.sortBy) {
+        case 'name':
+          products.sort((a, b) => a.name.localeCompare(b.name));
+          break;
+        case 'price_asc':
+          products.sort((a, b) => a.price - b.price);
+          break;
+        case 'price_desc':
+          products.sort((a, b) => b.price - a.price);
+          break;
+        case 'newest':
+          products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          break;
+        case 'stock_status':
+          products.sort((a, b) => {
+            // In-stock first, then by quantity descending
+            if (a.quantity > 0 && b.quantity === 0) return -1;
+            if (a.quantity === 0 && b.quantity > 0) return 1;
+            return b.quantity - a.quantity;
+          });
+          break;
+      }
     }
 
     return products;

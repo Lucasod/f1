@@ -108,7 +108,7 @@ export class ProductService {
     return this.productRepo.findByCategoryId(categoryId);
   }
 
-  async listProducts(filters?: { status?: string; vendorId?: string }): Promise<Product[]> {
+  async listProducts(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]> {
     return this.productRepo.findAll(filters);
   }
 

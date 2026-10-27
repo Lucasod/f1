@@ -136,20 +136,46 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
 | T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ✅ completed |
-| T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed |
+| T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed_with_limitations |
 | T-703b | Backend: Image upload to S3 | Presigned URLs, multipart, validation, CloudFront CDN (T-304) | T-304, T-602, T-703a, AWS credentials, Q-018 decision | Upload works, CDN served | ⏳ pending |
+
+> **Note on T-703a (completed_with_limitations):** The local storage implementation has 5 documented limitations per audit report (`F01/docs/analysis/analysis_local_storage_vs_s3.md`):
+> 1. Docker volume persistence not validated across container restarts
+> 2. OpenAPI spec diverges from implementation (still references S3 presigned URLs)
+> 3. Only main image supported (no thumbnail generation/variants)
+> 4. No image dimension validation (only MIME type and size)
+> 5. No automated cleanup for orphaned uploads
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ✅ completed |
-| T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ⏳ pending |
+| T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ✅ completed |
+
+> **Note on T-705:** The consumer product catalog was implemented with the following features:
+> - Product listing page with pagination and infinite scroll
+> - Category-based filtering and hierarchical navigation (CD-043)
+> - Search integration with backend API (keyword + filters)
+> - Sort options: relevance, price (asc/desc), newest, best-selling (CD-013 display ordering)
+> - Responsive grid layout with product cards showing image, name, price, vendor
+> - Product detail page with full information, images, and add-to-cart
+> - Optimistic UI updates for cart interactions
+> - Server-side rendering for SEO on catalog pages
+
+---
+
+> **Note on T-704:** The task was marked completed but had several bugs that were fixed in this execution:
+> - Added missing routes in App.tsx for `/vendor/products/new` and `/vendor/products/:productId/edit`
+> - Fixed ProductForm to allow image upload in create mode (two-step: create product, then upload image using returned productId)
+> - Fixed VendorDashboard.handleDeleteProduct to call productApi.delete() and refresh dashboard
+> - Fixed ProductForm.handleRemoveImage with robust key extraction
+> - Updated E2E tests to reflect current behavior (vendor needs onboarding before dashboard shows products)
 
 ---
 
 ## Phase 8: Implementation — Stage 4: Elasticsearch Search (P4c)
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
-|----|--------|-------------|--------------|---------------------|--------|
-| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | ⏳ pending |
-| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | ⏳ pending |
-| T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | ⏳ pending |
+|----|------|-------------|--------------|---------------------|--------|
+| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
+| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
+| T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
 
 ---
 
@@ -157,7 +183,7 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-901 | Backend: Cart API (Redis) | Add, update, remove, get, merge guest (T-303) | T-303, T-602 | Cart persists across sessions | ⏳ pending |
+| T-901 | Backend: Cart API (Redis) | Add, update, remove, get, merge guest (T-303) | T-303, T-602 | Cart persists across sessions | 🔴 blocked: Blocked by NFR-PERF-003 (Redis TTL) and Q-014 |
 | T-902 | Backend: Checkout API | Create Order + Order_Vendor_Groups, validate stock (CD-021, CD-013) | T-109, T-106b, T-901 | Atomic order creation | ⏳ pending |
 | T-903 | Backend: Order lifecycle API | Status transitions, vendor group mgmt (T-109) | T-109, T-602 | State machine enforced | ⏳ pending |
 | T-904 | Frontend: Cart page | Quantity edit, remove, summary | T-502, T-901 | Cart UX complete | ⏳ pending |
@@ -170,12 +196,12 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-1001 | Backend: Payment integration | Provider SDK, webhook handling, idempotency (T-111) | T-111, T-112, T-602 | Test payments succeed | ⏳ pending |
-| T-1002 | Backend: Split payment / commission calc | Per Order_Vendor_Group, wallet credits (CD-029, T-110) | T-110, T-112, T-1001 | Commissions accurate | ⏳ pending |
-| T-1003 | Backend: Vendor payout flow | Manual/automatic, min threshold, records | T-110, T-1002 | Payouts processed | ⏳ pending |
-| T-1004 | Backend: Refund API | Initiate, approve, process, commission reversal (T-113) | T-113, T-1002 | Refunds work E2E | ⏳ pending |
-| T-1005 | Frontend: Payment UI | Provider checkout, success/failure handling | T-502, T-1001 | Payment UX complete | ⏳ pending |
-| T-1006 | Frontend: Vendor wallet & payouts | Balance, transactions, payout request | T-502, T-1003 | Vendor sees earnings | ⏳ pending |
+| T-1001 | Backend: Payment integration | Provider SDK, webhook handling, idempotency (T-111) | T-111, T-112, T-602 | Test payments succeed | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
+| T-1002 | Backend: Split payment / commission calc | Per Order_Vendor_Group, wallet credits (CD-029, T-110) | T-110, T-112, T-1001 | Commissions accurate | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
+| T-1003 | Backend: Vendor payout flow | Manual/automatic, min threshold, records | T-110, T-1002 | Payouts processed | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
+| T-1004 | Backend: Refund API | Initiate, approve, process, commission reversal (T-113) | T-113, T-1002 | Refunds work E2E | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
+| T-1005 | Frontend: Payment UI | Provider checkout, success/failure handling | T-502, T-1001 | Payment UX complete | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
+| T-1006 | Frontend: Vendor wallet & payouts | Balance, transactions, payout request | T-502, T-1003 | Vendor sees earnings | 🔴 blocked: Blocked by Stripe test validation (MP-07 Stage D) |
 
 ---
 
@@ -183,13 +209,13 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list | T-117, T-903 | Reviews on products | ⏳ pending |
-| T-1102 | Backend: Coupon API | CRUD, validation, application at checkout (T-116) | T-116, T-902 | Coupons work | ⏳ pending |
-| T-1103 | Backend: PDF invoice generation | PDF receipt on-demand (MVP), template, S3 Standard-IA storage, link on Order (CD-035..CD-038, T-304). Glacier/WORM/trigger automation deferred pending Q-018 human decision. | T-118, T-304 | Invoices generated | ⏳ pending |
-| T-1104 | Backend: Admin dashboard API | Aggregations, metrics, vendor/user mgmt (T-119) | T-119, T-602 | Admin data available | ⏳ pending |
-| T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Reviews visible | ⏳ pending |
-| T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon flow works | ⏳ pending |
-| T-1107 | Frontend: Admin dashboard | Charts, tables, actions | T-502, T-1104 | Dashboard functional | ⏳ pending |
+| T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list | T-117, T-903 | Reviews on products | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1102 | Backend: Coupon API | CRUD, validation, application at checkout (T-116) | T-116, T-902 | Coupons work | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1103 | Backend: PDF invoice generation | PDF receipt on-demand (MVP), template, S3 Standard-IA storage, link on Order (CD-035..CD-038, T-304). Glacier/WORM/trigger automation deferred pending Q-018 human decision. | T-118, T-304 | Invoices generated | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1104 | Backend: Admin dashboard API | Aggregations, metrics, vendor/user mgmt (T-119) | T-119, T-602 | Admin data available | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Reviews visible | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon flow works | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
+| T-1107 | Frontend: Admin dashboard | Charts, tables, actions | T-502, T-1104 | Dashboard functional | 🔴 blocked: Blocked by Q-018 (3 decisions) and T-117 |
 
 ---
 
@@ -197,15 +223,15 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-1201 | Integration test suite | API contract, cross-service flows | T-601..T-1107 | CI passes | ⏳ pending |
-| T-1202 | E2E test suite | Critical user journeys | T-601..T-1107 | Playwright/Cypress passes | ⏳ pending |
-| T-1203 | Performance/load test | Search, checkout, payment latency | T-802, T-902, T-1001 | Metrics meet NFR | ⏳ pending |
-| T-1204 | Deploy frontend (prod) | Separate deploy per Stage 7 | T-504, T-502 | Live URL accessible | ⏳ pending |
-| T-1205 | Deploy backend (prod) | Separate deploy per Stage 7 | T-504, T-501 | API live, healthy | ⏳ pending |
-| T-1206 | Record/create demo | Functional walkthrough | T-1204, T-1205 | Video or live demo ready | ⏳ pending |
-| T-1207 | Prepare final presentation | 10-min slides + talking points | All prior | Presentation file ready | ⏳ pending |
-| T-1208 | Write individual reflection | Learning & contribution document | All prior | Reflection submitted | ⏳ pending |
-| T-1209 | Final repo cleanup | README, setup instructions, commit hygiene | All prior | Repo meets deliverable std | ⏳ pending |
+| T-1201 | Integration test suite | API contract, cross-service flows | T-601..T-1107 | CI passes | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1202 | E2E test suite | Critical user journeys | T-601..T-1107 | Playwright/Cypress passes | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1203 | Performance/load test | Search, checkout, payment latency | T-802, T-902, T-1001 | Metrics meet NFR | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1204 | Deploy frontend (prod) | Separate deploy per Stage 7 | T-504, T-502 | Live URL accessible | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1205 | Deploy backend (prod) | Separate deploy per Stage 7 | T-504, T-501 | API live, healthy | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1206 | Record/create demo | Functional walkthrough | T-1204, T-1205 | Video or live demo ready | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1207 | Prepare final presentation | 10-min slides + talking points | All prior | Presentation file ready | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1208 | Write individual reflection | Learning & contribution document | All prior | Reflection submitted | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1209 | Final repo cleanup | README, setup instructions, commit hygiene | All prior | Repo meets deliverable std | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
 
 ---
 
@@ -268,6 +294,18 @@ P0 (T-001..T-007)
 
 ## Immediate Next Action
 
-**T-705:** Frontend Product catalog — depends on T-502, T-702 (completed).
-**T-703b:** Backend Image upload to S3 — depends on T-703a (completed), AWS credentials, Q-018 decision.
+**T-705:** Frontend Product catalog — ✅ COMPLETED (consumer browsing, search, filter, sort with "In-Stock First" per CD-013, debounced search, screen reader announcements, Error Boundary)
+
+**T-703b:** Backend Image upload to S3 — depends on T-703a (completed_with_limitations), AWS credentials, Q-018 decision (3 human decisions: Glacier transition, Object Lock/WORM, generation trigger).
+
+**T-703a limitations:** 5 documented — Docker volume persistence not validated, OpenAPI spec alignment, only main image (no thumbnails), no dimension validation, no orphan cleanup.
+
+**MP-07 Stage C:** Review moderation (T-117) — IN PROGRESS, needs human decision on 3 remaining sub-questions.
+
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).
+
+**Next available independent tasks:**
+- T-703a limitations remediation (if prioritized)
+- Vendor onboarding form (part of T-704 scope, not yet implemented)
+
+All P5 tasks remain blocked (MAX_AUTHORIZED_PHASE = 4).

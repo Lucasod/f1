@@ -31,6 +31,16 @@ export interface ProductListResponse {
   limit: number;
 }
 
+export interface ProductListParams {
+  status?: string;
+  vendorId?: string;
+  categoryId?: string;
+  search?: string;
+  sortBy?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface CreateProductInput {
   categoryId: string;
   name: string;
@@ -52,11 +62,13 @@ export interface UpdateProductInput {
 }
 
 export const productApi = {
-  async list(filters?: { status?: string; vendorId?: string; categoryId?: string; page?: number; limit?: number }): Promise<ProductListResponse> {
+  async list(filters?: ProductListParams): Promise<ProductListResponse> {
     const params = new URLSearchParams();
     if (filters?.status) params.append('status', filters.status);
     if (filters?.vendorId) params.append('vendorId', filters.vendorId);
     if (filters?.categoryId) params.append('categoryId', filters.categoryId);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
     

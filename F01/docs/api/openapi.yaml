@@ -512,11 +512,11 @@ components:
           example: "active"
         images:
           type: array
-          description: Product image URLs
+          description: Array of local image URLs (served via /api/v1/uploads/; S3 integration deferred to T-703b)
           items:
             type: string
-            format: uri
-          example: ["https://cdn.example.com/images/phone1.jpg", "https://cdn.example.com/images/phone2.jpg"]
+            format: string
+          example: ["/api/v1/uploads/products/vendor123/product456/main.jpg"]
         createdAt:
           type: string
           format: date-time
@@ -1778,17 +1778,17 @@ components:
 
     ProductImagesRequest:
       type: object
-      description: Request to upload product images
+      description: Request to upload product images (local storage implementation; S3 integration deferred to T-703b)
       required:
         - images
       properties:
         images:
           type: array
-          description: Array of presigned S3 image URLs
+          description: Array of local image URLs (served via /api/v1/uploads/)
           items:
             type: string
-            format: uri
-          example: ["https://bucket.s3.amazonaws.com/product1.jpg", "https://bucket.s3.amazonaws.com/product2.jpg"]
+            format: string
+          example: ["/api/v1/uploads/products/vendor123/product456/main.jpg"]
 
     ProductInput:
       type: object

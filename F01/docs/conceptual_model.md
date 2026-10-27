@@ -624,6 +624,13 @@ See `F01/docs/analysis/analysis_review_moderation.md` for detailed analysis and 
 
 ## Diagram Quality Issues Noted (Updated)
 
+> ⚠️ **IMPORTANT WARNING:** The Draw.io diagram (`F01/docs/modeling/conceptual-model.drawio`) contains elements that **conflict with confirmed decisions** recorded in `decisions.md`. The diagram has NOT been updated to reflect all MP-02 through MP-08 decisions. **`decisions.md` is the authoritative source of truth** for all confirmed business rules. Specific conflicts include:
+> - CD-007 (CPF/CNPJ mutual exclusivity) — diagram shows both fields
+> - CD-004 (Role only for Admin) — diagram shows Role as general concept
+> - CD-040 (Address/Contact_Info field restrictions) — diagram may include excluded fields
+> - CD-043 (Category hierarchy rules) — diagram may not reflect cycle prevention requirement
+> Always cross-reference with `decisions.md` before relying on the diagram for implementation.
+
 1. **CONFLICT RESOLVED:** `Main_Info` shows both CPF and CNPJ — **CD-007 confirms mutual exclusivity** (exactly one). Diagram needs correction.
 2. **Inconsistent naming:** `Product_Pic` vs `Product_Pics` (plural on Product), `Orders_Vendor_Products_History` vs `Order_Vendor_Group_History`
 3. **Ambiguous attributes:** `Pic_Product` on Product_Pic, `Product_List`/`Coupons`/`Wallet` on Vendor shown as attributes not relationships — **CD-027 clarifies these are lists**

@@ -137,16 +137,18 @@ export function createProductRoutes({ authService, productService, personRepo, v
   // GET /api/v1/products - List products (public, with optional filters)
   router.get('/', (async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { status, vendorId, categoryId, page, limit } = req.query;
+      const { status, vendorId, categoryId, search, sortBy, page, limit } = req.query;
       
-      const filters: { status?: string; vendorId?: string } = {};
+      const filters: { status?: string; vendorId?: string; search?: string; sortBy?: string } = {};
       const statusStr = getQueryString(status);
       const vendorIdStr = getQueryString(vendorId);
+      const searchStr = getQueryString(search);
+      const sortByStr = getQueryString(sortBy);
       if (statusStr) filters.status = statusStr;
       if (vendorIdStr) filters.vendorId = vendorIdStr;
+      if (searchStr) filters.search = searchStr;
+      if (sortByStr) filters.sortBy = sortByStr;
       
-      // Note: categoryId filter not directly supported in listProducts, but we can add it
-      // For now, use the service's listProducts with status and vendorId
       const products = await productService.listProducts(filters);
       
       // Apply category filter in memory if needed (since service doesn't support it directly)

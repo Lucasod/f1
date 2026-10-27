@@ -5,6 +5,9 @@ import { HomePage } from './features/home/HomePage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { Navigation } from './components/Navigation';
+import { VendorDashboard } from './features/vendor/VendorDashboard';
+import { ProductForm } from './features/vendor/ProductForm';
+import { ProductCatalogPage } from './features/catalog/ProductCatalogPage';
 
 function App() {
   return (
@@ -17,6 +20,10 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             
+            {/* Public product routes */}
+            <Route path="/products" element={<ProductCatalogPage />} />
+            <Route path="/products/:productId" element={<div className="p-4">Product Detail (TODO)</div>} />
+            
             {/* Protected routes for authenticated users */}
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<div className="p-4">Dashboard</div>} />
@@ -25,8 +32,10 @@ function App() {
             
             {/* Vendor only routes */}
             <Route element={<ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']} />}>
-              <Route path="/vendor/dashboard" element={<div className="p-4">Vendor Dashboard</div>} />
+              <Route path="/vendor/dashboard" element={<VendorDashboard />} />
               <Route path="/vendor/products" element={<div className="p-4">Vendor Products</div>} />
+              <Route path="/vendor/products/new" element={<ProductForm />} />
+              <Route path="/vendor/products/:productId/edit" element={<ProductForm />} />
             </Route>
             
             {/* Admin only routes */}
