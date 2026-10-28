@@ -55,6 +55,18 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertIn(".kilo/rules/project-rules.md", instructions)
         self.assertIn(".kilo/rules/autonomous-execution.md", instructions)
 
+    def test_project_has_only_core_agents(self):
+        """The project must keep only the three core agents required for implementation and review."""
+        self.assertEqual(set(self.agent_frontmatters), {"code-developer", "code-reviewer", "code-orchestrator"})
+        for removed_name in ("docs-specialist", "frontend-specialist", "test-engineer"):
+            self.assertNotIn(removed_name, self.agent_frontmatters)
+            self.assertFalse((ROOT / ".kilo/agents" / f"{removed_name}.md").exists())
+
+    def test_core_skills_are_removed(self):
+        """Specialist skills were consolidated into the core developer and must no longer exist as separate skills."""
+        self.assertFalse((ROOT / ".kilo/skills/frontend-design").exists())
+        self.assertFalse((ROOT / ".kilo/skills/mongodb-schema-design").exists())
+
     def test_code_agent_delegation_allowlist(self):
         """Primary `code` agent may only delegate to code-reviewer and code-orchestrator."""
         delegation = self.kilo_config["agent"]["code"]["permission"]["task"]

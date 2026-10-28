@@ -645,6 +645,30 @@ describe('FIPR flow orchestration', () => {
     expect(mockAgents.delegateToCode).toHaveBeenCalledTimes(2); // FIX and IMP
   });
 
+  it('does not mark DOCUPDATE successful when the handler is unavailable', async () => {
+    mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => ({
+      ...executionReport,
+      fiprPhase: req.fiprPhase!,
+      snapshotId: `snapshot-${req.fiprPhase}`,
+    }));
+    mockAgents.reviewWithCodeReviewer.mockResolvedValue({
+      ...reviewReport,
+      verdict: 'PASS',
+      findings: [],
+    });
+
+    const orchestrator = new SequentialTaskOrchestrator({
+      delegateToCode: mockAgents.delegateToCode,
+      reviewWithCodeReviewer: mockAgents.reviewWithCodeReviewer,
+    }, correctionEngine);
+
+    const result = await orchestrator.executeFiprFlow('T-701', [task({ phase: 'P2' })], request);
+
+    expect(result.outcome).toBe('INCONCLUSIVE');
+    expect(result.docUpdatePerformed).toBe(false);
+    expect(result.divergences).toContain('DOCUPDATE phase failed: Doc update handler is not configured');
+  });
+
   it('executes DOCUPDATE phase after REVIEW returns PASS', async () => {
     mockAgents.delegateToCode.mockImplementation(async (req: TaskDelegationRequest) => ({
       ...executionReport,

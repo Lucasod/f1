@@ -696,13 +696,12 @@ export class SequentialTaskOrchestrator {
     confirmedCriteria: string[],
   ): Promise<DocUpdateReport> {
     if (!this.agents.performDocUpdate) {
-      // DOCUPDATE not available - return a default completed report
       return {
         runId: execution.runId,
         taskId: execution.taskId,
-        verdict: 'COMPLETED',
+        verdict: 'FAILED',
         updatedFiles: [],
-        errors: [],
+        errors: ['Doc update handler is not configured'],
       };
     }
 

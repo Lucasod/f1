@@ -32,7 +32,7 @@ describe('SelfCorrectionEngine', () => {
     maxTotalAttempts: 10,
     allowedCorrectionPaths: ['kilo-orchestration/src/', 'kilo-orchestration/tests/'],
     blockedActions: ['chmod', 'chown', 'git push', 'git commit', 'npm publish'],
-    requireReviewFor: ['code-reviewer.md', 'code-reviewer-tests.md'],
+    requireReviewFor: ['code-reviewer.md', 'universal-rules.md', 'project-rules.md', 'autonomous-execution.md'],
     ...overrides,
   });
 
@@ -439,7 +439,7 @@ describe('SelfCorrectionEngine', () => {
     it('should deny files requiring review', () => {
       const failure = engine.getFailuresByCategory('DETERMINISTIC_TEST_BUILD')[0];
       expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agents/code-reviewer.md')).toThrow('not authorized');
-      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/agents/code-reviewer-tests.md')).toThrow('not authorized');
+      expect(() => engine.attemptCorrection(failure.id, 'edit', 'Fix', '.kilo/rules/project-rules.md')).toThrow('not authorized');
     });
   });
 

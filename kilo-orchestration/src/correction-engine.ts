@@ -55,7 +55,6 @@ export class SelfCorrectionEngine {
       ],
       requireReviewFor: [
         'code-reviewer.md',
-        'code-reviewer-tests.md',
         'universal-rules.md',
         'project-rules.md',
         'autonomous-execution.md',

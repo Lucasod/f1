@@ -183,7 +183,7 @@ Use `kilo-orchestration` module's `SelfCorrectionEngine`:
 - Track attempts per finding (max 3) and total attempts (max 10)
 - Only authorize corrections within allowed paths (`kilo-orchestration/src/`, `kilo-orchestration/tests/`)
 - Block actions: `chmod`, `chown`, `git push`, `git commit`, `npm publish`, `docker push`
-- Require review for: `code-reviewer.md`, `code-reviewer-tests.md`, rule files
+- Require review for: `code-reviewer.md`, rule files, and execution contracts
 - Never grant self new permissions or modify allowlists to pass tests
 
 ## HUMAN GATES
