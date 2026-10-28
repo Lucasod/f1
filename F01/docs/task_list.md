@@ -167,6 +167,7 @@
 > - Fixed ProductForm.handleRemoveImage with robust key extraction
 > - **Implemented vendor suspension/reactivation endpoints (FR-VEND-002)**: POST `/api/v1/vendors/:vendorId/suspend` (ADMIN only) and POST `/api/v1/vendors/:vendorId/reactivate` (ADMIN only) with proper state transitions, audit logging, and downstream effects on product visibility
 > - Updated E2E tests to reflect current behavior (vendor needs onboarding before dashboard shows products)
+> - **Implemented vendor onboarding form**: New `/vendor/onboard` route with OnboardingForm component (storeName, slug validation, real-time client-side validation, submission with loading/error/success states, redirect to dashboard). Backend validation aligned: slug normalization (lowercase), min 2 chars for storeName/slug, error code mapping to user-friendly messages. Frontend: trim input, handle 404/401/403/5xx distinctly, accessibility (aria-live for loading). 17 tests added, all passing.
 
 ---
 
@@ -309,7 +310,6 @@ P0 (T-001..T-007)
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).
 
 **Next available independent tasks:**
-- Vendor onboarding form (part of T-704 scope, not yet implemented)
 - T-901 Cart API (blocked by NFR-PERF-003 / Q-014 Redis TTL)
 
 All P5 tasks remain blocked (MAX_AUTHORIZED_PHASE = 4).

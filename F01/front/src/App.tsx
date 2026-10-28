@@ -7,6 +7,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { Navigation } from './components/Navigation';
 import { VendorDashboard } from './features/vendor/VendorDashboard';
 import { ProductForm } from './features/vendor/ProductForm';
+import { OnboardingForm } from './features/vendor/OnboardingForm';
 import { ProductCatalogPage } from './features/catalog/ProductCatalogPage';
 
 function App() {
@@ -36,6 +37,7 @@ function App() {
               <Route path="/vendor/products" element={<div className="p-4">Vendor Products</div>} />
               <Route path="/vendor/products/new" element={<ProductForm />} />
               <Route path="/vendor/products/:productId/edit" element={<ProductForm />} />
+              <Route path="/vendor/onboard" element={<OnboardingForm />} />
             </Route>
             
             {/* Admin only routes */}

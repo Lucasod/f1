@@ -48,15 +48,23 @@ export class Vendor {
       throw new Error('PERSON_ID_REQUIRED');
     }
 
-    if (!data.storeName || data.storeName.trim().length === 0) {
+    const trimmedStoreName = data.storeName.trim();
+    if (!trimmedStoreName || trimmedStoreName.length === 0) {
       throw new Error('STORE_NAME_REQUIRED');
     }
-
-    if (!data.slug || data.slug.trim().length === 0) {
-      throw new Error('SLUG_REQUIRED');
+    if (trimmedStoreName.length < 2) {
+      throw new Error('STORE_NAME_TOO_SHORT');
     }
 
-    if (!validateSlug(data.slug)) {
+    const trimmedSlug = data.slug.trim().toLowerCase();
+    if (!trimmedSlug || trimmedSlug.length === 0) {
+      throw new Error('SLUG_REQUIRED');
+    }
+    if (trimmedSlug.length < 2) {
+      throw new Error('INVALID_SLUG_FORMAT');
+    }
+
+    if (!validateSlug(trimmedSlug)) {
       throw new Error('INVALID_SLUG_FORMAT');
     }
 
@@ -67,6 +75,8 @@ export class Vendor {
 
     return new Vendor({
       ...data,
+      storeName: trimmedStoreName,
+      slug: trimmedSlug,
       commissionPct,
       status: VendorStatus.ACTIVE
     });
@@ -92,10 +102,14 @@ export class Vendor {
   }
 
   updateStoreName(newStoreName: string): void {
-    if (!newStoreName || newStoreName.trim().length === 0) {
+    const trimmedStoreName = newStoreName.trim();
+    if (!trimmedStoreName || trimmedStoreName.length === 0) {
       throw new Error('STORE_NAME_REQUIRED');
     }
-    this.storeName = newStoreName;
+    if (trimmedStoreName.length < 2) {
+      throw new Error('STORE_NAME_TOO_SHORT');
+    }
+    this.storeName = trimmedStoreName;
     this.updatedAt = new Date();
   }
 }

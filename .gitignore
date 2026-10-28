@@ -15,3 +15,5 @@ __pycache__/
 # Test execution artifacts
 F01/front/playwright-report/
 F01/back/test-storage/uploads/
+F01/front/test-results
+F01/front/test-results/.last-run.json

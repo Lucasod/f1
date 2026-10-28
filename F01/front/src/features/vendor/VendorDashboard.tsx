@@ -105,7 +105,13 @@ export function VendorDashboard() {
   if (!state.vendor) {
     return (
       <div className="p-6 text-center">
-        <p className="text-gray-600">Vendor profile not found.</p>
+        <p className="text-gray-600 mb-4">Vendor profile not found.</p>
+        <Link
+          to="/vendor/onboard"
+          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Create your vendor profile
+        </Link>
       </div>
     );
   }
