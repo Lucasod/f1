@@ -1,5 +1,6 @@
 import { useAuth } from '@/app/providers/AuthProvider';
 import { Link, useLocation } from 'react-router-dom';
+import { Button } from '@/components/ui';
 
 export function Navigation() {
   const { user, isAuthenticated, isLoading, hasRole, logout } = useAuth();
@@ -22,6 +23,21 @@ export function Navigation() {
     );
   }
 
+  const navLinkClassName = (isActive: boolean) => `
+    px-3 py-2 rounded-md text-sm font-medium transition-colors
+    ${isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'}
+  `;
+
+  const vendorNavLinkClassName = (isActive: boolean) => `
+    px-3 py-2 rounded-md text-sm font-medium transition-colors
+    ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'}
+  `;
+
+  const adminNavLinkClassName = (isActive: boolean) => `
+    px-3 py-2 rounded-md text-sm font-medium transition-colors
+    ${isActive ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'}
+  `;
+
   return (
     <nav className="bg-white shadow-sm" role="navigation" aria-label="Main navigation">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
@@ -35,11 +51,7 @@ export function Navigation() {
               <li role="none">
                 <Link
                   to="/products"
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    location.pathname === '/products'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
+                  className={navLinkClassName(location.pathname === '/products')}
                   role="menuitem"
                 >
                   Browse Products
@@ -51,11 +63,7 @@ export function Navigation() {
                   <li role="none">
                     <Link
                       to="/vendor/dashboard"
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        location.pathname.startsWith('/vendor')
-                          ? 'bg-green-100 text-green-700'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
+                      className={vendorNavLinkClassName(location.pathname.startsWith('/vendor'))}
                       role="menuitem"
                     >
                       Vendor Dashboard
@@ -64,11 +72,7 @@ export function Navigation() {
                   <li role="none">
                     <Link
                       to="/vendor/products"
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        location.pathname === '/vendor/products'
-                          ? 'bg-green-100 text-green-700'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
+                      className={vendorNavLinkClassName(location.pathname === '/vendor/products')}
                       role="menuitem"
                     >
                       Vendor Products
@@ -82,11 +86,7 @@ export function Navigation() {
                   <li role="none">
                     <Link
                       to="/admin/dashboard"
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        location.pathname.startsWith('/admin')
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
+                      className={adminNavLinkClassName(location.pathname.startsWith('/admin'))}
                       role="menuitem"
                     >
                       Admin Dashboard
@@ -95,11 +95,7 @@ export function Navigation() {
                   <li role="none">
                     <Link
                       to="/admin/users"
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        location.pathname === '/admin/users'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
+                      className={adminNavLinkClassName(location.pathname === '/admin/users')}
                       role="menuitem"
                     >
                       Admin Users
@@ -112,13 +108,14 @@ export function Navigation() {
                 <span className="text-gray-700 text-sm" aria-hidden="true">
                   {user?.name} ({user?.roles.join(', ')})
                 </span>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={logout}
-                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
                   role="menuitem"
                 >
                   Logout
-                </button>
+                </Button>
               </li>
             </>
           ) : (
@@ -126,7 +123,7 @@ export function Navigation() {
               <li role="none">
                 <Link
                   to="/login"
-                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                  className={navLinkClassName(false)}
                   role="menuitem"
                 >
                   Login
@@ -135,7 +132,7 @@ export function Navigation() {
               <li role="none">
                 <Link
                   to="/register"
-                  className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
                   role="menuitem"
                 >
                   Register

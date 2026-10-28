@@ -4,16 +4,20 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { OnboardingForm } from './OnboardingForm';
-import { vendorApi } from '@/shared/api/vendor';
+import { vendorApi, VendorApiException } from '@/shared/api/vendor';
 import type { Vendor } from '@/shared/api/vendor';
 
-// Mock APIs
-vi.mock('@/shared/api/vendor', () => ({
-  vendorApi: {
-    getMe: vi.fn(),
-    onboard: vi.fn(),
-  },
-}));
+// Mock APIs - use actual VendorApiException class for instanceof checks
+vi.mock('@/shared/api/vendor', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    vendorApi: {
+      getMe: vi.fn(),
+      onboard: vi.fn(),
+    },
+  };
+});
 
 const mockedVendorApi = vi.mocked(vendorApi);
 
@@ -93,7 +97,9 @@ describe('OnboardingForm', () => {
 
   describe('Form Rendering', () => {
     beforeEach(() => {
-      mockedVendorApi.getMe.mockRejectedValue(new Error('404 Not Found'));
+      mockedVendorApi.getMe.mockRejectedValue(
+        new VendorApiException('Not Found', 404)
+      );
     });
 
     it('should render form with correct fields and labels', async () => {
@@ -113,7 +119,9 @@ describe('OnboardingForm', () => {
 
   describe('Validation', () => {
     beforeEach(() => {
-      mockedVendorApi.getMe.mockRejectedValue(new Error('404 Not Found'));
+      mockedVendorApi.getMe.mockRejectedValue(
+        new VendorApiException('Not Found', 404)
+      );
     });
 
     it('should show error for empty storeName on blur', async () => {
@@ -263,7 +271,9 @@ describe('OnboardingForm', () => {
 
   describe('Submission', () => {
     beforeEach(() => {
-      mockedVendorApi.getMe.mockRejectedValue(new Error('404 Not Found'));
+      mockedVendorApi.getMe.mockRejectedValue(
+        new VendorApiException('Not Found', 404)
+      );
     });
 
     it('should call vendorApi.onboard with correct payload on valid submission', async () => {
@@ -350,7 +360,9 @@ describe('OnboardingForm', () => {
 
     it('should display error message on submission failure', async () => {
       // Mock rejection with error code that mapBackendError recognizes
-      mockedVendorApi.onboard.mockRejectedValue(new Error('SLUG_ALREADY_EXISTS: Slug already taken'));
+      mockedVendorApi.onboard.mockRejectedValue(
+        new VendorApiException('Slug already taken', 400, 'SLUG_ALREADY_EXISTS')
+      );
 
       renderForm();
 
@@ -368,7 +380,7 @@ describe('OnboardingForm', () => {
       await userEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toBeInTheDocument();
       });
       expect(screen.getByText(/this store slug is already taken/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
@@ -377,7 +389,9 @@ describe('OnboardingForm', () => {
     it('should allow retry after dismissing error', async () => {
       // First call fails with recognized error code, second succeeds
       mockedVendorApi.onboard
-        .mockRejectedValueOnce(new Error('INVALID_SLUG_FORMAT: Invalid slug format'))
+        .mockRejectedValueOnce(
+          new VendorApiException('Invalid slug format', 400, 'INVALID_SLUG_FORMAT')
+        )
         .mockResolvedValueOnce({
           vendor: createVendor({ storeName: 'My Awesome Store', slug: 'my-awesome-store' }),
         });

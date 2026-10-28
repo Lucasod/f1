@@ -681,7 +681,62 @@ Decisions validated against confirmed requirements:
 
 ---
 
-## MP-15: T-703a Local Image Storage Implementation — FS-01 Marketplace
+## MP-17: Visual Polish + Fix Phase — Frontend Design System Implementation and Review Finding Resolution
+**Date:** 2026-10-28
+**Objective:** Implement frontend visual polish (design system + 10 screens) and fix 8 review findings from MP-16
+**Scope:** F01/front/src/components/ui/ (8 new components), 10 updated screens, F01/front/src/shared/types/person.ts, F01/front/src/shared/api/vendor.ts, F01/back/scripts/seed.ts, F01/back/src/modules/vendor/vendor.routes.test.ts
+
+### Results
+- **FIX Phase (8 findings resolved):**
+  - CR-001: Created `VendorApiException` class preserving HTTP status/error code for typed error handling
+  - CR-002: Corrected misleading test names in vendor.routes.test.ts ("ownership isolation" → "requires VENDOR role")
+  - CR-003: Simplified redundant environment validation in seed.ts
+  - CR-004: Renamed `generateDeterministicId` → `generateDeterministicHashId` (accurate naming)
+  - CR-005: Documented deterministic ID rationale for seed idempotency
+  - CR-006: Configuration-based commissionPct via SEED_COMMISSION_PCT env var
+  - CR-007: Created `PersonRole` enum; RegisterForm uses `PersonRole.CONSUMER` instead of string literal
+  - CR-008: Documented test admin creation workarounds as accepted practice
+
+- **IMP Phase (Visual Polish):**
+  - Created 8 shared UI components: Button, Input, Card, Badge, Spinner, EmptyState, ErrorAlert, Modal
+  - Updated 10 priority screens with design system: ProductCard, ProductFilters, ProductCatalogPage, LoginForm, RegisterForm, VendorDashboard, ProductForm, OnboardingForm, Navigation, HomePage
+  - Design system: Blue primary (#2563eb), semantic colors, system font stack, 4px spacing scale, rounded-lg (8px), shadows, 150-200ms transitions, accessibility (focus-visible, ARIA, reduced motion)
+  - Zero new dependencies (Tailwind CSS v4)
+
+- **REVIEW Phase:** Independent code review completed — all 6 findings (CR-001 to CR-006) resolved; re-review verdict: PASS
+
+### Evidence
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| F01/front/src/shared/api/vendor.ts | ~80 modified | VendorApiException + typed error throwing |
+| F01/back/src/modules/vendor/vendor.routes.test.ts | ~20 modified | Test name corrections |
+| F01/back/scripts/seed.ts | ~100 modified | Env guard, function rename, config, documentation |
+| F01/front/src/shared/types/person.ts (NEW) | ~20 created | PersonRole enum |
+| F01/front/src/features/auth/RegisterForm.tsx | ~30 modified | Use PersonRole enum |
+| F01/front/src/components/ui/*.tsx (8 files) | ~1200 created | Design system components |
+| F01/front/src/components/ui/index.ts (NEW) | ~30 created | Barrel export |
+| 10 screen components | ~800 modified | Apply design system |
+| F01/front/src/components/ui/*.test.tsx (8 files) | ~600 created | Unit tests for UI components |
+
+### Verification Results
+| Suite | Tests | Status |
+|-------|-------|--------|
+| Backend (Vitest) | 314/314 | ✅ PASS |
+| Frontend (Vitest) | 156/156 | ✅ PASS |
+| Frontend TypeScript | — | ✅ PASS |
+| Frontend Vite Build | — | ✅ PASS |
+
+### Decisions Preserved
+All 74 CD-001..CD-074 remain confirmed. No decisions reverted.
+
+### New Technical Decisions (Documented for Traceability)
+- **Design System Implementation**: Component library pattern with polymorphic `asChild` for Button, barrel exports, semantic color tokens, 4px spacing scale, accessible ARIA patterns. No new dependencies.
+- **Error Handling Standardization**: `VendorApiException` pattern for typed API errors with status/code preservation.
+
+### Files Modified
+- `/home/workstation/source/f1/F01/docs/task_list.md` — T-704/T-705 visual polish notes, Immediate Next Action updated
+- `/home/workstation/source/f1/F01/docs/mp_log.md` — This entry appended
+- `/home/workstation/source/f1/docs/agent_runs/orch-audit-visual-polish-2026-10-28.md` — Finalized with DOCUPDATE section
 
 **Date:** 2026-10-27
 **Objective:** Implement T-703a (local persistent image storage) per validated analysis; defer S3 integration (T-703b)

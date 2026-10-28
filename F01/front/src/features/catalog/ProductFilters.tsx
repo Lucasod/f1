@@ -1,3 +1,5 @@
+import { Input, Select } from '@/components/ui';
+
 interface ProductFiltersProps {
   categories: { id: string; name: string }[];
   selectedCategory: string | null;
@@ -14,7 +16,7 @@ const SORT_OPTIONS = [
   { value: 'price_asc', label: 'Price: Low to High' },
   { value: 'price_desc', label: 'Price: High to Low' },
   { value: 'stock_status', label: 'In-Stock First' },
-] as const;
+];
 
 export function ProductFilters({
   categories,
@@ -28,57 +30,40 @@ export function ProductFilters({
   return (
     <div data-testid="product-filters" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div className="lg:col-span-2">
-        <label htmlFor="search" className="sr-only">
-          Search products
-        </label>
-        <input
+        <Input
           id="search"
           type="search"
           placeholder="Search products..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
           aria-label="Search products"
+          label="Search"
         />
       </div>
 
       <div>
-        <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-          Category
-        </label>
-        <select
+        <Select
           id="category"
+          label="Category"
           value={selectedCategory || ''}
           onChange={(e) => onCategoryChange(e.target.value || null)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+          options={[
+            { value: '', label: 'All Categories' },
+            ...categories.map((category) => ({ value: category.id, label: category.name })),
+          ]}
           aria-label="Category"
-        >
-          <option value="">All Categories</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       <div>
-        <label htmlFor="sort" className="block text-sm font-medium text-gray-700 mb-1">
-          Sort by
-        </label>
-        <select
+        <Select
           id="sort"
+          label="Sort by"
           value={sortBy}
           onChange={(e) => onSortChange(e.target.value as typeof sortBy)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+          options={SORT_OPTIONS}
           aria-label="Sort by"
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        />
       </div>
     </div>
   );

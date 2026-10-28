@@ -126,6 +126,8 @@
 | T-601 | Backend: User registration/login | JWT issue/refresh, password hash (CD-010) | T-403, T-501 | API works, tests pass | ✅ completed |
 | T-602 | Backend: Role guards & permission middleware | Protect routes per permission matrix (CD-004: Admin only; Consumer/Vendor separate) | T-601, T-103 | All endpoints guarded | ✅ completed |
 | T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E (manual checklist executed, API-level E2E verified) | ✅ completed |
+
+> **Note on T-603:** Registration now defaults to CONSUMER role without role selector; backend rejects ADMIN (403) and defaults VENDOR → CONSUMER.
 | T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ✅ completed |
 
 ---
@@ -146,7 +148,13 @@
 > 4. ✅ Image dimension validation implemented (minimum 800x800px, configurable)
 > 5. ✅ Automated cleanup for orphaned uploads implemented (scheduled + on-demand)
 | T-704 | Frontend: Vendor dashboard | Onboarding form, product management | T-502, T-701, T-702 | Dashboard functional | ✅ completed |
+
+> **Note on T-704 (visual polish completed 2026-10-28):** Vendor dashboard updated with design system components (Card, Badge, EmptyState, Spinner, ErrorAlert, ConfirmDialog, Button). Metric cards, product table with skeletons, accessible delete confirmation implemented.
+
+> **Note on T-704:** Vendor onboarding flow is separate from registration; users register as CONSUMER then complete onboarding to become VENDOR.
 | T-705 | Frontend: Product catalog (consumer) | Browse, search, filter, sort (CD-013 display ordering) | T-502, T-702 | Catalog works | ✅ completed_with_limitations |
+
+> **Note on T-705 (visual polish completed 2026-10-28):** Product catalog updated with design system components (Spinner, ErrorAlert, EmptyState, Button). Loading skeletons, professional empty states, retry UX implemented.
 
 > **Note on T-705:** The consumer product catalog was implemented with the following features:
 > - Product listing page with pagination and infinite scroll
@@ -308,6 +316,17 @@ P0 (T-001..T-007)
 **MP-07 Stage C:** Review moderation (T-117) — IN PROGRESS, needs human decision on 7 sub-questions.
 
 **MP-07 Stage D:** Stripe Connect test mode validation — validates Stage 6 (Payments).
+
+**Visual Polish Completed (this run):**
+- 8 shared UI components created (Button, Input, Card, Badge, Spinner, EmptyState, ErrorAlert, Modal)
+- 10 priority screens updated with design system (ProductCard, ProductFilters, ProductCatalogPage, LoginForm, RegisterForm, VendorDashboard, ProductForm, OnboardingForm, Navigation, HomePage)
+- Design system: color palette, typography, spacing (4px scale), border radius, shadows, transitions (150-200ms), accessibility (focus-visible, ARIA, reduced motion)
+
+**Recently Completed (this run):**
+- Public registration: Role selector removed, defaults to CONSUMER; backend rejects ADMIN (403), defaults VENDOR→CONSUMER
+- Catalog /products: Role-aware empty state messages (vendor with/without profile, consumer, filtered views)
+- Development seed: `npm run seed` creates 6 categories, 3 onboarded vendors, 12 products with deterministic IDs
+- Fix phase: VendorApiException typed errors, PersonRole enum, seed script improvements, test name corrections
 
 **Next available independent tasks:**
 - T-901 Cart API (blocked by NFR-PERF-003 / Q-014 Redis TTL)

@@ -4,7 +4,7 @@ import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
-import { InMemoryPersonRepository } from '../person/person.domain';
+import { InMemoryPersonRepository, Person } from '../person/person.domain';
 import { InMemoryProductRepository, InMemoryCategoryRepository, ProductStatus } from './product.domain';
 import { AuthService } from '../auth/auth.service';
 import { ProductService } from './product.service';
@@ -16,6 +16,7 @@ import { VendorService } from '../vendor/vendor.service';
 import { createVendorRoutes } from '../vendor/vendor.routes';
 import { config } from '../../config';
 import { LocalStorageAdapter } from '../../shared/storage/local.adapter';
+import { hashPassword } from '../auth/credential.domain';
 
 // Valid test CPF/CNPJ values (these pass validation)
 const VALID_CPF_1 = '52998224725';
@@ -88,7 +89,7 @@ describe('Product Routes', () => {
       vendorRepo
     }));
 
-    // Register vendor 1
+    // Register vendor 1 (as CONSUMER, then onboard to become vendor)
     const vendorRegister = await request(app)
       .post('/api/v1/auth/register')
       .send({
@@ -97,7 +98,7 @@ describe('Product Routes', () => {
         taxIdValue: VALID_CNPJ_1,
         email: 'john@vendor.com',
         password: testPassword,
-        role: PersonRole.VENDOR
+        role: PersonRole.CONSUMER
       });
     expect(vendorRegister.status).toBe(201);
     vendorToken = vendorRegister.body.tokens.accessToken;
@@ -114,7 +115,17 @@ describe('Product Routes', () => {
     expect(vendorOnboard.status).toBe(201);
     vendorId = vendorOnboard.body.vendor.id;
 
-    // Register vendor 2 (for ownership tests)
+    // Login again to get fresh token with VENDOR role
+    const vendorLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'john@vendor.com',
+        password: testPassword
+      });
+    expect(vendorLogin.status).toBe(200);
+    vendorToken = vendorLogin.body.tokens.accessToken;
+
+    // Register vendor 2 (for ownership tests, as CONSUMER then onboard)
     const vendor2Register = await request(app)
       .post('/api/v1/auth/register')
       .send({
@@ -123,7 +134,7 @@ describe('Product Routes', () => {
         taxIdValue: VALID_CNPJ_2,
         email: 'jane@vendor.com',
         password: testPassword,
-        role: PersonRole.VENDOR
+        role: PersonRole.CONSUMER
       });
     expect(vendor2Register.status).toBe(201);
     vendor2Token = vendor2Register.body.tokens.accessToken;
@@ -140,6 +151,16 @@ describe('Product Routes', () => {
     expect(vendor2Onboard.status).toBe(201);
     vendor2Id = vendor2Onboard.body.vendor.id;
 
+    // Login again to get fresh token with VENDOR role
+    const vendor2Login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'jane@vendor.com',
+        password: testPassword
+      });
+    expect(vendor2Login.status).toBe(200);
+    vendor2Token = vendor2Login.body.tokens.accessToken;
+
     // Register consumer
     const consumerRegister = await request(app)
       .post('/api/v1/auth/register')
@@ -154,19 +175,26 @@ describe('Product Routes', () => {
     expect(consumerRegister.status).toBe(201);
     consumerToken = consumerRegister.body.tokens.accessToken;
 
-    // Register admin
-    const adminRegister = await request(app)
-      .post('/api/v1/auth/register')
+    // Create admin user directly in repository (bypassing register API which rejects ADMIN)
+    const adminPerson = Person.create({
+      name: 'Admin User',
+      mainInfo: { name: 'Admin User', taxIdType: 'CPF', taxIdValue: VALID_CPF_2 },
+      contactInfos: [{ type: 'email', value: 'admin@example.com', isPrimary: true }],
+      addresses: []
+    });
+    adminPerson.addRole(PersonRole.ADMIN);
+    adminPerson.setCredential(await hashPassword(testPassword));
+    await personRepo.save(adminPerson);
+    
+    // Login to get tokens
+    const adminLogin = await request(app)
+      .post('/api/v1/auth/login')
       .send({
-        name: 'Admin User',
-        taxIdType: 'CPF',
-        taxIdValue: VALID_CPF_2,
         email: 'admin@example.com',
-        password: testPassword,
-        role: PersonRole.ADMIN
+        password: testPassword
       });
-    expect(adminRegister.status).toBe(201);
-    adminToken = adminRegister.body.tokens.accessToken;
+    expect(adminLogin.status).toBe(200);
+    adminToken = adminLogin.body.tokens.accessToken;
 
     // Create test category (via admin)
     const categoryResponse = await request(app)
@@ -387,7 +415,7 @@ describe('Product Routes', () => {
     let suspendedProductId: string;
 
     beforeEach(async () => {
-      // Register a new vendor to suspend (use a unique CNPJ)
+      // Register a new vendor to suspend (use a unique CNPJ, as CONSUMER then onboard)
       const suspendedVendorRegister = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -396,7 +424,7 @@ describe('Product Routes', () => {
           taxIdValue: '12345678000195', // Unique valid CNPJ for testing
           email: 'suspended@vendor.com',
           password: testPassword,
-          role: PersonRole.VENDOR
+          role: PersonRole.CONSUMER
         });
       expect(suspendedVendorRegister.status).toBe(201);
       suspendedVendorToken = suspendedVendorRegister.body.tokens.accessToken;
@@ -410,6 +438,16 @@ describe('Product Routes', () => {
         });
       expect(suspendedVendorOnboard.status).toBe(201);
       suspendedVendorId = suspendedVendorOnboard.body.vendor.id;
+
+      // Login again to get fresh token with VENDOR role
+      const suspendedVendorLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'suspended@vendor.com',
+          password: testPassword
+        });
+      expect(suspendedVendorLogin.status).toBe(200);
+      suspendedVendorToken = suspendedVendorLogin.body.tokens.accessToken;
 
       // Create a product for the suspended vendor BEFORE suspending (using vendor token)
       const productResponse = await request(app)
@@ -1798,7 +1836,7 @@ describe('Product Routes', () => {
       expect(response.body.error).toBe('PRODUCT_OWNERSHIP_VIOLATION');
     });
 
-    it('should return 404 for vendor without vendor profile', async () => {
+    it('should return 403 for vendor without vendor profile', async () => {
       // Register a new vendor user but don't onboard them
       const newVendorRegister = await request(app)
         .post('/api/v1/auth/register')
@@ -1808,7 +1846,7 @@ describe('Product Routes', () => {
           taxIdValue: '12345678000195',
           email: 'noprofile@vendor.com',
           password: testPassword,
-          role: PersonRole.VENDOR
+          role: PersonRole.CONSUMER
         });
       const noProfileToken = newVendorRegister.body.tokens.accessToken;
       
@@ -1819,8 +1857,8 @@ describe('Product Routes', () => {
         .set('Authorization', `Bearer ${noProfileToken}`)
         .attach('image', jpegBuffer, 'test.jpg');
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
     });
   });
 

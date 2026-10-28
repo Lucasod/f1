@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { vendorApi, Vendor } from '@/shared/api/vendor';
+import { vendorApi, Vendor, VendorApiException } from '@/shared/api/vendor';
 import { productApi, Product } from '@/shared/api/product';
+import { Button, Card, Badge, EmptyState, EmptyStateIcons, Spinner, ErrorAlert, ConfirmDialog, CardContent } from '@/components/ui';
 
 interface DashboardState {
   vendor: Vendor | null;
@@ -17,6 +18,8 @@ export function VendorDashboard() {
     isLoading: true,
     error: null,
   });
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ productId: string; productName: string } | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -34,10 +37,29 @@ export function VendorDashboard() {
         error: null,
       });
     } catch (error) {
+      let errorMessage = 'Error loading dashboard';
+      if (error instanceof VendorApiException) {
+        if (error.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (error.status === 403) {
+          window.location.href = '/access-denied';
+          return;
+        }
+        if (error.status === 404) {
+          // No vendor profile
+          errorMessage = 'Vendor profile not found';
+        } else {
+          errorMessage = error.message || 'Error loading dashboard';
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Error loading dashboard',
+        error: errorMessage,
       }));
     }
   }, []);
@@ -45,6 +67,16 @@ export function VendorDashboard() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  const getStatusVariant = (status: Product['status']): 'success' | 'warning' | 'error' | 'neutral' => {
+    const variants: Record<Product['status'], 'success' | 'warning' | 'error' | 'neutral'> = {
+      active: 'success',
+      inactive: 'neutral',
+      out_of_stock: 'warning',
+      discontinued: 'error',
+    };
+    return variants[status] || 'neutral';
+  };
 
   const getStatusLabel = (status: Product['status']) => {
     const labels: Record<Product['status'], string> = {
@@ -54,16 +86,6 @@ export function VendorDashboard() {
       discontinued: 'Discontinued',
     };
     return labels[status] || status;
-  };
-
-  const getStatusClass = (status: Product['status']) => {
-    const classes: Record<Product['status'], string> = {
-      active: 'bg-green-100 text-green-800',
-      inactive: 'bg-gray-100 text-gray-800',
-      out_of_stock: 'bg-yellow-100 text-yellow-800',
-      discontinued: 'bg-red-100 text-red-800',
-    };
-    return classes[status] || 'bg-gray-100 text-gray-800';
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -76,43 +98,42 @@ export function VendorDashboard() {
     }
   };
 
+  const handleDeleteClick = (productId: string, productName: string) => {
+    setDeleteConfirm({ productId, productName });
+  };
+
   if (state.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" role="status" aria-live="polite">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-        <span className="sr-only">Loading dashboard...</span>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+        <div className="flex items-center justify-center min-h-[400px]" role="status" aria-live="polite">
+          <Spinner size="lg" label="Loading dashboard..." />
+        </div>
+      </main>
     );
   }
 
   if (state.error) {
     return (
-      <div className="p-6 text-center">
-        <div className="max-w-md mx-auto">
-          <h1 className="text-xl font-semibold text-red-600 mb-2">Error loading dashboard</h1>
-          <p className="text-gray-600 mb-4">{state.error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+        <ErrorAlert
+          title="Error Loading Dashboard"
+          message={state.error}
+          action={{ label: 'Try Again', onClick: () => window.location.reload() }}
+        />
+      </main>
     );
   }
 
   if (!state.vendor) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-gray-600 mb-4">Vendor profile not found.</p>
-        <Link
-          to="/vendor/onboard"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Create your vendor profile
-        </Link>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+        <EmptyState
+          title="Vendor profile not found"
+          description="You need to create a vendor profile to access the dashboard."
+          icon={EmptyStateIcons.profile}
+          action={{ label: 'Create Vendor Profile', onClick: () => window.location.href = '/vendor/onboard' }}
+        />
+      </main>
     );
   }
 
@@ -128,41 +149,37 @@ export function VendorDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{state.vendor.storeName}</h1>
-          <h2 className="text-gray-500 mt-1 text-xl font-medium">Vendor Dashboard</h2>
+          <p className="text-gray-500 mt-1 text-xl font-medium">Vendor Dashboard</p>
         </div>
-        <Link
-          to="/vendor/products/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Add Product
+        <Link to="/vendor/products/new">
+          <Button leftIcon={<span aria-hidden="true">+</span>}>
+            Add Product
+          </Button>
         </Link>
       </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard title="Total Products" value={totalProducts} icon="📦" />
-        <MetricCard title="Active" value={activeProducts} icon="✅" className="border-l-4 border-green-500" />
-        <MetricCard title="Out of Stock" value={outOfStockProducts} icon="⚠️" className="border-l-4 border-yellow-500" />
-        <MetricCard title="Inactive" value={inactiveProducts} icon="⏸️" className="border-l-4 border-gray-400" />
+        <MetricCard title="Total Products" value={totalProducts} />
+        <MetricCard title="Active" value={activeProducts} variant="success" />
+        <MetricCard title="Out of Stock" value={outOfStockProducts} variant="warning" />
+        <MetricCard title="Inactive" value={inactiveProducts} variant="neutral" />
       </div>
 
       {/* Products Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <Card variant="bordered" padding="none">
         {state.products.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="text-4xl mb-4">📦</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No products yet</h2>
-            <p className="text-gray-500 mb-6">Start by adding your first product.</p>
-            <Link
-              to="/vendor/products/new"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              + Add Product
-            </Link>
-          </div>
+          <CardContent className="p-12">
+            <EmptyState
+              title="No products yet"
+              description="Start by adding your first product."
+              icon={EmptyStateIcons.products}
+              action={{ label: 'Add Product', onClick: () => window.location.href = '/vendor/products/new' }}
+            />
+          </CardContent>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full" role="table">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
@@ -184,7 +201,7 @@ export function VendorDashboard() {
                             className="h-12 w-12 rounded-lg object-cover"
                           />
                         ) : (
-                          <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                          <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400" aria-hidden="true">
                             📷
                           </div>
                         )}
@@ -205,24 +222,25 @@ export function VendorDashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(product.status)}`}>
+                      <Badge variant={getStatusVariant(product.status)} size="sm" dot>
                         {getStatusLabel(product.status)}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link to={`/vendor/products/${product.id}/edit`} className="text-blue-600 hover:text-blue-900 mr-3">
+                      <Link
+                        to={`/vendor/products/${product.id}/edit`}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                      >
                         Edit
                       </Link>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete "${product.name}"? This action cannot be undone.`)) {
-                            handleDeleteProduct(product.id);
-                          }
-                        }}
-                        className="text-red-600 hover:text-red-900"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteClick(product.id, product.name)}
+                        className="text-red-600 hover:text-red-900 hover:bg-red-50"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -230,21 +248,57 @@ export function VendorDashboard() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
+
+      <ConfirmDialog
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            handleDeleteProduct(deleteConfirm.productId);
+            setDeleteConfirm(null);
+          }
+        }}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${deleteConfirm?.productName}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </main>
   );
 }
 
-function MetricCard({ title, value, icon, className = '' }: { title: string; value: number; icon: string; className?: string }) {
+type MetricCardVariant = 'default' | 'success' | 'warning' | 'neutral';
+
+interface MetricCardProps {
+  title: string;
+  value: number;
+  variant?: MetricCardVariant;
+}
+
+function MetricCard({ title, value, variant = 'default' }: MetricCardProps) {
+  const variantStyles: Record<MetricCardVariant, string> = {
+    default: 'border-l-4 border-blue-500',
+    success: 'border-l-4 border-green-500',
+    warning: 'border-l-4 border-yellow-500',
+    neutral: 'border-l-4 border-gray-400',
+  };
+
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${className}`}>
+    <Card variant="bordered" padding="md" className={variantStyles[variant]}>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
           <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
         </div>
-        <span className="text-3xl">{icon}</span>
+        <div className="text-3xl" aria-hidden="true">
+          {variant === 'success' && '✅'}
+          {variant === 'warning' && '⚠️'}
+          {variant === 'neutral' && '⏸️'}
+          {variant === 'default' && '📦'}
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }

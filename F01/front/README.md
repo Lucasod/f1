@@ -6,7 +6,7 @@ Frontend application for the FS-01 Marketplace, built with React, Vite, and Type
 
 This is a single-page application (SPA) for the FS-01 marketplace platform. It provides user authentication, role-based access control, and a foundation for consumer, vendor, and admin interfaces.
 
-**Stack**: React 18 · Vite 5 · TypeScript 5 · React Router 7 · Zustand 5 · Vitest · Playwright
+**Stack**: React 18 · Vite 6 · TypeScript 5 · React Router 7 · Zustand 5 · Vitest · Playwright
 
 ## Project Structure
 
@@ -32,10 +32,10 @@ src/
 | Category | Technology | Version |
 |----------|------------|---------|
 | Framework | React | 18.3 |
-| Build Tool | Vite | 5.4 |
+| Build Tool | Vite | 6.4 |
 | Routing | React Router | 7.18 |
 | State Management | Zustand | 5.0 |
-| Unit Testing | Vitest + JSDOM + Testing Library | 2.1 |
+| Unit Testing | Vitest + JSDOM + Testing Library | 4.1 |
 | E2E Testing | Playwright | 1.47 |
 | Language | TypeScript | 5.6 |
 

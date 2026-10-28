@@ -15,15 +15,29 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
     try {
       const { name, taxIdType, taxIdValue, email, password, role } = req.body as RegisterInput;
 
-      if (!name || !taxIdType || !taxIdValue || !email || !password || !role) {
+      if (!name || !taxIdType || !taxIdValue || !email || !password) {
         return res.status(400).json({ error: 'MISSING_FIELDS', message: 'All fields are required' });
       }
 
-      if (!Object.values(PersonRole).includes(role)) {
-        return res.status(400).json({ error: 'INVALID_ROLE', message: 'Invalid role' });
+      let determinedRole: PersonRole = PersonRole.CONSUMER;
+
+      if (role) {
+        if (!Object.values(PersonRole).includes(role)) {
+          return res.status(400).json({ error: 'INVALID_ROLE', message: 'Invalid role' });
+        }
+
+        if (role === PersonRole.ADMIN) {
+          return res.status(403).json({ error: 'FORBIDDEN_ROLE', message: 'Admin cannot be created via public registration' });
+        }
+
+        if (role === PersonRole.VENDOR) {
+          determinedRole = PersonRole.CONSUMER;
+        } else if (role === PersonRole.CONSUMER) {
+          determinedRole = PersonRole.CONSUMER;
+        }
       }
 
-      const result = await authService.register({ name, taxIdType, taxIdValue, email, password, role });
+      const result = await authService.register({ name, taxIdType, taxIdValue, email, password, role: determinedRole });
 
       return res.status(201).json({
         person: {

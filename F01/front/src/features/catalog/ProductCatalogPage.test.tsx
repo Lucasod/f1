@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProductCatalogPage } from './ProductCatalogPage';
 import { productApi } from '@/shared/api/product';
 import { ProductListResponse } from '@/shared/api/product';
+import { AuthProvider } from '@/app/providers/AuthProvider';
 
 vi.mock('@/shared/api/product', () => ({
   productApi: {
@@ -72,9 +73,11 @@ const createWrapper = () => {
   
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        {children}
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          {children}
+        </MemoryRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 };

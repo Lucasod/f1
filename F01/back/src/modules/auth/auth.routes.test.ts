@@ -44,7 +44,7 @@ describe('Auth Routes', () => {
       expect(response.body.tokens.refreshToken).toBeDefined();
     });
 
-    it('should register a new Vendor and return 201', async () => {
+    it('should register with VENDOR role defaulting to CONSUMER and return 201', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -57,7 +57,24 @@ describe('Auth Routes', () => {
         });
 
       expect(response.status).toBe(201);
-      expect(response.body.person.roles).toContain(PersonRole.VENDOR);
+      expect(response.body.person.roles).toContain(PersonRole.CONSUMER);
+      expect(response.body.person.roles).not.toContain(PersonRole.VENDOR);
+    });
+
+    it('should reject ADMIN role registration with 403', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Admin User',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'admin@example.com',
+          password: testPassword,
+          role: PersonRole.ADMIN
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN_ROLE');
     });
 
     it('should return 400 for missing fields', async () => {
@@ -199,7 +216,7 @@ describe('Auth Routes', () => {
           taxIdValue: '12345678000190',
           email: 'jane@vendor.com',
           password: testPassword,
-          role: PersonRole.VENDOR
+          role: PersonRole.CONSUMER
         });
 
       expect(response.status).toBe(400);

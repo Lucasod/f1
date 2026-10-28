@@ -5,7 +5,7 @@ import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
 import { VendorDashboard } from './VendorDashboard';
 import { productApi, Product } from '@/shared/api/product';
-import { vendorApi, Vendor } from '@/shared/api/vendor';
+import { vendorApi, Vendor, VendorApiException } from '@/shared/api/vendor';
 
 // Mock the API modules
 vi.mock('@/shared/api/product', () => ({
@@ -14,11 +14,15 @@ vi.mock('@/shared/api/product', () => ({
   },
 }));
 
-vi.mock('@/shared/api/vendor', () => ({
-  vendorApi: {
-    getMe: vi.fn(),
-  },
-}));
+vi.mock('@/shared/api/vendor', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    vendorApi: {
+      getMe: vi.fn(),
+    },
+  };
+});
 
 const mockGetMyProducts = vi.mocked(productApi.getMyProducts);
 const mockGetMe = vi.mocked(vendorApi.getMe);
@@ -194,7 +198,7 @@ describe('VendorDashboard', () => {
   });
 
   it('should handle API error gracefully', async () => {
-    mockGetMyProducts.mockRejectedValue(new Error('API Error'));
+    mockGetMyProducts.mockRejectedValue(new VendorApiException('API Error', 500));
 
     renderDashboard();
 

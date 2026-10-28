@@ -1,40 +1,42 @@
 import { Link } from 'react-router-dom';
 import { Product } from '@/shared/api/product';
+import { Badge } from '@/components/ui';
+import { Card } from '@/components/ui';
 
 interface ProductCardProps {
   product: Product;
 }
 
-function getStatusBadge(status: Product['status'], quantity: number) {
+function getStatusVariant(status: Product['status'], quantity: number): 'success' | 'error' | 'neutral' {
   if (quantity === 0 || status === 'out_of_stock') {
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-        Out of Stock
-      </span>
-    );
+    return 'error';
   }
   
   switch (status) {
     case 'active':
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          In Stock
-        </span>
-      );
+      return 'success';
     case 'inactive':
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-          Inactive
-        </span>
-      );
     case 'discontinued':
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-          Discontinued
-        </span>
-      );
+      return 'neutral';
     default:
-      return null;
+      return 'neutral';
+  }
+}
+
+function getStatusLabel(status: Product['status'], quantity: number): string {
+  if (quantity === 0 || status === 'out_of_stock') {
+    return 'Out of Stock';
+  }
+  
+  switch (status) {
+    case 'active':
+      return 'In Stock';
+    case 'inactive':
+      return 'Inactive';
+    case 'discontinued':
+      return 'Discontinued';
+    default:
+      return 'Unknown';
   }
 }
 
@@ -47,11 +49,16 @@ function getImageUrl(images: string[]): string {
 
 export function ProductCard({ product }: ProductCardProps) {
   const imageUrl = getImageUrl(product.images);
-  const statusBadge = getStatusBadge(product.status, product.quantity);
+  const statusVariant = getStatusVariant(product.status, product.quantity);
+  const statusLabel = getStatusLabel(product.status, product.quantity);
 
   return (
-    <article className="group bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
-      <Link to={`/products/${product.id}`} className="block focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg">
+    <Card variant="bordered" padding="none" className="group overflow-hidden hover:shadow-md transition-shadow duration-200" role="article">
+      <Link
+        to={`/products/${product.id}`}
+        className="block focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-xl"
+        aria-label={`View ${product.name} details`}
+      >
         <div className="aspect-square bg-gray-100 relative overflow-hidden">
           <img
             src={imageUrl}
@@ -60,7 +67,9 @@ export function ProductCard({ product }: ProductCardProps) {
             loading="lazy"
           />
           <div className="absolute top-2 right-2">
-            {statusBadge}
+            <Badge variant={statusVariant} size="sm" dot>
+              {statusLabel}
+            </Badge>
           </div>
         </div>
         
@@ -73,6 +82,6 @@ export function ProductCard({ product }: ProductCardProps) {
           </p>
         </div>
       </Link>
-    </article>
+    </Card>
   );
 }

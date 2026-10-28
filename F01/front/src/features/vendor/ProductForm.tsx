@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productApi, Product, Category, CreateProductInput, UpdateProductInput } from '@/shared/api/product';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { Input, Textarea, Select, Button, Card, ErrorAlert, Spinner, Badge } from '@/components/ui';
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'out_of_stock', label: 'Out of Stock' },
+  { value: 'discontinued', label: 'Discontinued' },
+];
 
 export function ProductForm() {
   const { productId } = useParams<{ productId?: string }>();
@@ -226,6 +234,7 @@ export function ProductForm() {
   };
 
   const handleCancel = () => {
+    // Revoke all blob URLs from formData.images (includes pending images' blob URLs)
     (formData.images || []).forEach(img => {
       if (img.startsWith('blob:')) {
         URL.revokeObjectURL(img);
@@ -236,12 +245,18 @@ export function ProductForm() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" role="status" aria-live="polite">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-        <span className="sr-only">Loading...</span>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="status" aria-live="polite">
+        <div className="flex items-center justify-center min-h-[300px]">
+          <Spinner size="lg" label="Loading..." />
+        </div>
       </div>
     );
   }
+
+  const categoryOptions = [
+    { value: '', label: 'Select a category' },
+    ...categories.map(cat => ({ value: cat.id, label: cat.name })),
+  ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -249,190 +264,160 @@ export function ProductForm() {
         <h1 className="text-3xl font-bold text-gray-900">
           {isEdit ? 'Edit Product' : 'New Product'}
         </h1>
-        <button
-          onClick={handleCancel}
-          className="px-4 py-2 text-gray-600 hover:text-gray-900"
-          disabled={isSubmitting}
-        >
+        <Button variant="ghost" onClick={handleCancel} disabled={isSubmitting}>
           Cancel
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
-        </div>
+        <ErrorAlert
+          message={error}
+          onDismiss={() => setError(null)}
+          dismissible
+          className="mb-6"
+        />
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-            Product Name *
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={formData.name}
-            onChange={e => handleChange('name', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg ${validationErrors.name ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-            placeholder="Product name"
-            disabled={isSubmitting}
-          />
-          {validationErrors.name && <p className="mt-1 text-sm text-red-600">{validationErrors.name}</p>}
-        </div>
-
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-            Description *
-          </label>
-          <textarea
-            id="description"
-            value={formData.description}
-            onChange={e => handleChange('description', e.target.value)}
-            rows={4}
-            className={`w-full px-3 py-2 border rounded-lg ${validationErrors.description ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-            placeholder="Product description"
-            disabled={isSubmitting}
-          />
-          {validationErrors.description && <p className="mt-1 text-sm text-red-600">{validationErrors.description}</p>}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-              Price *
-            </label>
-            <input
-              id="price"
-              type="number"
-              step="0.01"
-              value={formData.price}
-              onChange={e => handleChange('price', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg ${validationErrors.price ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-              placeholder="0,00"
+      <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <Card variant="bordered" padding="lg">
+          <div className="space-y-6">
+            <Input
+              id="name"
+              type="text"
+              label="Product Name"
+              required
+              value={formData.name}
+              onChange={e => handleChange('name', e.target.value)}
+              error={validationErrors.name}
+              placeholder="Product name"
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.name}
             />
-            {validationErrors.price && <p className="mt-1 text-sm text-red-600">{validationErrors.price}</p>}
-          </div>
 
-          <div>
-            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
-              Stock Quantity *
-            </label>
-            <input
-              id="quantity"
-              type="number"
-              step="1"
-              value={formData.quantity}
-              onChange={e => handleChange('quantity', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg ${validationErrors.quantity ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-              placeholder="0"
+            <Textarea
+              id="description"
+              label="Description"
+              required
+              value={formData.description}
+              onChange={e => handleChange('description', e.target.value)}
+              error={validationErrors.description}
+              placeholder="Product description"
+              rows={4}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.description}
             />
-            {validationErrors.quantity && <p className="mt-1 text-sm text-red-600">{validationErrors.quantity}</p>}
-          </div>
-        </div>
 
-        <div>
-          <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-1">
-            Category *
-          </label>
-          <select
-            id="categoryId"
-            value={formData.categoryId}
-            onChange={e => handleChange('categoryId', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg ${validationErrors.categoryId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-            disabled={isSubmitting}
-          >
-            <option value="">Select a category</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-          {validationErrors.categoryId && <p className="mt-1 text-sm text-red-600">{validationErrors.categoryId}</p>}
-        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <Input
+                id="price"
+                type="number"
+                label="Price"
+                required
+                step="0.01"
+                value={formData.price}
+                onChange={e => handleChange('price', e.target.value)}
+                error={validationErrors.price}
+                placeholder="0.00"
+                disabled={isSubmitting}
+                aria-invalid={!!validationErrors.price}
+              />
 
-        <div>
-          <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
-            Product Images (Max 11: 1 Main + 10 Gallery)
-          </label>
-          {imagePreviews.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-4">
-              {imagePreviews.map((preview, index) => (
-                <div key={preview} className="relative group">
-                  <img 
-                    src={preview} 
-                    alt={`${formData.name || 'Product'} image ${index + 1}`} 
-                    className="h-24 w-24 rounded-lg object-cover border border-gray-200"
-                  />
-                  {index === 0 && (
-                    <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
-                      Main
-                    </span>
-                  )}
-                  {index > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-gray-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                      Gallery {index}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(preview)}
-                    className="absolute bottom-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    disabled={uploadingImages}
-                    aria-label={`Remove image ${index + 1}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+              <Input
+                id="quantity"
+                type="number"
+                label="Stock Quantity"
+                required
+                step="1"
+                value={formData.quantity}
+                onChange={e => handleChange('quantity', e.target.value)}
+                error={validationErrors.quantity}
+                placeholder="0"
+                disabled={isSubmitting}
+                aria-invalid={!!validationErrors.quantity}
+              />
             </div>
-          )}
-          <input
-            type="file"
-            id="image"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            onChange={handleImageUpload}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            disabled={isSubmitting || uploadingImages}
-          />
-          {uploadingImages && <p className="mt-1 text-sm text-blue-600">Uploading images...</p>}
-          {validationErrors.image && <p className="mt-1 text-sm text-red-600">{validationErrors.image}</p>}
-          <p className="mt-1 text-xs text-gray-500">JPEG, PNG, or WebP. Maximum 10MB per image. First image becomes main, rest become gallery.</p>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            value={formData.status}
-            onChange={e => handleChange('status', e.target.value as Product['status'])}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            disabled={isSubmitting}
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="out_of_stock">Out of Stock</option>
-            <option value="discontinued">Discontinued</option>
-          </select>
-        </div>
+            <Select
+              id="categoryId"
+              label="Category"
+              required
+              value={formData.categoryId}
+              onChange={e => handleChange('categoryId', e.target.value)}
+              error={validationErrors.categoryId}
+              options={categoryOptions}
+              disabled={isSubmitting}
+              aria-invalid={!!validationErrors.categoryId}
+            />
+
+            <div>
+              <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
+                Product Images (Max 11: 1 Main + 10 Gallery)
+              </label>
+              {imagePreviews.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-4">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={preview} className="relative group">
+                      <img 
+                        src={preview} 
+                        alt={`${formData.name || 'Product'} image ${index + 1}`} 
+                        className="h-24 w-24 rounded-lg object-cover border border-gray-200"
+                      />
+                      {index === 0 && (
+                        <Badge variant="info" className="absolute -top-2 -right-2">
+                          Main
+                        </Badge>
+                      )}
+                      {index > 0 && (
+                        <Badge variant="neutral" className="absolute -top-2 -right-2">
+                          Gallery {index}
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveImage(preview)}
+                        disabled={uploadingImages}
+                        className="absolute bottom-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Remove image ${index + 1}`}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                type="file"
+                id="image"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleImageUpload}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                disabled={isSubmitting || uploadingImages}
+              />
+              {uploadingImages && <p className="mt-1 text-sm text-blue-600">Uploading images...</p>}
+              {validationErrors.image && <p className="mt-1 text-sm text-red-600" role="alert">{validationErrors.image}</p>}
+              <p className="mt-1 text-xs text-gray-500">JPEG, PNG, or WebP. Maximum 10MB per image. First image becomes main, rest become gallery.</p>
+            </div>
+
+            <Select
+              id="status"
+              label="Status"
+              value={formData.status}
+              onChange={e => handleChange('status', e.target.value as Product['status'])}
+              options={STATUS_OPTIONS}
+              disabled={isSubmitting}
+            />
+          </div>
+        </Card>
 
         <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-4 py-2 text-gray-600 hover:text-gray-900"
-            disabled={isSubmitting}
-          >
+          <Button variant="secondary" onClick={handleCancel} disabled={isSubmitting}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            disabled={isSubmitting}
-          >
+          </Button>
+          <Button type="submit" isLoading={isSubmitting}>
             {isSubmitting ? 'Saving...' : 'Save'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

@@ -4,6 +4,9 @@ import { useCategories } from './useCategories';
 import { ProductCard } from './ProductCard';
 import { ProductFilters as ProductFiltersComponent } from './ProductFilters';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { vendorApi, VendorApiException } from '@/shared/api/vendor';
+import { Button, EmptyState, EmptyStateIcons, Spinner, ErrorAlert } from '@/components/ui';
 
 function ProductCatalogContent() {
   const [filters, setFilters] = useState<ProductFilterParams>({
@@ -17,6 +20,45 @@ function ProductCatalogContent() {
 
   const { data, isLoading, isError, error, refetch } = useProducts(filters);
   const { data: categoriesData } = useCategories();
+  const { isAuthenticated, hasRole } = useAuth();
+  const isVendor = hasRole('VENDOR');
+
+  // Check vendor profile status for vendors
+  const [vendorProfile, setVendorProfile] = useState<{ hasProfile: boolean; isLoading: boolean }>({
+    hasProfile: false,
+    isLoading: true,
+  });
+
+  useEffect(() => {
+    if (isVendor && isAuthenticated) {
+      const checkVendorProfile = async () => {
+        try {
+          const response = await vendorApi.getMe();
+          setVendorProfile({ hasProfile: !!response.vendor, isLoading: false });
+        } catch (err) {
+          // If API call fails, check if it's a VendorApiException
+          if (err instanceof VendorApiException) {
+            if (err.status === 401 || err.status === 403) {
+              // Auth errors - no profile
+              setVendorProfile({ hasProfile: false, isLoading: false });
+            } else if (err.status === 404) {
+              // No profile found
+              setVendorProfile({ hasProfile: false, isLoading: false });
+            } else {
+              // 5xx or other errors - treat as loading error
+              setVendorProfile({ hasProfile: false, isLoading: false });
+            }
+          } else {
+            // Network or unknown error
+            setVendorProfile({ hasProfile: false, isLoading: false });
+          }
+        }
+      };
+      checkVendorProfile();
+    } else {
+      setVendorProfile({ hasProfile: false, isLoading: false });
+    }
+  }, [isVendor, isAuthenticated]);
 
   // Announce product count changes to screen readers
   const total = data?.total || 0;
@@ -58,8 +100,7 @@ function ProductCatalogContent() {
     return (
       <main className="max-w-7xl mx-auto px-4 py-12" role="main">
         <div className="flex justify-center items-center min-h-[400px]" role="status" aria-live="polite">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" aria-hidden="true" />
-          <span className="sr-only">Loading products...</span>
+          <Spinner size="lg" label="Loading products..." />
         </div>
       </main>
     );
@@ -68,18 +109,59 @@ function ProductCatalogContent() {
   if (isError) {
     return (
       <main className="max-w-7xl mx-auto px-4 py-12" role="main">
-        <div className="text-center py-12">
-          <p className="text-red-600 mb-4" role="alert">Failed to load products: {error?.message}</p>
-          <button
-            onClick={() => refetch()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorAlert
+          title="Failed to Load Products"
+          message={error?.message || 'An unexpected error occurred'}
+          action={{ label: 'Retry', onClick: () => refetch() }}
+        />
       </main>
     );
   }
+
+  const hasFilters = filters.search || filters.categoryId;
+
+  const getEmptyStateMessage = () => {
+    // If filters are applied, show filter adjustment message
+    if (hasFilters) {
+      return 'Try adjusting your filters or search query.';
+    }
+
+    // No filters applied - show role-based message
+    if (!isAuthenticated) {
+      return 'No products available at the moment. Check back later!';
+    }
+
+    if (isVendor) {
+      if (vendorProfile.isLoading) {
+        return 'Loading...';
+      }
+      if (!vendorProfile.hasProfile) {
+        return 'Complete your vendor onboarding to add products';
+      }
+      return "You don't have any products yet. Add your first product.";
+    }
+
+    // Consumer or other roles
+    return 'No products available at the moment. Check back later!';
+  };
+
+  const getEmptyStateAction = () => {
+    if (!hasFilters && isVendor && !vendorProfile.isLoading && !vendorProfile.hasProfile) {
+      return {
+        label: 'Create Vendor Profile',
+        onClick: () => window.location.href = '/vendor/onboard',
+        variant: 'primary' as const,
+      };
+    }
+    if (!hasFilters && isVendor && vendorProfile.hasProfile) {
+      return {
+        label: 'Add Product',
+        onClick: () => window.location.href = '/vendor/products/new',
+        variant: 'primary' as const,
+      };
+    }
+    return undefined;
+  };
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-8" role="main">
@@ -107,28 +189,12 @@ function ProductCatalogContent() {
       />
 
       {products.length === 0 ? (
-        <div className="text-center py-12">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-            />
-          </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No products found</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            {filters.search || filters.categoryId
-              ? 'Try adjusting your filters or search query.'
-              : 'Get started by adding a new product.'}
-          </p>
-        </div>
+        <EmptyState
+          title="No products found"
+          description={getEmptyStateMessage()}
+          icon={EmptyStateIcons.products}
+          action={getEmptyStateAction()}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" role="list" aria-label="Product catalog">
@@ -139,13 +205,12 @@ function ProductCatalogContent() {
 
           {(data?.page || 1) * (data?.limit || 20) < total && (
             <div className="mt-8 text-center">
-              <button
+              <Button
                 onClick={() => setFilters((prev) => ({ ...prev, page: (prev.page || 1) + 1 }))}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 disabled={isLoading}
               >
                 Load More
-              </button>
+              </Button>
             </div>
           )}
         </>
