@@ -294,6 +294,10 @@ export class Category {
     });
   }
 
+  static reconstruct(data: CategoryData): Category {
+    return new Category(data);
+  }
+
   updateName(newName: string): void {
     if (!newName || newName.trim().length === 0) {
       throw new Error(ProductError.CATEGORY_NAME_REQUIRED);
@@ -302,7 +306,7 @@ export class Category {
     this.updatedAt = new Date();
   }
 
-  updateSlug(newSlug: string): void {
+  updateSlug(newSlug: string, parentPath: string | null = null): void {
     if (!newSlug || newSlug.trim().length === 0) {
       throw new Error(ProductError.CATEGORY_SLUG_REQUIRED);
     }
@@ -310,6 +314,7 @@ export class Category {
       throw new Error(ProductError.CATEGORY_SLUG_INVALID);
     }
     this.slug = newSlug;
+    this.path = buildPath(parentPath, newSlug);
     this.updatedAt = new Date();
   }
 
@@ -369,16 +374,10 @@ export class Category {
     if (this.isRoot) {
       return 0;
     }
-    let depth = 0;
-    let currentPath = this.path;
-    while (currentPath.length > 1) {
-      depth++;
-      currentPath = currentPath.substring(1);
-      const nextSlash = currentPath.indexOf('/');
-      if (nextSlash === -1) break;
-      currentPath = currentPath.substring(nextSlash);
-    }
-    return depth;
+    // Path format: /segment1/segment2/.../segmentN/
+    // Depth = number of segments - 1 (root is depth 0)
+    const segments = this.path.split('/').filter(s => s.length > 0);
+    return segments.length - 1;
   }
 }
 

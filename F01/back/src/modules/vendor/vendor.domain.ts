@@ -112,6 +112,10 @@ export class Vendor {
     this.storeName = trimmedStoreName;
     this.updatedAt = new Date();
   }
+
+  static reconstruct(data: VendorData): Vendor {
+    return new Vendor(data);
+  }
 }
 
 export interface VendorRepository {
