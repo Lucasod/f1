@@ -114,6 +114,14 @@ export class Person {
     });
   }
 
+  /**
+   * Reconstructs a Person from persisted data without validation.
+   * Used by repositories when loading from database.
+   */
+  static reconstruct(data: PersonData): Person {
+    return new Person(data);
+  }
+
   addRole(role: PersonRole): void {
     if (this.roles.includes(role)) {
       return;
