@@ -1,7 +1,7 @@
 import { config } from '../config/index.js';
-import { Person, PersonRole, InMemoryPersonRepository, ContactInfo, Address, MainInfo } from '../modules/person/person.domain.js';
-import { Vendor, VendorStatus, InMemoryVendorRepository } from '../modules/vendor/vendor.domain.js';
-import { Product, Category, ProductStatus, InMemoryProductRepository, InMemoryCategoryRepository } from '../modules/product/product.domain.js';
+import { Person, PersonRole, PersonRepository, ContactInfo, Address, MainInfo } from '../modules/person/person.domain.js';
+import { Vendor, VendorStatus, VendorRepository } from '../modules/vendor/vendor.domain.js';
+import { Product, Category, ProductStatus, ProductRepository, CategoryRepository } from '../modules/product/product.domain.js';
 import { hashPassword } from '../modules/auth/credential.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
 export type { SeedRepositories };
@@ -19,7 +19,7 @@ const SEED_BASE = 1_000_000_000_000;
  * Generates a deterministic hash-based ID for seed data idempotency.
  * Uses a counter-based approach (not timestamp-based) to ensure reproducible IDs
  * across seed runs while maintaining uniqueness within a single run.
- * 
+ *
  * NOTE: Deterministic IDs are used intentionally for seed idempotency.
  * This allows re-running the seed script safely without creating duplicate data.
  * Domain entities normally generate their own IDs, but seed operations require
@@ -259,29 +259,47 @@ const PRODUCTS: ProductSeedData[] = [
 /**
  * Runs the seed process with the provided repositories.
  * If repositories are not provided, creates new instances (for CLI usage).
- * 
- * @param repositories - Optional repositories to use for seeding. If omitted, new instances are created.
+ *
+ * @param repositories - Optional repositories to use for seeding. If omitted, new InMemory instances are created.
  */
 export async function runSeed(repositories?: SeedRepositories): Promise<void> {
   console.log('🌱 Starting seed process...');
-  
+
   // 1. Validate environment
   console.log('📋 Validating environment...');
   validateSeedEnvironment();
   console.log('✅ Environment validation passed');
 
-  // 2. Initialize repositories (use provided or create new)
+  // 2. Initialize repositories (use provided or create new InMemory instances)
   console.log('🔧 Initializing repositories...');
-  const personRepo = repositories?.personRepo ?? new InMemoryPersonRepository();
-  const vendorRepo = repositories?.vendorRepo ?? new InMemoryVendorRepository();
-  const categoryRepo = repositories?.categoryRepo ?? new InMemoryCategoryRepository();
-  const productRepo = repositories?.productRepo ?? new InMemoryProductRepository();
+
+  let personRepo: PersonRepository;
+  let vendorRepo: VendorRepository;
+  let categoryRepo: CategoryRepository;
+  let productRepo: ProductRepository;
+
+  if (repositories) {
+    personRepo = repositories.personRepo;
+    vendorRepo = repositories.vendorRepo;
+    categoryRepo = repositories.categoryRepo;
+    productRepo = repositories.productRepo;
+  } else {
+    // Dynamic imports for InMemory implementations to avoid coupling
+    const { InMemoryPersonRepository } = await import('../modules/person/person.domain.js');
+    const { InMemoryVendorRepository } = await import('../modules/vendor/vendor.domain.js');
+    const { InMemoryProductRepository, InMemoryCategoryRepository } = await import('../modules/product/product.domain.js');
+
+    personRepo = new InMemoryPersonRepository();
+    vendorRepo = new InMemoryVendorRepository();
+    categoryRepo = new InMemoryCategoryRepository();
+    productRepo = new InMemoryProductRepository();
+  }
   console.log('✅ Repositories initialized');
 
   // 3. Create categories with hierarchy
   console.log('📦 Creating categories...');
   const categoryMap = new Map<string, Category>();
-  
+
   // First pass: create root categories
   for (const catData of CATEGORIES.filter(c => c.parentSlug === null)) {
     const category = Category.create({
@@ -318,7 +336,7 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
   // 4. Create vendor users (register + onboard)
   console.log('👤 Creating vendor users...');
   const vendorSlugToId = new Map<string, string>();
-  
+
   for (const vendorData of VENDORS) {
     // Check if vendor already exists by slug (idempotency)
     const existingVendor = await vendorRepo.findBySlug(vendorData.slug);
@@ -384,7 +402,7 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
 
   // 5. Create products
   console.log('📦 Creating products...');
-  
+
   for (const prodData of PRODUCTS) {
     const vendorId = vendorSlugToId.get(prodData.vendorSlug);
     if (!vendorId) {
@@ -423,9 +441,9 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
   console.log('\n✨ Seed completed successfully!');
 }
 
-export { 
-  validateSeedEnvironment, 
-  generateDeterministicHashId, 
+export {
+  validateSeedEnvironment,
+  generateDeterministicHashId,
   resetDeterministicIdGenerator,
   CATEGORIES,
   VENDORS,

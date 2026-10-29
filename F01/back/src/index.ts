@@ -4,34 +4,52 @@ import helmet from 'helmet';
 import { config, validateConfig } from './config';
 import { InMemoryPersonRepository } from './modules/person/person.domain';
 import { InMemoryVendorRepository } from './modules/vendor/vendor.domain';
+import { InMemoryProductRepository, InMemoryCategoryRepository } from './modules/product/product.domain';
 import { AuthService } from './modules/auth/auth.service';
 import { VendorService } from './modules/vendor/vendor.service';
+import { ProductService } from './modules/product/product.service';
 import { createAuthRoutes } from './modules/auth/auth.routes';
 import { createVendorRoutes } from './modules/vendor/vendor.routes';
-import { ProductService } from './modules/product/product.service';
-import { InMemoryProductRepository, InMemoryCategoryRepository } from './modules/product/product.domain';
 import { createProductRoutes, createCategoryRoutes, createUploadRoutes } from './modules/product/product.routes';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runSeed } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
 
+// MongoDB repositories and client
+import { MongoPersonRepository } from './modules/person/person.mongo.repository';
+import { MongoVendorRepository } from './modules/vendor/vendor.mongo.repository';
+import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
+import { MongoProductRepository } from './modules/product/product.mongo.repository';
+import { connectToMongo, initializeCollections, closeMongoConnection, getDb } from './shared/database/mongo.client';
+
+// Repository interfaces
+import { PersonRepository } from './modules/person/person.domain';
+import { VendorRepository } from './modules/vendor/vendor.domain';
+import { ProductRepository, CategoryRepository } from './modules/product/product.domain';
+
 validateConfig();
 
 const app = express();
 
-// Initialize repositories
-const personRepo = new InMemoryPersonRepository();
-const vendorRepo = new InMemoryVendorRepository();
-const productRepo = new InMemoryProductRepository();
-const categoryRepo = new InMemoryCategoryRepository();
+// Repository instances - will be initialized after MongoDB connection
+let personRepo: PersonRepository;
+let vendorRepo: VendorRepository;
+let productRepo: ProductRepository;
+let categoryRepo: CategoryRepository;
 
-// Initialize services
-const authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
-const vendorService = new VendorService(vendorRepo, personRepo, config);
-const productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+// Initialize services (will be recreated after repositories are set)
+let authService!: AuthService;
+let vendorService!: VendorService;
+let productService!: ProductService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
+
+function initializeServices(): void {
+  authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
+  vendorService = new VendorService(vendorRepo, personRepo, config);
+  productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+}
 
 // Run seed in development mode if product repo is empty
 async function runDevelopmentSeed(): Promise<void> {
@@ -77,6 +95,25 @@ async function runStartupCleanup() {
   }
 }
 
+// Graceful shutdown handler
+async function gracefulShutdown(signal: string): Promise<void> {
+  console.log(`\n${signal} received, starting graceful shutdown...`);
+
+  try {
+    await closeMongoConnection();
+    console.log('MongoDB connection closed');
+  } catch (error) {
+    console.error('Error closing MongoDB connection:', error);
+  }
+
+  console.log('Graceful shutdown complete');
+  process.exit(0);
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 app.use(helmet());
 app.use(cors({
   origin: config.corsOrigins.length > 0 ? config.corsOrigins : true,
@@ -87,21 +124,6 @@ app.use(express.json());
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-// Auth routes
-app.use('/api/v1/auth', createAuthRoutes({ authService }));
-
-// Vendor routes
-app.use('/api/v1/vendor', createVendorRoutes({ authService, vendorService, personRepo }));
-
-// Product routes
-app.use('/api/v1/products', createProductRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
-
-// Category routes
-app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
-
-// Upload routes (public)
-app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
@@ -117,6 +139,79 @@ export { app };
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
   // Run startup tasks before listening (IIFE for top-level await in CommonJS)
   (async () => {
+    try {
+      // Connect to MongoDB
+      console.log('Connecting to MongoDB...');
+      await connectToMongo();
+
+      // Initialize collections and indexes
+      console.log('Initializing collections and indexes...');
+      await initializeCollections();
+
+      // Create MongoDB repository instances
+      console.log('Creating MongoDB repository instances...');
+      const db = getDb();
+      personRepo = new MongoPersonRepository(db);
+      vendorRepo = new MongoVendorRepository(db);
+      categoryRepo = new MongoCategoryRepository(db);
+      productRepo = new MongoProductRepository(db);
+
+      // Initialize services with MongoDB repositories
+      initializeServices();
+      console.log('✅ MongoDB repositories initialized');
+
+      // Register routes after services are initialized
+      // Auth routes
+      app.use('/api/v1/auth', createAuthRoutes({ authService }));
+
+      // Vendor routes
+      app.use('/api/v1/vendor', createVendorRoutes({ authService, vendorService, personRepo }));
+
+      // Product routes
+      app.use('/api/v1/products', createProductRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
+
+      // Category routes
+      app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
+
+      // Upload routes (public)
+      app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+
+    } catch (mongoError) {
+      console.error('⚠️  MongoDB connection failed:', mongoError);
+
+      // Fallback to InMemory repositories in development mode
+      if (config.nodeEnv === 'development') {
+        console.log('🔄 Falling back to InMemory repositories for development...');
+        personRepo = new InMemoryPersonRepository();
+        vendorRepo = new InMemoryVendorRepository();
+        categoryRepo = new InMemoryCategoryRepository();
+        productRepo = new InMemoryProductRepository();
+
+        initializeServices();
+        console.log('✅ InMemory repositories initialized (development fallback)');
+
+        // Register routes after services are initialized (fallback path)
+        // Auth routes
+        app.use('/api/v1/auth', createAuthRoutes({ authService }));
+
+        // Vendor routes
+        app.use('/api/v1/vendor', createVendorRoutes({ authService, vendorService, personRepo }));
+
+        // Product routes
+        app.use('/api/v1/products', createProductRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
+
+        // Category routes
+        app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
+
+        // Upload routes (public)
+        app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+      } else {
+        // In production, MongoDB is required
+        console.error('❌ MongoDB is required in production mode. Exiting...');
+        process.exit(1);
+      }
+    }
+
     // Run development seed before cleanup
     await runDevelopmentSeed();
 
