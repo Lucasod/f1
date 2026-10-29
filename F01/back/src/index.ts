@@ -10,8 +10,10 @@ import { createAuthRoutes } from './modules/auth/auth.routes';
 import { createVendorRoutes } from './modules/vendor/vendor.routes';
 import { ProductService } from './modules/product/product.service';
 import { InMemoryProductRepository, InMemoryCategoryRepository } from './modules/product/product.domain';
-import { createProductRoutes, createCategoryRoutes } from './modules/product/product.routes';
+import { createProductRoutes, createCategoryRoutes, createUploadRoutes } from './modules/product/product.routes';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
+import { runSeed } from './scripts/seed.js';
+import { SeedRepositories } from './shared/seed.types';
 
 validateConfig();
 
@@ -31,6 +33,31 @@ const productService = new ProductService(productRepo, categoryRepo, vendorRepo,
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
 
+// Run seed in development mode if product repo is empty
+async function runDevelopmentSeed(): Promise<void> {
+  if (config.nodeEnv !== 'development') {
+    return;
+  }
+
+  const existingProducts = await productRepo.findAll();
+  if (existingProducts.length > 0) {
+    console.log('Product repository not empty, skipping seed');
+    return;
+  }
+
+  console.log('🌱 Development mode detected with empty product repository, running seed...');
+
+  const seedRepos: SeedRepositories = {
+    personRepo,
+    vendorRepo,
+    categoryRepo,
+    productRepo,
+  };
+
+  await runSeed(seedRepos);
+  console.log('✅ Development seed completed');
+}
+
 // Run orphaned file cleanup on startup
 async function runStartupCleanup() {
   try {
@@ -42,7 +69,7 @@ async function runStartupCleanup() {
         referencedUrls.push(...product.images);
       }
     }
-    
+
     const result = await storageAdapter.cleanupOrphanedFiles(referencedUrls);
     console.log(`Startup cleanup: removed ${result.deletedCount} orphaned files`);
   } catch (error) {
@@ -73,6 +100,9 @@ app.use('/api/v1/products', createProductRoutes({ authService, productService, p
 // Category routes
 app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
 
+// Upload routes (public)
+app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
@@ -85,14 +115,18 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 export { app };
 
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
-  // Run startup cleanup before listening (IIFE for top-level await in CommonJS)
+  // Run startup tasks before listening (IIFE for top-level await in CommonJS)
   (async () => {
+    // Run development seed before cleanup
+    await runDevelopmentSeed();
+
+    // Run startup cleanup
     if (config.enableStartupCleanup) {
       await runStartupCleanup();
     } else {
       console.log('Startup cleanup disabled (ENABLE_STARTUP_CLEANUP=false)');
     }
-    
+
     app.listen(config.port, () => {
       console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
     });

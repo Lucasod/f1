@@ -1,0 +1,4 @@
+# TypeScript build outputs
+scripts/*.js
+scripts/*.d.ts
+scripts/*.map

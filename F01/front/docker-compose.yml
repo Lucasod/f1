@@ -14,9 +14,9 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - ./package-lock.json:/app/package-lock.json
-      - ./vite.config.ts:/app/vite.config.ts
       - ./index.html:/app/index.html
       - ./tsconfig.json:/app/tsconfig.json
       - ./tsconfig.node.json:/app/tsconfig.node.json
+    command: sh -c "rm -rf node_modules/.vite-temp && npm run dev -- --host"
 
 volumes: {}

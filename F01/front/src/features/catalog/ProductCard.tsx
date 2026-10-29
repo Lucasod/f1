@@ -47,10 +47,19 @@ function getImageUrl(images: string[]): string {
   return `/api/v1/uploads/${images[0]}`;
 }
 
+const PLACEHOLDER_IMAGE = '/placeholder-product.svg';
+
 export function ProductCard({ product }: ProductCardProps) {
   const imageUrl = getImageUrl(product.images);
   const statusVariant = getStatusVariant(product.status, product.quantity);
   const statusLabel = getStatusLabel(product.status, product.quantity);
+
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = event.target as HTMLImageElement;
+    if (target.src !== PLACEHOLDER_IMAGE) {
+      target.src = PLACEHOLDER_IMAGE;
+    }
+  };
 
   return (
     <Card variant="bordered" padding="none" className="group overflow-hidden hover:shadow-md transition-shadow duration-200" role="article">
@@ -65,6 +74,7 @@ export function ProductCard({ product }: ProductCardProps) {
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
+            onError={handleImageError}
           />
           <div className="absolute top-2 right-2">
             <Badge variant={statusVariant} size="sm" dot>
