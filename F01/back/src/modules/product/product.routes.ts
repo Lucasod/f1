@@ -660,9 +660,10 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
 
       const filePath = path.join(config.storageRoot, safeKey);
       
-      // Check if file exists
+      // Check if file exists and get stats
+      let stats: fs.Stats;
       try {
-        await fs.promises.access(filePath);
+        stats = await fs.promises.stat(filePath);
       } catch {
         return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found' });
       }
@@ -677,7 +678,39 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
       };
       const contentType = contentTypeMap[ext] || 'application/octet-stream';
 
+      // Generate ETag based on mtime + size (efficient, no content hash needed)
+      const etag = `"${stats.mtimeMs.toFixed(0)}-${stats.size}"`;
+      // Last-Modified in HTTP date format
+      const lastModified = stats.mtime.toUTCString();
+
+      // Conditional request headers
+      const ifNoneMatch = req.headers['if-none-match'];
+      const ifModifiedSince = req.headers['if-modified-since'];
+
+      // Check If-None-Match (ETag)
+      if (ifNoneMatch && ifNoneMatch === etag) {
+        return res.status(304).set({
+          'ETag': etag,
+          'Last-Modified': lastModified,
+          'Cache-Control': 'public, max-age=31536000',
+        }).end();
+      }
+
+      // Check If-Modified-Since
+      if (ifModifiedSince) {
+        const sinceDate = new Date(ifModifiedSince);
+        if (!isNaN(sinceDate.getTime()) && stats.mtime <= sinceDate) {
+          return res.status(304).set({
+            'ETag': etag,
+            'Last-Modified': lastModified,
+            'Cache-Control': 'public, max-age=31536000',
+          }).end();
+        }
+      }
+
       res.setHeader('Content-Type', contentType);
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', lastModified);
       res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
 
       const fileStream = fs.createReadStream(filePath);

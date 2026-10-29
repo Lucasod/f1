@@ -79,6 +79,10 @@ export const productApi = {
     if (filters?.limit) params.append('limit', filters.limit.toString());
     
     const response = await apiClient.get(`/api/v1/products?${params.toString()}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'LIST_FAILED');
+    }
     return response.json();
   },
 

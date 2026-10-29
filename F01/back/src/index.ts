@@ -125,15 +125,6 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
 export { app };
 
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
@@ -175,6 +166,17 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
       // Upload routes (public)
       app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+
+      // 404 handler - must be after all routes
+      app.use((_req: Request, res: Response) => {
+        res.status(404).json({ error: 'Not found' });
+      });
+
+      // Error handler
+      app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+        console.error('Error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+      });
 
     } catch (mongoError) {
       console.error('⚠️  MongoDB connection failed:', mongoError);
