@@ -137,6 +137,10 @@ export class Product {
     });
   }
 
+  static reconstruct(data: ProductData): Product {
+    return new Product(data);
+  }
+
   inactivate(): void {
     if (this.status === ProductStatus.INACTIVE) {
       return;
