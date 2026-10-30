@@ -12,6 +12,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src:/app/src
+      - ./public:/app/public
       - ./package.json:/app/package.json
       - ./package-lock.json:/app/package-lock.json
       - ./index.html:/app/index.html

@@ -11,7 +11,7 @@ function getStatusVariant(status: Product['status'], quantity: number): 'success
   if (quantity === 0 || status === 'out_of_stock') {
     return 'error';
   }
-  
+
   switch (status) {
     case 'active':
       return 'success';
@@ -27,7 +27,7 @@ function getStatusLabel(status: Product['status'], quantity: number): string {
   if (quantity === 0 || status === 'out_of_stock') {
     return 'Out of Stock';
   }
-  
+
   switch (status) {
     case 'active':
       return 'In Stock';
@@ -56,7 +56,14 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const target = event.target as HTMLImageElement;
-    if (target.src !== PLACEHOLDER_IMAGE) {
+    const currentSrc = target.src;
+
+    // Compare pathnames to avoid infinite loop (target.src returns absolute URL)
+    const currentPathname = new URL(currentSrc, window.location.origin).pathname;
+    const placeholderPathname = PLACEHOLDER_IMAGE;
+
+    // Safeguard: prevent infinite retries if placeholder itself fails
+    if (currentPathname !== placeholderPathname) {
       target.src = PLACEHOLDER_IMAGE;
     }
   };
@@ -82,7 +89,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </Badge>
           </div>
         </div>
-        
+
         <div className="p-4">
           <h3 className="font-semibold text-gray-900 truncate" role="heading">
             {product.name}

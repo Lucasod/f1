@@ -8,6 +8,7 @@ RUN npm ci
 
 COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
+COPY public ./public
 
 EXPOSE 5173
 RUN npm run build
