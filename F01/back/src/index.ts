@@ -11,6 +11,10 @@ import { ProductService } from './modules/product/product.service';
 import { createAuthRoutes } from './modules/auth/auth.routes';
 import { createVendorRoutes } from './modules/vendor/vendor.routes';
 import { createProductRoutes, createCategoryRoutes, createUploadRoutes } from './modules/product/product.routes';
+import { createCartRoutes } from './modules/cart/cart.routes';
+import { CartService } from './modules/cart/cart.service';
+import { RedisCartRepository } from './modules/cart/cart.redis.repository';
+import { CartRepository, InMemoryCartRepository } from './modules/cart/cart.domain';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runSeed } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
@@ -36,19 +40,25 @@ let personRepo: PersonRepository;
 let vendorRepo: VendorRepository;
 let productRepo: ProductRepository;
 let categoryRepo: CategoryRepository;
+let cartRepo: CartRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
 let vendorService!: VendorService;
 let productService!: ProductService;
+let cartService!: CartService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
+
+// Initialize cart repository (Redis)
+cartRepo = new RedisCartRepository();
 
 function initializeServices(): void {
   authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
   vendorService = new VendorService(vendorRepo, personRepo, config);
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+  cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
 }
 
 // Run seed in development mode if product repo is empty
@@ -167,6 +177,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Upload routes (public)
       app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
 
+      // Cart routes
+      app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
+
       // 404 handler - must be after all routes
       app.use((_req: Request, res: Response) => {
         res.status(404).json({ error: 'Not found' });
@@ -188,6 +201,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
         vendorRepo = new InMemoryVendorRepository();
         categoryRepo = new InMemoryCategoryRepository();
         productRepo = new InMemoryProductRepository();
+        cartRepo = new InMemoryCartRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -207,6 +221,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Upload routes (public)
         app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+
+        // Cart routes
+        app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
       } else {
         // In production, MongoDB is required
         console.error('❌ MongoDB is required in production mode. Exiting...');
