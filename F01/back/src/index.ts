@@ -15,6 +15,8 @@ import { createCartRoutes } from './modules/cart/cart.routes';
 import { CartService } from './modules/cart/cart.service';
 import { RedisCartRepository } from './modules/cart/cart.redis.repository';
 import { CartRepository, InMemoryCartRepository } from './modules/cart/cart.domain';
+import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
+import { CheckoutService } from './modules/checkout/checkout.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runSeed } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
@@ -30,6 +32,7 @@ import { connectToMongo, initializeCollections, closeMongoConnection, getDb } fr
 import { PersonRepository } from './modules/person/person.domain';
 import { VendorRepository } from './modules/vendor/vendor.domain';
 import { ProductRepository, CategoryRepository } from './modules/product/product.domain';
+import { OrderRepository, InMemoryOrderRepository, PaymentRepository, InMemoryPaymentRepository } from './modules/order/order.domain';
 
 validateConfig();
 
@@ -41,12 +44,15 @@ let vendorRepo: VendorRepository;
 let productRepo: ProductRepository;
 let categoryRepo: CategoryRepository;
 let cartRepo: CartRepository;
+let orderRepo: OrderRepository;
+let paymentRepo: PaymentRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
 let vendorService!: VendorService;
 let productService!: ProductService;
 let cartService!: CartService;
+let checkoutService!: CheckoutService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -59,6 +65,7 @@ function initializeServices(): void {
   vendorService = new VendorService(vendorRepo, personRepo, config);
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
+  checkoutService = new CheckoutService(orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config);
 }
 
 // Run seed in development mode if product repo is empty
@@ -156,6 +163,8 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       vendorRepo = new MongoVendorRepository(db);
       categoryRepo = new MongoCategoryRepository(db);
       productRepo = new MongoProductRepository(db);
+      orderRepo = new InMemoryOrderRepository();
+      paymentRepo = new InMemoryPaymentRepository();
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -180,6 +189,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Cart routes
       app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
 
+      // Checkout routes
+      app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+
       // 404 handler - must be after all routes
       app.use((_req: Request, res: Response) => {
         res.status(404).json({ error: 'Not found' });
@@ -202,6 +214,8 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
         categoryRepo = new InMemoryCategoryRepository();
         productRepo = new InMemoryProductRepository();
         cartRepo = new InMemoryCartRepository();
+        orderRepo = new InMemoryOrderRepository();
+        paymentRepo = new InMemoryPaymentRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -224,6 +238,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Cart routes
         app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
+
+        // Checkout routes
+        app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
       } else {
         // In production, MongoDB is required
         console.error('❌ MongoDB is required in production mode. Exiting...');

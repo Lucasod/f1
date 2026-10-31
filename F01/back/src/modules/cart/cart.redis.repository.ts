@@ -35,7 +35,7 @@ export class RedisCartRepository implements CartRepository {
         local found = false
         for i, item in ipairs(items) do
           if item.product_id == ARGV[1] then
-            item.quantity = tonumber(ARGV[3])
+            item.quantity = item.quantity + tonumber(ARGV[3])
             found = true
             break
           end
@@ -46,13 +46,19 @@ export class RedisCartRepository implements CartRepository {
             product_id = ARGV[1],
             vendor_id = ARGV[2],
             quantity = tonumber(ARGV[3]),
-            added_at = ARGV[4]
+            added_at = ARGV[4],
+            unit_price = tonumber(ARGV[7])
           })
         end
 
-        redis.call('HSET', KEYS[1], 'items', cjson.encode(items), 'updated_at', ARGV[5], 'version', (tonumber(cart[4]) or 0) + 1)
+        local new_version = (tonumber(cart[4]) or 0) + 1
+        redis.call('HSET', KEYS[1], 'items', cjson.encode(items), 'updated_at', ARGV[5], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[6])
-        return cjson.encode(items)
+        return cjson.encode({
+          items = items,
+          updated_at = ARGV[5],
+          version = new_version
+        })
       `,
 
       updateItemQuantity: `
@@ -71,9 +77,14 @@ export class RedisCartRepository implements CartRepository {
             table.insert(new_items, item)
           end
         end
-        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[3], 'version', (tonumber(cart[4]) or 0) + 1)
+        local new_version = (tonumber(cart[4]) or 0) + 1
+        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[3], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[4])
-        return cjson.encode(new_items)
+        return cjson.encode({
+          items = new_items,
+          updated_at = ARGV[3],
+          version = new_version
+        })
       `,
 
       removeItem: `
@@ -86,9 +97,14 @@ export class RedisCartRepository implements CartRepository {
             table.insert(new_items, item)
           end
         end
-        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[2], 'version', (tonumber(cart[4]) or 0) + 1)
+        local new_version = (tonumber(cart[4]) or 0) + 1
+        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[2], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[3])
-        return cjson.encode(new_items)
+        return cjson.encode({
+          items = new_items,
+          updated_at = ARGV[2],
+          version = new_version
+        })
       `,
 
       getCart: `
@@ -162,11 +178,13 @@ export class RedisCartRepository implements CartRepository {
       vendor_id: string;
       quantity: number;
       added_at: string;
+      unit_price: number;
     }) => ({
       productId: item.product_id,
       vendorId: item.vendor_id,
       quantity: item.quantity,
       addedAt: new Date(item.added_at),
+      unitPrice: item.unit_price,
     }));
 
     return Cart.reconstruct({
@@ -184,6 +202,7 @@ export class RedisCartRepository implements CartRepository {
         vendor_id: item.vendorId,
         quantity: item.quantity,
         added_at: item.addedAt.toISOString(),
+        unit_price: item.unitPrice,
       }))),
       updated_at: cart.updatedAt.toISOString(),
       version: cart.version,
@@ -196,7 +215,7 @@ export class RedisCartRepository implements CartRepository {
 
     const exists = await this.redis.exists(key);
     if (exists) {
-      throw new Error(CartError.CART_NOT_FOUND); // Or a more specific error for "already exists"
+      throw new Error(CartError.CART_ALREADY_EXISTS);
     }
 
     await this.redis.hset(key, {
@@ -250,7 +269,7 @@ export class RedisCartRepository implements CartRepository {
 
   // Atomic operations using Lua scripts
 
-  async addItem(consumerId: string, productId: string, vendorId: string, quantity: number): Promise<Cart> {
+  async addItem(consumerId: string, productId: string, vendorId: string, quantity: number, unitPrice: number): Promise<Cart> {
     const key = this.getKey(consumerId);
     const scripts = this.getLuaScripts();
     const now = new Date().toISOString();
@@ -264,7 +283,8 @@ export class RedisCartRepository implements CartRepository {
       quantity.toString(),
       now, // added_at
       now, // updated_at
-      CART_TTL_SECONDS.toString()
+      CART_TTL_SECONDS.toString(),
+      unitPrice.toString()
     ) as string;
 
     const data = JSON.parse(result);

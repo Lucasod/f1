@@ -243,6 +243,7 @@ export class MongoPersonRepository implements PersonRepository {
     }));
 
     const addresses: Address[] = addressDocs.map(doc => ({
+      id: doc._id,
       street: doc.street,
       number: doc.number,
       neighborhood: doc.neighborhood,

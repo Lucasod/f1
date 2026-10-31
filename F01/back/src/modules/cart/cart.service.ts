@@ -52,15 +52,16 @@ export class CartService {
 
     // Get or create cart
     let cart = await this.cartRepo.findById(consumerId);
-    if (!cart) {
+    const isNewCart = !cart;
+    if (isNewCart) {
       cart = Cart.create(consumerId);
     }
 
     // Add item to cart
-    cart.addItem(productId, vendorId, quantity, product.price);
+    cart!.addItem(productId, vendorId, quantity, product.price);
 
-    // Save cart
-    return this.cartRepo.save(cart);
+    // Save cart: use save() for new carts, update() for existing carts
+    return isNewCart ? this.cartRepo.save(cart!) : this.cartRepo.update(cart!);
   }
 
   async updateItemQuantity(consumerId: string, productId: string, quantity: number): Promise<Cart> {
@@ -127,20 +128,21 @@ export class CartService {
 
     // Get or create user cart
     let userCart = await this.cartRepo.findById(userId);
-    if (!userCart) {
+    const isNewUserCart = !userCart;
+    if (isNewUserCart) {
       userCart = Cart.create(userId);
     }
 
     // Merge guest cart items into user cart
-    userCart.mergeGuestCart(guestCart.getItems());
+    userCart!.mergeGuestCart(guestCart.getItems());
 
-    // Save user cart
-    await this.cartRepo.save(userCart);
+    // Save user cart: use save() for new carts, update() for existing carts
+    await (isNewUserCart ? this.cartRepo.save(userCart!) : this.cartRepo.update(userCart!));
 
     // Delete guest cart
     await this.cartRepo.delete(guestId);
 
-    return userCart;
+    return userCart!;
   }
 
   async clearCart(consumerId: string): Promise<void> {

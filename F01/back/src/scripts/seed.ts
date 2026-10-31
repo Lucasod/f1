@@ -359,6 +359,7 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
       ],
       addresses: [
         {
+          id: `addr-${vendorData.personId}-1`,
           street: 'Av. Principal',
           number: '1000',
           neighborhood: 'Centro',
