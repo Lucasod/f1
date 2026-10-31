@@ -9,6 +9,7 @@ import { VendorDashboard } from './features/vendor/VendorDashboard';
 import { ProductForm } from './features/vendor/ProductForm';
 import { OnboardingForm } from './features/vendor/OnboardingForm';
 import { ProductCatalogPage } from './features/catalog/ProductCatalogPage';
+import { CartPage } from './features/cart/CartPage';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<div className="p-4">Dashboard</div>} />
               <Route path="/products" element={<div className="p-4">Products</div>} />
+              <Route path="/cart" element={<CartPage />} />
             </Route>
             
             {/* Vendor only routes */}

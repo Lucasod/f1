@@ -17,6 +17,8 @@ import { RedisCartRepository } from './modules/cart/cart.redis.repository';
 import { CartRepository, InMemoryCartRepository } from './modules/cart/cart.domain';
 import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
 import { CheckoutService } from './modules/checkout/checkout.service';
+import { createOrderRoutes } from './modules/order/order.routes';
+import { OrderService } from './modules/order/order.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runSeed } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
@@ -53,6 +55,7 @@ let vendorService!: VendorService;
 let productService!: ProductService;
 let cartService!: CartService;
 let checkoutService!: CheckoutService;
+let orderService!: OrderService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -66,6 +69,7 @@ function initializeServices(): void {
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
   checkoutService = new CheckoutService(orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config);
+  orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
 }
 
 // Run seed in development mode if product repo is empty
@@ -192,6 +196,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Checkout routes
       app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
 
+      // Order routes
+      app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
+
       // 404 handler - must be after all routes
       app.use((_req: Request, res: Response) => {
         res.status(404).json({ error: 'Not found' });
@@ -241,6 +248,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Checkout routes
         app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+
+        // Order routes
+        app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
       } else {
         // In production, MongoDB is required
         console.error('❌ MongoDB is required in production mode. Exiting...');

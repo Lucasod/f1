@@ -653,6 +653,7 @@ export interface OrderRepository {
   findById(id: string): Promise<Order | null>;
   findByPersonId(personId: string): Promise<Order[]>;
   findByStatus(status: OrderStatus): Promise<Order[]>;
+  findAll(): Promise<Order[]>;
   update(order: Order): Promise<Order>;
 }
 
@@ -695,6 +696,14 @@ export class InMemoryOrderRepository implements OrderRepository {
     for (const id of orderIds) {
       const order = this.orders.get(id);
       if (order) orders.push(order);
+    }
+    return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async findAll(): Promise<Order[]> {
+    const orders: Order[] = [];
+    for (const order of this.orders.values()) {
+      orders.push(order);
     }
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }

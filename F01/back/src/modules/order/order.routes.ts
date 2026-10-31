@@ -1,0 +1,291 @@
+import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
+import { AuthService } from '../auth/auth.service';
+import { OrderService } from './order.service';
+import { PersonRepository } from '../person/person.domain';
+import { VendorRepository } from '../vendor/vendor.domain';
+import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
+import { PersonRole } from '../person/person.domain';
+import { Order, OrderVendorGroup, OrderStatus, OrderVendorGroupStatus, OrderError } from './order.domain';
+
+export interface OrderRoutesConfig {
+  authService: AuthService;
+  orderService: OrderService;
+  personRepo: PersonRepository;
+  vendorRepo: VendorRepository;
+}
+
+export function createOrderRoutes({ authService, orderService, personRepo, vendorRepo }: OrderRoutesConfig): Router {
+  const router = Router();
+
+  const authMw = authMiddleware(authService);
+  const requireConsumerVendorAdmin = requireRole(PersonRole.CONSUMER, PersonRole.VENDOR, PersonRole.ADMIN);
+  const requireVendorAdmin = requireRole(PersonRole.VENDOR, PersonRole.ADMIN);
+  const requireAdmin = requireRole(PersonRole.ADMIN);
+  const requireVendor = requireRole(PersonRole.VENDOR);
+
+  // GET /orders - List orders (auth required)
+  // Consumer: returns their orders
+  // Vendor: returns orders with their vendor groups (requires vendor profile)
+  // Admin: returns all orders
+  router.get('/orders', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const personId = req.user.sub;
+      const { status, page, limit } = req.query;
+
+      let vendorId: string | undefined;
+      let role: 'consumer' | 'vendor' | 'admin' = 'consumer';
+
+      if (req.user.roles.includes(PersonRole.ADMIN)) {
+        role = 'admin';
+      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
+        role = 'vendor';
+        // Get vendor ID from person's vendor profile
+        const vendor = await vendorRepo.findByPersonId(personId);
+        if (!vendor) {
+          return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+        }
+        vendorId = vendor.id;
+      }
+
+      const result = await orderService.listOrders(personId, {
+        status: status as OrderStatus | undefined,
+        page: page ? parseInt(page as string, 10) : undefined,
+        limit: limit ? parseInt(limit as string, 10) : undefined,
+        role,
+        vendorId
+      });
+
+      return res.json({
+        orders: result.orders.map(orderToResponse),
+        total: result.total,
+        page: result.page,
+        limit: result.limit
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.VENDOR_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
+          case OrderError.PERSON_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.PERSON_ID_REQUIRED, message: 'Person ID is required' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // GET /orders/:orderId - Get order details (auth required)
+  // Authorization: consumer owns order, vendor owns vendor group in order, admin any
+  router.get('/orders/:orderId', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const personId = req.user.sub;
+
+      if (!orderId || orderId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
+      }
+
+      let role: 'consumer' | 'vendor' | 'admin' = 'consumer';
+      let vendorId: string | undefined;
+
+      if (req.user.roles.includes(PersonRole.ADMIN)) {
+        role = 'admin';
+      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
+        role = 'vendor';
+        const vendor = await vendorRepo.findByPersonId(personId);
+        if (!vendor) {
+          return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+        }
+        vendorId = vendor.id;
+      }
+
+      const order = await orderService.getOrderById(orderId, personId, role, vendorId);
+
+      if (!order) {
+        return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
+      }
+
+      return res.json({ order: orderToResponse(order) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.VENDOR_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
+          case OrderError.PERSON_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.PERSON_ID_REQUIRED, message: 'Person ID is required' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // PATCH /orders/:orderId/vendor-groups/:ovgId/status - Update vendor group status (auth required)
+  // Body: { status: OrderVendorGroupStatus }
+  // Vendor: can only update their own vendor groups
+  // Admin: can update any vendor group
+  router.patch('/orders/:orderId/vendor-groups/:ovgId/status', authMw as RequestHandler, requireVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const vendorGroupId = Array.isArray(req.params.ovgId) ? req.params.ovgId[0] : req.params.ovgId;
+      const { status } = req.body;
+      const personId = req.user.sub;
+
+      if (!orderId || orderId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
+      }
+      if (!vendorGroupId || vendorGroupId.trim().length === 0) {
+        return res.status(400).json({ error: 'VENDOR_GROUP_ID_REQUIRED', message: 'Vendor group ID is required' });
+      }
+      if (!status || !Object.values(OrderVendorGroupStatus).includes(status as OrderVendorGroupStatus)) {
+        return res.status(400).json({ error: 'INVALID_STATUS', message: 'Invalid vendor group status' });
+      }
+
+      let actorRole: 'vendor' | 'admin' = 'vendor';
+      let actorId = personId;
+
+      if (req.user.roles.includes(PersonRole.ADMIN)) {
+        actorRole = 'admin';
+      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
+        const vendor = await vendorRepo.findByPersonId(personId);
+        if (!vendor) {
+          return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+        }
+        actorId = vendor.id;
+      }
+
+      const order = await orderService.updateVendorGroupStatus(
+        orderId,
+        vendorGroupId,
+        status as OrderVendorGroupStatus,
+        actorRole,
+        actorId
+      );
+
+      return res.json({ order: orderToResponse(order) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.ORDER_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
+          case OrderError.VENDOR_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor group not found' });
+          case OrderError.INVALID_STATUS_TRANSITION:
+            return res.status(409).json({ error: OrderError.INVALID_STATUS_TRANSITION, message: 'Invalid status transition' });
+          case OrderError.VENDOR_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // PATCH /orders/:orderId/status - Update order status (auth required, ADMIN only)
+  // Body: { status: OrderStatus }
+  router.patch('/orders/:orderId/status', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const { status } = req.body;
+
+      if (!orderId || orderId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
+      }
+      if (!status || !Object.values(OrderStatus).includes(status as OrderStatus)) {
+        return res.status(400).json({ error: 'INVALID_STATUS', message: 'Invalid order status' });
+      }
+
+      const order = await orderService.updateOrderStatus(orderId, status as OrderStatus);
+
+      return res.json({ order: orderToResponse(order) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.ORDER_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
+          case OrderError.INVALID_STATUS_TRANSITION:
+            return res.status(409).json({ error: OrderError.INVALID_STATUS_TRANSITION, message: 'Invalid status transition' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // GET /vendor/orders - Get vendor's order groups (auth required, VENDOR role)
+  // Query params: status?, page?, limit?
+  router.get('/vendor/orders', authMw as RequestHandler, requireVendor as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const personId = req.user.sub;
+      const { status, page, limit } = req.query;
+
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (!vendor) {
+        return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+      }
+
+      const result = await orderService.getOrdersByVendor(vendor.id, {
+        status: status as OrderVendorGroupStatus | undefined,
+        page: page ? parseInt(page as string, 10) : undefined,
+        limit: limit ? parseInt(limit as string, 10) : undefined
+      });
+
+      return res.json({
+        vendorGroups: vendorGroupsToResponse(result.vendorGroups),
+        total: result.total,
+        page: page ? parseInt(page as string, 10) : 1,
+        limit: limit ? parseInt(limit as string, 10) : 20
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.VENDOR_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor not found' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  return router;
+}
+
+function orderToResponse(order: Order) {
+  return {
+    id: order.id,
+    personId: order.personId,
+    status: order.status,
+    vendorGroups: order.vendorGroups.map(vg => vendorGroupToResponse(vg)),
+    shippingAddress: order.shippingAddress,
+    totalAmount: order.totalAmount,
+    financialStatus: order.financialStatus,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt
+  };
+}
+
+function vendorGroupToResponse(vg: OrderVendorGroup) {
+  return {
+    id: vg.id,
+    orderId: vg.orderId,
+    vendorId: vg.vendorId,
+    status: vg.status,
+    items: vg.items.map(item => ({
+      id: item.id,
+      productId: item.productId,
+      productName: item.productName,
+      vendorId: item.vendorId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice
+    })),
+    subtotal: vg.subtotal,
+    commissionPct: vg.commissionPct,
+    commissionAmount: vg.commissionAmount,
+    vendorNet: vg.vendorNet,
+    transferId: vg.transferId,
+    createdAt: vg.createdAt,
+    updatedAt: vg.updatedAt
+  };
+}
+
+function vendorGroupsToResponse(vgs: OrderVendorGroup[]) {
+  return vgs.map(vendorGroupToResponse);
+}
