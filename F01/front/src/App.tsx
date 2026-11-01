@@ -16,6 +16,7 @@ import { OrderDetailPage } from './features/order/OrderDetailPage';
 import { VendorOrderPage } from './features/order/VendorOrderPage';
 
 function App() {
+  // HMR Test 7 - with CHOKIDAR_USEPOLLING env
   return (
     <BrowserRouter>
       <AuthProvider>

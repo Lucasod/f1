@@ -8,6 +8,8 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_PROXY_TARGET=http://host.docker.internal:3000
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -18,7 +20,6 @@ services:
       - ./index.html:/app/index.html
       - ./tsconfig.json:/app/tsconfig.json
       - ./tsconfig.node.json:/app/tsconfig.node.json
-      - ./node_modules:/node_modules
       
     command: sh -c "rm -rf node_modules/.vite-temp && npm run dev -- --host"
 

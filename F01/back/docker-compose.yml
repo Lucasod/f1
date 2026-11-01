@@ -24,7 +24,6 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - ./package-lock.json:/app/package-lock.json
-      - ./node_modules:/node_modules
       - f01_uploads:/app/storage/uploads
 
   mongo:

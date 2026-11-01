@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => {
           target: apiProxyTarget,
           changeOrigin: true
         }
+      },
+      watch: {
+        usePolling: true,
+        interval: 1000
       }
     },
     test: {

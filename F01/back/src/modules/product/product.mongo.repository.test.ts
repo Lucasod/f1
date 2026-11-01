@@ -6,7 +6,27 @@ import { MongoProductRepository } from './product.mongo.repository';
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
 const TEST_DB_NAME = 'fs01_marketplace_test';
 
-describe('MongoProductRepository Contract Tests', () => {
+// MongoDB availability check utility
+async function isMongoAvailable(uri: string): Promise<boolean> {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    await client.db('admin').command({ ping: 1 });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await client.close();
+  }
+}
+
+// Check MongoDB availability before registering tests
+const mongoAvailable = await isMongoAvailable(TEST_MONGO_URI);
+const describeIfMongo = mongoAvailable
+  ? describe
+  : (name: string, fn: () => void) => describe.skip(`${name} (MongoDB unavailable at ${TEST_MONGO_URI})`, fn);
+
+describeIfMongo('MongoProductRepository Contract Tests', () => {
   let client: MongoClient;
   let db: Db;
   let productsCollection: Collection;
