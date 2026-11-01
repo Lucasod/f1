@@ -9,6 +9,7 @@ import { VendorDashboard } from './features/vendor/VendorDashboard';
 import { ProductForm } from './features/vendor/ProductForm';
 import { OnboardingForm } from './features/vendor/OnboardingForm';
 import { ProductCatalogPage } from './features/catalog/ProductCatalogPage';
+import { ProductDetailPage } from './features/catalog/ProductDetailPage';
 import { CartPage } from './features/cart/CartPage';
 import { CheckoutPage } from './features/checkout/CheckoutPage';
 import { OrderHistoryPage } from './features/order/OrderHistoryPage';
@@ -29,7 +30,7 @@ function App() {
             
             {/* Public product routes */}
             <Route path="/products" element={<ProductCatalogPage />} />
-            <Route path="/products/:productId" element={<div className="p-4">Product Detail (TODO)</div>} />
+            <Route path="/products/:productId" element={<ProductDetailPage />} />
             
             {/* Protected routes for authenticated users */}
             <Route element={<ProtectedRoute />}>
