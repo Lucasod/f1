@@ -11,6 +11,9 @@ import { OnboardingForm } from './features/vendor/OnboardingForm';
 import { ProductCatalogPage } from './features/catalog/ProductCatalogPage';
 import { CartPage } from './features/cart/CartPage';
 import { CheckoutPage } from './features/checkout/CheckoutPage';
+import { OrderHistoryPage } from './features/order/OrderHistoryPage';
+import { OrderDetailPage } from './features/order/OrderDetailPage';
+import { VendorOrderPage } from './features/order/VendorOrderPage';
 
 function App() {
   return (
@@ -33,6 +36,8 @@ function App() {
               <Route path="/products" element={<div className="p-4">Products</div>} />
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/orders" element={<OrderHistoryPage />} />
+              <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             </Route>
             
             {/* Vendor only routes */}
@@ -42,12 +47,14 @@ function App() {
               <Route path="/vendor/products/new" element={<ProductForm />} />
               <Route path="/vendor/products/:productId/edit" element={<ProductForm />} />
               <Route path="/vendor/onboard" element={<OnboardingForm />} />
+              <Route path="/vendor/orders" element={<VendorOrderPage />} />
             </Route>
             
             {/* Admin only routes */}
             <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
               <Route path="/admin/dashboard" element={<div className="p-4">Admin Dashboard</div>} />
               <Route path="/admin/users" element={<div className="p-4">Admin Users</div>} />
+              <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             </Route>
             
             {/* Redirect unknown routes to home */}
