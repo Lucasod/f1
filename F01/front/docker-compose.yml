@@ -18,6 +18,8 @@ services:
       - ./index.html:/app/index.html
       - ./tsconfig.json:/app/tsconfig.json
       - ./tsconfig.node.json:/app/tsconfig.node.json
+      - ./node_modules:/node_modules
+      
     command: sh -c "rm -rf node_modules/.vite-temp && npm run dev -- --host"
 
 volumes: {}
