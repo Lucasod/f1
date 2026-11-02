@@ -193,9 +193,11 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
             return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
           case OrderError.VENDOR_NOT_FOUND:
             return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor group not found' });
-          case OrderError.INVALID_STATUS_TRANSITION:
-            return res.status(409).json({ error: OrderError.INVALID_STATUS_TRANSITION, message: 'Invalid status transition' });
-          case OrderError.VENDOR_ID_REQUIRED:
+           case OrderError.INVALID_STATUS_TRANSITION:
+             return res.status(409).json({ error: OrderError.INVALID_STATUS_TRANSITION, message: 'Invalid status transition' });
+           case OrderError.FORBIDDEN:
+             return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+           case OrderError.VENDOR_ID_REQUIRED:
             return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
         }
       }

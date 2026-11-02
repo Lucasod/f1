@@ -6,14 +6,9 @@
     ".kilo/rules/autonomous-execution.md"
   ],
   "agent": {
-    "code": {
-      "permission": {
-        "task": {
-          "*": "deny",
-          "bash": "deny",
-          "code-developer": "allow",
-          "code-reviewer": "allow"
-        }
+    "agent": {
+    "code-orchestrator": {
+      "model": "kilo/reflection/beam-free"
       }
     }
   },
@@ -39,7 +34,8 @@
       ".yaml",
       ".yml"
     ],
-    "enabled": true
+    "enabled": true,
+    "model": "nomic-embed-text"
   },
   "mcp": {
   }

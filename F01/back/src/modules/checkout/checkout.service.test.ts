@@ -155,6 +155,9 @@ describe('Checkout Service', () => {
       await productRepo.save(validProduct2);
 
       // Add items to cart
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
+
       await cartService.addItem(consumerId, productId, 2);
       await cartService.addItem(consumerId, productId2, 3);
 
@@ -196,6 +199,9 @@ describe('Checkout Service', () => {
       await productRepo.save(validProduct2);
 
       // Add items to cart
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
+
       await cartService.addItem(consumerId, productId, 2);
       await cartService.addItem(consumerId, productId2, 3);
 
@@ -283,6 +289,82 @@ describe('Checkout Service', () => {
       await expect(checkoutService.checkout('non-existent-consumer', addressId))
         .rejects.toThrow(OrderError.PERSON_ID_REQUIRED);
     });
+
+    it('should decrement product stock on successful checkout', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      await checkoutService.checkout(consumerId, addressId);
+
+      const product = await productRepo.findById(productId);
+      expect(product).not.toBeNull();
+      expect(product!.quantity).toBe(8);
+    });
+
+    it('should not create order or clear cart when stock is insufficient', async () => {
+      await cartService.addItem(consumerId, productId, 2);
+
+      const lowStockProduct = Product.reconstruct({
+        ...validProduct,
+        quantity: 1
+      });
+      await productRepo.update(lowStockProduct);
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.INSUFFICIENT_STOCK);
+
+      const orders = await orderRepo.findByPersonId(consumerId);
+      expect(orders).toHaveLength(0);
+
+      const cart = await cartRepo.findById(consumerId);
+      expect(cart).not.toBeNull();
+      expect(cart!.isEmpty).toBe(false);
+    });
+
+    it('should rollback previously decremented stock if a later decrement fails', async () => {
+      const productId2 = 'product-2';
+      const validProduct2 = Product.create({
+        vendorId,
+        categoryId: 'category-1',
+        name: 'Test Product 2',
+        description: 'Test Description 2',
+        price: 50,
+        quantity: 10,
+        status: ProductStatus.ACTIVE,
+      });
+      validProduct2.id = productId2;
+      await productRepo.save(validProduct2);
+
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
+
+      await cartService.addItem(consumerId, productId, 2);
+      await cartService.addItem(consumerId, productId2, 3);
+
+      // Make update fail on second product to simulate decrement failure
+      const originalUpdate = productRepo.update.bind(productRepo);
+      let updateCallCount = 0;
+      productRepo.update = async (product) => {
+        updateCallCount += 1;
+        if (updateCallCount === 2) {
+          throw new Error('simulated decrement failure');
+        }
+        return originalUpdate(product);
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.INSUFFICIENT_STOCK);
+
+      // First product stock should be rolled back
+      const product1 = await productRepo.findById(productId);
+      expect(product1!.quantity).toBe(10);
+
+      const orders = await orderRepo.findByPersonId(consumerId);
+      expect(orders).toHaveLength(0);
+    });
+
   });
 
   describe('previewCheckout', () => {
@@ -339,6 +421,9 @@ describe('Checkout Service', () => {
       });
       validProduct2.id = productId2;
       await productRepo.save(validProduct2);
+
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
 
       await cartService.addItem(consumerId, productId, 2);
       await cartService.addItem(consumerId, productId2, 3);

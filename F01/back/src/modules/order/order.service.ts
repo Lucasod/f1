@@ -183,7 +183,7 @@ export class OrderService {
     if (actorRole === 'vendor') {
       // Vendor can only update their own vendor groups
       if (vendorGroup.vendorId !== actorId) {
-        throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+        throw new Error(OrderError.FORBIDDEN);
       }
     }
     // Admin can update any vendor group

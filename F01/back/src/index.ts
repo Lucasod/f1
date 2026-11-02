@@ -34,6 +34,8 @@ import { MongoVendorRepository } from './modules/vendor/vendor.mongo.repository'
 import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
 import { MongoProductRepository } from './modules/product/product.mongo.repository';
 import { MongoReviewRepository } from './modules/review/review.mongo.repository';
+import { MongoOrderRepository } from './modules/order/order.mongo.repository';
+import { MongoPaymentRepository } from './modules/order/payment.mongo.repository';
 import { connectToMongo, initializeCollections, closeMongoConnection, getDb } from './shared/database/mongo.client';
 
 // Repository interfaces
@@ -172,8 +174,8 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       categoryRepo = new MongoCategoryRepository(db);
       productRepo = new MongoProductRepository(db);
       reviewRepo = new MongoReviewRepository(db);
-      orderRepo = new InMemoryOrderRepository();
-      paymentRepo = new InMemoryPaymentRepository();
+      orderRepo = new MongoOrderRepository(db);
+      paymentRepo = new MongoPaymentRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();

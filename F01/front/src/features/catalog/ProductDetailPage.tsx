@@ -6,6 +6,9 @@ import { useCartMutations } from '@/features/cart/useCart';
 import { CartItemInput } from '@/shared/api/cart';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Card, Badge, Spinner, ErrorAlert, EmptyState, EmptyStateIcons, Button } from '@/components/ui';
+import ReviewSection from '@/features/review/ReviewSection';
+import CreateReviewForm from '@/features/review/CreateReviewForm';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 function getStatusVariant(status: Product['status'], quantity: number): 'success' | 'error' | 'neutral' {
   if (quantity === 0 || status === 'out_of_stock') {
@@ -66,6 +69,7 @@ function ProductDetailContent() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { useAddItem } = useCartMutations();
+  const { isAuthenticated, hasRole } = useAuth();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -413,6 +417,14 @@ function ProductDetailContent() {
           </Card>
         </div>
       </div>
+
+      {isAuthenticated && hasRole('CONSUMER') ? (
+        <CreateReviewForm productId={productId!} />
+      ) : !isAuthenticated ? (
+        <p className="text-sm text-gray-600">Please log in to write a review.</p>
+      ) : null}
+
+      <ReviewSection productId={productId!} />
     </main>
   );
 }

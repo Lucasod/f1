@@ -93,6 +93,9 @@ export class CheckoutService {
     // Validate and prepare vendor groups
     const vendorGroupsData = await this.prepareVendorGroups(cart);
 
+    // Decrement product stock (atomic-ish) with rollback on failure
+    await this.decrementStock(cart);
+
     // Create order
     const order = Order.create({
       personId: consumerId,
@@ -181,6 +184,43 @@ export class CheckoutService {
       vendorGroups: previewVendorGroups,
       totalAmount
     };
+  }
+
+  private async decrementStock(cart: Cart): Promise<void> {
+    const decremented: { productId: string; originalQuantity: number }[] = [];
+
+    try {
+      for (const cartItem of cart.items) {
+        const product = await this.productRepo.findById(cartItem.productId);
+        if (!product) {
+          throw new Error(OrderError.PRODUCT_NOT_FOUND);
+        }
+
+        if (product.quantity < cartItem.quantity) {
+          throw new Error(OrderError.INSUFFICIENT_STOCK);
+        }
+
+        const originalQuantity = product.quantity;
+        product.updateStock(originalQuantity - cartItem.quantity);
+        await this.productRepo.update(product);
+        decremented.push({ productId: product.id, originalQuantity });
+      }
+    } catch (error) {
+      // Rollback previously decremented quantities
+      for (const entry of decremented) {
+        try {
+          const product = await this.productRepo.findById(entry.productId);
+          if (product) {
+            product.updateStock(entry.originalQuantity);
+            await this.productRepo.update(product);
+          }
+        } catch {
+          // Best-effort rollback; rethrow original failure below
+        }
+      }
+
+      throw new Error(OrderError.INSUFFICIENT_STOCK);
+    }
   }
 
   private async prepareVendorGroups(cart: Cart): Promise<{
