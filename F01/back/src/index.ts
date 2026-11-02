@@ -211,7 +211,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
       // Payment routes (T-1004)
-      app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService }));
+      app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
 
       // Person routes
       app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
@@ -274,7 +274,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
         app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
         // Payment routes (T-1004)
-        app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService }));
+        app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
 
         // Person routes
         app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));

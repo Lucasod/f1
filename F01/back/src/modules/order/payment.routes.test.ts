@@ -43,7 +43,7 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/auth', createAuthRoutes({ authService }));
-    app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService }));
+    app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
 
     const adminPerson = Person.create({
       name: 'Admin', mainInfo: { name: 'Admin', taxIdType: 'CPF', taxIdValue: '98765432100' },

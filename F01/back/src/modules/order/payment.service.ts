@@ -48,14 +48,6 @@ function isValidProvider(provider: string): provider is ValidProvider {
   return VALID_PROVIDERS.includes(provider as ValidProvider);
 }
 
-const VALID_PAYMENT_STATUS_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
-  [PaymentStatus.PENDING]: [PaymentStatus.AUTHORIZED, PaymentStatus.FAILED],
-  [PaymentStatus.AUTHORIZED]: [PaymentStatus.CAPTURED, PaymentStatus.FAILED],
-  [PaymentStatus.CAPTURED]: [PaymentStatus.REFUNDED],
-  [PaymentStatus.FAILED]: [],
-  [PaymentStatus.REFUNDED]: []
-};
-
 export class PaymentService {
   constructor(
     private readonly paymentRepo: PaymentRepository,
@@ -63,11 +55,15 @@ export class PaymentService {
   ) {}
 
   async createPayment(
-    orderId: string,
+    orderId: unknown,
     personId: string,
     amount: number,
     provider?: string
   ): Promise<Payment> {
+    // CR-005: validate orderId is a string
+    if (typeof orderId !== 'string') {
+      throw new Error(PaymentError.ORDER_NOT_FOUND);
+    }
     if (!orderId || orderId.trim().length === 0) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
@@ -84,6 +80,12 @@ export class PaymentService {
     const order = await this.orderRepo.findById(orderId);
     if (!order) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
+    }
+
+    // Ownership enforced unconditionally: only the order owner may create a payment.
+    // CR-004: mismatch returns 403 (deliberate, documented choice) rather than 404.
+    if (order.personId !== personId) {
+      throw new Error(OrderError.FORBIDDEN);
     }
 
     if (order.totalAmount !== amount) {
@@ -247,10 +249,11 @@ export class PaymentService {
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
-    if (order) {
-      order.refund(true);
-      await this.orderRepo.update(order);
+    if (!order) {
+      throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
+    order.refund(true);
+    await this.orderRepo.update(order);
 
     return payment;
   }
@@ -274,12 +277,5 @@ export class PaymentService {
       return [];
     }
     return this.paymentRepo.findByPersonId(personId);
-  }
-
-  private validateStatusTransition(from: PaymentStatus, to: PaymentStatus): void {
-    const allowed = VALID_PAYMENT_STATUS_TRANSITIONS[from];
-    if (!allowed.includes(to)) {
-      throw new Error(PaymentError.PAYMENT_ALREADY_PROCESSED);
-    }
   }
 }
