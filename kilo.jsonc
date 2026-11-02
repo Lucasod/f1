@@ -6,11 +6,6 @@
     ".kilo/rules/autonomous-execution.md"
   ],
   "agent": {
-    "agent": {
-    "code-orchestrator": {
-      "model": "kilo/reflection/beam-free"
-      }
-    }
   },
   "indexing": {
     "fileExtensions": [

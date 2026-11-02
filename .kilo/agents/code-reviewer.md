@@ -1,7 +1,6 @@
 ---
 description: Independent read-only reviewer; invoked by Code for the current explicitly user-authorized task or by an explicit user review request
 mode: subagent
-model: kilo/reflection/beam-free
 steps: 300
 hidden: false
 color: "#FF5733"

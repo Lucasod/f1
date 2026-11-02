@@ -24,7 +24,10 @@ import { PaymentService } from './modules/order/payment.service';
 import { createPersonRoutes } from './modules/person/person.routes';
 import { createReviewRoutes } from './modules/review/review.routes';
 import { createPaymentRoutes } from './modules/order/payment.routes';
+import { createPayoutRoutes } from './modules/payout/payout.routes';
+import { PayoutService } from './modules/payout/payout.service';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
+import { InMemoryPayoutRepository, PayoutRepository } from './modules/payout/payout.domain';
 import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runDevelopmentSeed as seedDevelopmentData } from './scripts/seed.js';
@@ -59,6 +62,7 @@ let cartRepo: CartRepository;
 let orderRepo: OrderRepository;
 let paymentRepo: PaymentRepository;
 let reviewRepo: ReviewRepository;
+let payoutRepo: PayoutRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -70,6 +74,7 @@ let orderService!: OrderService;
 let personService!: PersonService;
 let reviewService!: ReviewService;
 let paymentService!: PaymentService;
+let payoutService!: PayoutService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -85,8 +90,9 @@ function initializeServices(): void {
   checkoutService = new CheckoutService(orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config);
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
-  reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
-  paymentService = new PaymentService(paymentRepo, orderRepo);
+reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
+paymentService = new PaymentService(paymentRepo, orderRepo);
+payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo);
 }
 
 // Seed the catalog only when empty, but always reconcile demo accounts.
@@ -177,9 +183,10 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       vendorRepo = new MongoVendorRepository(db);
       categoryRepo = new MongoCategoryRepository(db);
       productRepo = new MongoProductRepository(db);
-      reviewRepo = new MongoReviewRepository(db);
-      orderRepo = new MongoOrderRepository(db);
-      paymentRepo = new MongoPaymentRepository(db);
+reviewRepo = new MongoReviewRepository(db);
+orderRepo = new MongoOrderRepository(db);
+paymentRepo = new MongoPaymentRepository(db);
+payoutRepo = new InMemoryPayoutRepository();
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -213,6 +220,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Payment routes (T-1004)
       app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
 
+      // Payout routes (T-1003)
+      app.use('/api/v1/payouts', createPayoutRoutes({ authService, payoutService, vendorRepo }));
+
       // Person routes
       app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
 
@@ -242,8 +252,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
         productRepo = new InMemoryProductRepository();
         cartRepo = new InMemoryCartRepository();
         orderRepo = new InMemoryOrderRepository();
-        paymentRepo = new InMemoryPaymentRepository();
-        reviewRepo = new InMemoryReviewRepository();
+paymentRepo = new InMemoryPaymentRepository();
+reviewRepo = new InMemoryReviewRepository();
+payoutRepo = new InMemoryPayoutRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -275,6 +286,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Payment routes (T-1004)
         app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
+
+        // Payout routes (T-1003)
+        app.use('/api/v1/payouts', createPayoutRoutes({ authService, payoutService, vendorRepo }));
 
         // Person routes
         app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));

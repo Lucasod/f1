@@ -1,7 +1,6 @@
 ---
 description: Implements code changes within authorized scope; follows TDD; reports evidence; does not decide scope or authorization
 mode: subagent
-model: kilo/reflection/beam-free
 steps: 300
 hidden: false
 color: "#32CD32"

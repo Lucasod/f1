@@ -1,7 +1,6 @@
 ---
 description: Orchestrates autonomous execution runs; delegates implementation to code-developer and reviews to code-reviewer via task tool; read-only except for task delegation
 mode: all
-model: kilo/reflection/beam-free
 steps: 300
 hidden: false
 color: "#00BFFF"
