@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOrders } from '@/features/order/useOrder';
+import { reviewApi, type Review } from '@/shared/api/review';
 import { Card } from '@/components/ui/Card';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Spinner } from '@/components/ui/Spinner';
+import { Button } from '@/components/ui/Button';
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -22,6 +26,40 @@ function formatDate(value: string): string {
 export function AdminDashboard() {
   const { data, isLoading, error, refetch } = useOrders({ page: 1, limit: 10 });
   const orders = data?.orders ?? [];
+
+  const queryClient = useQueryClient();
+  const [moderationError, setModerationError] = useState<{ reviewId: string; message: string } | null>(null);
+
+  const {
+    data: reviewsData,
+    isLoading: reviewsLoading,
+    isError: reviewsError,
+    error: reviewsErrorObj,
+    refetch: refetchReviews,
+  } = useQuery({
+    queryKey: ['admin', 'reviews'],
+    queryFn: () => reviewApi.listAdminReviews(),
+  });
+
+  const reviews = reviewsData?.items ?? [];
+
+  const moderateMutation = useMutation({
+    mutationFn: ({ reviewId, status }: { reviewId: string; status: string }) =>
+      reviewApi.moderateReview(reviewId, status as any),
+    onSuccess: () => {
+      setModerationError(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reviews'] });
+    },
+    onError: (err, variables) => {
+      const message = err instanceof Error ? err.message : 'Failed to moderate review.';
+      setModerationError({ reviewId: variables.reviewId, message });
+    },
+  });
+
+  const isModerating = (reviewId: string, status: string) =>
+    moderateMutation.isPending &&
+    moderateMutation.variables?.reviewId === reviewId &&
+    moderateMutation.variables?.status === status;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -89,6 +127,113 @@ export function AdminDashboard() {
             </div>
           )}
         </Card>
+
+        <div className="mt-8">
+          <Card variant="bordered" padding="none">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Review moderation</h2>
+            </div>
+
+            {reviewsLoading && (
+              <div className="flex justify-center p-12">
+                <Spinner size="lg" label="Loading reviews" withStatusRole />
+              </div>
+            )}
+
+            {reviewsError && (
+              <div className="p-6">
+                <ErrorAlert
+                  title="Unable to load reviews"
+                  message={reviewsErrorObj instanceof Error ? `${reviewsErrorObj.message}. Failed to load reviews.` : 'The review service did not return data. Try again. Failed to load reviews.'}
+                  variant="error"
+                  role="alert"
+                  action={{ label: 'Try again', onClick: () => refetchReviews() }}
+                />
+              </div>
+            )}
+
+            {!reviewsLoading && !reviewsError && reviews.length === 0 && (
+              <p className="px-6 py-10 text-center text-gray-600">No reviews to moderate. No reviews yet.</p>
+            )}
+
+            {!reviewsLoading && !reviewsError && reviews.length > 0 && (
+              <ul className="divide-y divide-gray-200">
+                {reviews.map((review: Review) => (
+                  <li key={review.id} className="px-6 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          {review.rating}/5
+                          <span className="ml-2 text-xs font-normal text-gray-500">Status: {review.status}</span>
+                        </p>
+                        {review.comment && (
+                          <p className="mt-1 text-sm text-gray-700">{review.comment}</p>
+                        )}
+                        {review.images && review.images.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {review.images.map((image, index) => (
+                              <img
+                                key={`${review.id}-${index}`}
+                                src={image}
+                                alt={`Review image ${index + 1}`}
+                                className="h-16 w-16 rounded object-cover border border-gray-200"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">
+                          Product: {review.productId} • Consumer: {review.consumerId}
+                        </p>
+                      </div>
+                      <div className="flex flex-shrink-0 gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => moderateMutation.mutate({ reviewId: review.id, status: 'published' })}
+                          isLoading={isModerating(review.id, 'published')}
+                          loadingText="Publishing..."
+                          disabled={moderateMutation.isPending}
+                        >
+                          Publish
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => moderateMutation.mutate({ reviewId: review.id, status: 'hidden' })}
+                          isLoading={isModerating(review.id, 'hidden')}
+                          loadingText="Hiding..."
+                          disabled={moderateMutation.isPending}
+                        >
+                          Hide
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => moderateMutation.mutate({ reviewId: review.id, status: 'rejected' })}
+                          isLoading={isModerating(review.id, 'rejected')}
+                          loadingText="Rejecting..."
+                          disabled={moderateMutation.isPending}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                    {moderationError?.reviewId === review.id && (
+                      <div className="mt-3">
+                        <ErrorAlert
+                          title="Unable to moderate review"
+                          message={`${moderationError.message}. Failed to moderate review.`}
+                          variant="error"
+                          role="alert"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   );

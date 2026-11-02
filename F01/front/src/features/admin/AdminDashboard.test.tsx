@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Order, orderApi } from '@/shared/api/order';
+import { reviewApi } from '@/shared/api/review';
 import { AdminDashboard } from './AdminDashboard';
 
 vi.mock('@/shared/api/order', async importOriginal => {
@@ -16,7 +17,20 @@ vi.mock('@/shared/api/order', async importOriginal => {
   };
 });
 
+vi.mock('@/shared/api/review', async importOriginal => {
+  const original = await importOriginal<typeof import('@/shared/api/review')>();
+  return {
+    ...original,
+    reviewApi: {
+      ...original.reviewApi,
+      listAdminReviews: vi.fn(),
+      moderateReview: vi.fn(),
+    },
+  };
+});
+
 const mockListOrders = vi.mocked(orderApi.list);
+const mockListAdminReviews = vi.mocked(reviewApi.listAdminReviews);
 
 const order: Order = {
   id: 'order-123',
@@ -55,6 +69,7 @@ function renderDashboard() {
 describe('AdminDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListAdminReviews.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
   });
 
   it('shows recent orders returned by the Admin order API', async () => {

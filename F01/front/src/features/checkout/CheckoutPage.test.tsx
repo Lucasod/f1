@@ -505,75 +505,40 @@ describe('CheckoutPage', () => {
     expect(submitButton).toBeDisabled();
   });
 
-  it('applies coupon code and calls previewCheckout', async () => {
-    mockUseCheckoutPreview.refetch.mockClear();
-    
+  it('disables coupon input and apply button (coupons unavailable)', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Select address first
-    fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
+    const couponInput = screen.getByTestId('coupon-input');
+    const applyButton = screen.getByTestId('coupon-apply-button');
 
-    // Apply coupon
-    const couponInput = screen.getByPlaceholderText(/código do cupom/i);
-    fireEvent.change(couponInput, { target: { value: 'SAVE10' } });
-
-    const applyButton = screen.getByRole('button', { name: /aplicar/i });
-    fireEvent.click(applyButton);
-
-    // Wait for addCouponCode to be called
-    await waitFor(() => {
-      expect(mockUseCheckoutState.addCouponCode).toHaveBeenCalledWith('SAVE10');
-    });
+    expect(couponInput).toBeDisabled();
+    expect(applyButton).toBeDisabled();
+    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
   });
 
-  it('shows applied coupons with remove option', async () => {
+  it('disables coupon input and apply button and shows unavailable message', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Select address first
-    fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
+    const couponInput = screen.getByTestId('coupon-input');
+    const applyButton = screen.getByTestId('coupon-apply-button');
 
-    // Apply coupon
-    const couponInput = screen.getByPlaceholderText(/código do cupom/i);
-    fireEvent.change(couponInput, { target: { value: 'SAVE10' } });
-
-    const applyButton = screen.getByRole('button', { name: /aplicar/i });
-    fireEvent.click(applyButton);
-
-    await waitFor(() => {
-      expect(mockUseCheckoutState.addCouponCode).toHaveBeenCalledWith('SAVE10');
-    });
-
-    // Verify removeCouponCode would be called when remove button is clicked
-    // (We can't easily test the button appearing without triggering a re-render)
-    // The mock's internal state now has the coupon code
-    expect(mockUseCheckoutState.couponCodes).toContain('SAVE10');
+    expect(couponInput).toBeDisabled();
+    expect(applyButton).toBeDisabled();
+    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
   });
 
-  it('shows coupon error when invalid', async () => {
-    // Mock addCouponCode to throw
-    mockUseCheckoutState.addCouponCode.mockImplementationOnce(() => {
-      throw new Error('Cupom inválido ou expirado');
-    });
-
+  it('shows coupons unavailable message', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Select address first
-    fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
-
-    // Apply invalid coupon
-    const couponInput = screen.getByPlaceholderText(/código do cupom/i);
-    fireEvent.change(couponInput, { target: { value: 'INVALID' } });
-
-    const applyButton = screen.getByRole('button', { name: /aplicar/i });
-    fireEvent.click(applyButton);
-
-    await waitFor(() => expect(screen.getByText(/cupom inválido ou expirado/i)).toBeInTheDocument());
+    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
+    expect(screen.getByTestId('coupon-input')).toBeDisabled();
+    expect(screen.getByTestId('coupon-apply-button')).toBeDisabled();
   });
 
 it('displays order summary with vendor groups, items, subtotal, discount, total', async () => {
@@ -605,7 +570,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(within(sidebar).getByText(/^total$/i).closest('div')).toContainHTML('R$ 109,97');
   });
 
-  it('shows discount when coupons applied', async () => {
+  it('does not show discount (coupons disabled)', async () => {
     // Set up coupon in state using the mock function
     mockUseCheckoutState.setCouponCodes(['SAVE10']);
     mockUseCheckoutPreview.data = mockPreviewResponseWithDiscount;
@@ -617,10 +582,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     // Select address
     fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
 
-    // Check discount appears in summary
-    await waitFor(() => expect(screen.getByText(/desconto \(cupons\)/i)).toBeInTheDocument());
-    // Check negative discount amount in sidebar (more specific)
-    expect(within(screen.getByTestId('checkout-sidebar-summary')).getByText(/-/)).toBeInTheDocument();
+    // Discount line should not appear
+    expect(screen.queryByText(/desconto \(cupons\)/i)).not.toBeInTheDocument();
   });
 
   it('shows payment selection with radio buttons', async () => {
@@ -772,11 +735,6 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     fireEvent.click(submitButton);
 
     // Click again - should not call checkout again due to double-click prevention in handleSubmit
-    // (handleSubmit checks checkoutMutation.isPending but we're using checkoutApi directly)
-    // The component has: if (checkoutMutation.isPending) return;
-    // Since checkoutMutation.isPending comes from the unused useCheckout mutation, it will always be false
-    // So the double-click prevention in the component doesn't work with the current implementation
-    // This test verifies the current behavior - the API is called once per click
     fireEvent.click(screen.getByTestId('checkout-submit-button'));
 
     // Resolve the promise
@@ -785,10 +743,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     });
 
     // Should only have been called once due to double-click prevention
-    // Note: The component's double-click prevention uses checkoutMutation.isPending which is from the unused useCheckout mutation
-    // So currently it doesn't prevent double submission via checkoutApi
-    // This test documents the current behavior
-    expect(mockCheckoutApi.checkout).toHaveBeenCalledTimes(2);
+    expect(mockCheckoutApi.checkout).toHaveBeenCalledTimes(1);
   });
 
   it('shows free shipping when shipping amount is zero', async () => {
@@ -869,37 +824,14 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(mockUseCheckoutState.removeCouponCode).toHaveBeenCalledWith('SAVE10');
   });
 
-  it('disables coupon input and apply button while applying', async () => {
-    // Make addCouponCode async/slow
-    let resolveAddCoupon: () => void;
-    const addCouponPromise = new Promise<void>((resolve) => {
-      resolveAddCoupon = resolve;
-    });
-    mockUseCheckoutState.addCouponCode.mockImplementationOnce(() => addCouponPromise);
-
+  it('disables coupon input and apply button (coupons unavailable)', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Select address
-    fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
-
-    // Apply coupon
-    const couponInput = screen.getByTestId('coupon-input');
-    fireEvent.change(couponInput, { target: { value: 'SAVE10' } });
-    fireEvent.click(screen.getByTestId('coupon-apply-button'));
-
-    // Should show loading state on apply button
-    await waitFor(() => expect(screen.getByTestId('coupon-apply-button')).toHaveTextContent(/aplicando\.\.\./i));
-    // Button should be disabled while applying
+    expect(screen.getByTestId('coupon-input')).toBeDisabled();
     expect(screen.getByTestId('coupon-apply-button')).toBeDisabled();
-    // Note: Input disabled state is not forwarded to native input by Input component (known issue)
-    // Verify input has aria-disabled or check via component props if available
-
-    // Resolve
-    await act(async () => {
-      resolveAddCoupon!();
-    });
+    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
   });
 
   it('shows progress steps', async () => {

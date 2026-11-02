@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useCart } from '@/features/cart/useCart';
-import { useCheckoutPreview, useCheckoutMutations, useCheckoutState } from './useCheckout';
+import { useCheckoutPreview, useCheckoutState } from './useCheckout';
 import { checkoutApi, CheckoutPreviewVendorGroup, CheckoutPreviewItem } from '@/shared/api/checkout';
 import { Order, Address } from '@/shared/api/order';
 import { personApi } from '@/shared/api/person';
@@ -150,6 +150,7 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: cartData, isLoading: cartLoading, error: cartError, refetch: refetchCart } = useCart();
+  const items = cartData?.cart?.items || [];
   
   // Checkout state
   const {
@@ -167,12 +168,10 @@ export function CheckoutPage() {
   const {
     data: previewData,
     isLoading: previewLoading,
+    error: previewError,
     refetch: refetchPreview,
-  } = useCheckoutPreview(couponCodes.length > 0 ? couponCodes : undefined);
+  } = useCheckoutPreview(couponCodes.length > 0 ? couponCodes : undefined, items.length > 0 && isAuthenticated);
 
-  // Checkout mutation
-  const { useCheckout } = useCheckoutMutations();
-  const checkoutMutation = useCheckout();
 
   // Addresses
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -185,31 +184,34 @@ export function CheckoutPage() {
   const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   // Submit state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
 
   // Fetch addresses when authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const loadAddresses = async () => {
-        setAddressesLoading(true);
-        setAddressesError(null);
-        try {
-          const data = await fetchUserAddresses();
-          setAddresses(data);
-        } catch {
-          setAddressesError('Não foi possível carregar os endereços');
-        } finally {
-          setAddressesLoading(false);
-        }
-      };
-      loadAddresses();
-    } else {
+  const loadAddresses = useCallback(async () => {
+    if (!isAuthenticated || !user) {
       setAddresses([]);
+      setAddressesLoading(false);
+      return;
+    }
+    setAddressesLoading(true);
+    setAddressesError(null);
+    try {
+      const data = await fetchUserAddresses();
+      setAddresses(data);
+    } catch {
+      setAddressesError('Não foi possível carregar os endereços');
+    } finally {
       setAddressesLoading(false);
     }
   }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    loadAddresses();
+  }, [loadAddresses]);
 
   // Refetch preview when coupons change
   useEffect(() => {
@@ -259,37 +261,17 @@ export function CheckoutPage() {
     return true;
   }, [selectedAddressId, paymentMethod]);
 
-  // Handle checkout submit
-  const handleSubmit = useCallback(async () => {
-    if (!validateForm()) return;
-    if (checkoutMutation.isPending) return; // Double-click prevention
-
-    try {
-      const response = await checkoutApi.checkout({
-        shippingAddressId: selectedAddressId!,
-        couponCodes: couponCodes.length > 0 ? couponCodes : undefined,
-      });
-      setSubmittedOrder(response.order);
-      setIsSubmitted(true);
-      resetCheckoutState();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao finalizar pedido';
-      setSubmitError(message);
-    }
-  }, [validateForm, selectedAddressId, paymentMethod, couponCodes, checkoutMutation, resetCheckoutState]);
-
   // Calculate subtotal from cart items
-  const items = cartData?.cart?.items || [];
   const isCartEmpty = items.length === 0;
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
   // Preview data
   const preview = previewData;
   const vendorGroups: CheckoutPreviewVendorGroup[] = preview?.vendorGroups || [];
-  const totalAmount = preview?.totalAmount ?? subtotal;
-  const subtotalFromPreview = vendorGroups.reduce((sum: number, vg: CheckoutPreviewVendorGroup) => sum + vg.subtotal, 0);
-  const discountAmount = subtotal - subtotalFromPreview;
-  const shippingAmount = totalAmount - subtotalFromPreview - discountAmount;
+  const totalAmount = preview?.totalAmount ?? 0;
+  const previewSubtotal = vendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
+  const subtotal = preview ? previewSubtotal : items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const discountAmount = preview ? subtotal - previewSubtotal : 0;
+  const shippingAmount = preview ? totalAmount - previewSubtotal - discountAmount : 0;
 
   // Address options for radio group
   const addressOptions = useMemo(() => addresses.map((addr) => ({
@@ -304,7 +286,39 @@ export function CheckoutPage() {
     { value: 'pix', label: 'Pix (Mock)', description: 'Pagamento instantâneo via Pix' },
   ], []);
 
-  const canSubmit = selectedAddressId && paymentMethod && !checkoutMutation.isPending;
+  const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview;
+
+  // Handle checkout submit
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting) return; // Double-click prevention
+    if (!validateForm()) return;
+    if (!preview) {
+      setSubmitError('Preview do pedido indisponível');
+      return;
+    }
+
+    if (submitLock.current) return;
+    submitLock.current = true;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const response = await checkoutApi.checkout({
+        shippingAddressId: selectedAddressId!,
+        couponCodes: couponCodes.length > 0 ? couponCodes : undefined,
+      });
+      setSubmittedOrder(response.order);
+      setIsSubmitted(true);
+      resetCheckoutState();
+      await refetchCart();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao finalizar pedido';
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+      submitLock.current = false;
+    }
+  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes, resetCheckoutState, refetchCart]);
 
   // Loading state
   const isInitialLoading = authLoading || cartLoading || addressesLoading;
@@ -394,8 +408,8 @@ export function CheckoutPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Pedido confirmado!</h1>
-            <p className="mt-2 text-gray-600">Seu pedido foi realizado com sucesso.</p>
+            <h1 className="text-3xl font-bold text-gray-900">Pedido criado com sucesso</h1>
+            <p className="mt-2 text-gray-600">Seu pedido foi registrado. O pagamento será confirmado pelo provedor.</p>
           </div>
           
           <Card variant="elevated" padding="lg">
@@ -486,6 +500,21 @@ export function CheckoutPage() {
           />
         )}
 
+        {/* Preview Error Alert */}
+        {previewError && (
+          <ErrorAlert
+            message={previewError instanceof Error ? previewError.message : 'Não foi possível carregar o resumo do pedido'}
+            title="Erro ao carregar preview"
+            variant="error"
+            action={{
+              label: 'Tentar novamente',
+              onClick: () => refetchPreview(),
+            }}
+            role="alert"
+            className="mb-6"
+          />
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content - Steps */}
           <div className="lg:col-span-2 space-y-6">
@@ -507,7 +536,7 @@ export function CheckoutPage() {
                     variant="error"
                     action={{
                       label: 'Tentar novamente',
-                      onClick: () => window.location.reload(),
+                      onClick: () => loadAddresses(),
                     }}
                     role="alert"
                   />
@@ -552,7 +581,7 @@ export function CheckoutPage() {
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     error={couponError}
-                    disabled={applyingCoupon || previewLoading}
+                    disabled
                     aria-label="Código do cupom"
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
                     data-testid="coupon-input"
@@ -560,7 +589,7 @@ export function CheckoutPage() {
                   <Button
                     variant="secondary"
                     onClick={handleApplyCoupon}
-                    disabled={applyingCoupon || previewLoading || !couponInput.trim()}
+                    disabled
                     isLoading={applyingCoupon}
                     loadingText="Aplicando..."
                     data-testid="coupon-apply-button"
@@ -568,6 +597,9 @@ export function CheckoutPage() {
                     Aplicar
                   </Button>
                 </div>
+                <p className="text-sm text-gray-500">
+                  Cupons indisponíveis até a resolução do cálculo de desconto (Q-016).
+                </p>
 
                 {couponCodes.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -706,8 +738,8 @@ export function CheckoutPage() {
                 variant="primary"
                 size="lg"
                 onClick={handleSubmit}
-                disabled={!canSubmit}
-                isLoading={checkoutMutation.isPending}
+                disabled={!canSubmit || isSubmitting || !preview}
+                isLoading={isSubmitting}
                 loadingText="Processando..."
                 data-testid="checkout-submit-button"
               >

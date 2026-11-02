@@ -2,11 +2,11 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { checkoutApi, CheckoutPreviewResponse, CheckoutInput, CheckoutResponse } from '@/shared/api/checkout';
 
-export function useCheckoutPreview(couponCodes?: string[]) {
+export function useCheckoutPreview(couponCodes?: string[], enabled = true) {
   return useQuery<CheckoutPreviewResponse, Error>({
     queryKey: ['checkout', 'preview', couponCodes],
     queryFn: () => checkoutApi.preview(couponCodes),
-    enabled: couponCodes !== undefined,
+    enabled: enabled,
     staleTime: 60 * 1000, // 1 minute
   });
 }
