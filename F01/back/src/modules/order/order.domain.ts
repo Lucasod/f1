@@ -51,6 +51,7 @@ export enum OrderError {
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
   VENDOR_NOT_FOUND = 'VENDOR_NOT_FOUND',
   PAYMENT_FAILED = 'PAYMENT_FAILED',
+  STOCK_ROLLBACK_FAILED = 'STOCK_ROLLBACK_FAILED',
   PERSON_ID_REQUIRED = 'PERSON_ID_REQUIRED',
   VENDOR_ID_REQUIRED = 'VENDOR_ID_REQUIRED',
   FORBIDDEN = 'FORBIDDEN',
@@ -656,6 +657,7 @@ export interface OrderRepository {
   findByStatus(status: OrderStatus): Promise<Order[]>;
   findAll(): Promise<Order[]>;
   update(order: Order): Promise<Order>;
+  delete(id: string): Promise<void>;
 }
 
 export class InMemoryOrderRepository implements OrderRepository {
@@ -739,6 +741,21 @@ export class InMemoryOrderRepository implements OrderRepository {
     return order;
   }
 
+  async delete(id: string): Promise<void> {
+    const order = this.orders.get(id);
+    if (order) {
+      const personOrders = this.personIndex.get(order.personId);
+      if (personOrders) {
+        personOrders.delete(id);
+      }
+      const statusOrders = this.statusIndex.get(order.status);
+      if (statusOrders) {
+        statusOrders.delete(id);
+      }
+      this.orders.delete(id);
+    }
+  }
+
   clear(): void {
     this.orders.clear();
     this.personIndex.clear();
@@ -752,6 +769,7 @@ export interface PaymentRepository {
   findByOrderId(orderId: string): Promise<Payment[]>;
   findByPersonId(personId: string): Promise<Payment[]>;
   update(payment: Payment): Promise<Payment>;
+  delete(id: string): Promise<void>;
 }
 
 export class InMemoryPaymentRepository implements PaymentRepository {
@@ -804,6 +822,21 @@ export class InMemoryPaymentRepository implements PaymentRepository {
     }
     this.payments.set(payment.id, payment);
     return payment;
+  }
+
+  async delete(id: string): Promise<void> {
+    const payment = this.payments.get(id);
+    if (payment) {
+      const orderPayments = this.orderIndex.get(payment.orderId);
+      if (orderPayments) {
+        orderPayments.delete(id);
+      }
+      const personPayments = this.personIndex.get(payment.personId);
+      if (personPayments) {
+        personPayments.delete(id);
+      }
+      this.payments.delete(id);
+    }
   }
 
   clear(): void {

@@ -175,6 +175,10 @@ export class MongoOrderRepository implements OrderRepository {
     return this.save(order);
   }
 
+  async delete(id: string): Promise<void> {
+    await this.ordersCollection.deleteOne({ _id: id });
+  }
+
   private mapToOrder(doc: OrderDoc): Order {
     const orderData: OrderData = {
       id: doc._id,

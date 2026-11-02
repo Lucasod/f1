@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CheckoutService } from './checkout.service';
 import { Cart, InMemoryCartRepository } from '../cart/cart.domain';
-import { Product, ProductStatus, InMemoryProductRepository } from '../product/product.domain';
+import { Product, ProductStatus, InMemoryProductRepository, ProductError } from '../product/product.domain';
 import { Vendor, VendorStatus, InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { Person, InMemoryPersonRepository, Address } from '../person/person.domain';
 import { Order, OrderStatus, FinancialStatus, Payment, PaymentStatus, OrderError, InMemoryOrderRepository, InMemoryPaymentRepository } from '../order/order.domain';
@@ -90,7 +90,9 @@ describe('Checkout Service', () => {
 
   describe('checkout', () => {
     beforeEach(async () => {
-      await productRepo.save(validProduct);
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      freshProduct.id = productId;
+      await productRepo.save(freshProduct);
       await vendorRepo.save(validVendor);
       await personRepo.save(validPerson);
     });
@@ -343,19 +345,19 @@ describe('Checkout Service', () => {
       await cartService.addItem(consumerId, productId, 2);
       await cartService.addItem(consumerId, productId2, 3);
 
-      // Make update fail on second product to simulate decrement failure
-      const originalUpdate = productRepo.update.bind(productRepo);
-      let updateCallCount = 0;
-      productRepo.update = async (product) => {
-        updateCallCount += 1;
-        if (updateCallCount === 2) {
+      // Make decrementStock fail on second product to simulate decrement failure
+      const originalDecrement = productRepo.decrementStock.bind(productRepo);
+      let decrementCallCount = 0;
+      productRepo.decrementStock = async (pid, amount) => {
+        decrementCallCount += 1;
+        if (decrementCallCount === 2) {
           throw new Error('simulated decrement failure');
         }
-        return originalUpdate(product);
+        return originalDecrement(pid, amount);
       };
 
       await expect(checkoutService.checkout(consumerId, addressId))
-        .rejects.toThrow(OrderError.INSUFFICIENT_STOCK);
+        .rejects.toThrow('simulated decrement failure');
 
       // First product stock should be rolled back
       const product1 = await productRepo.findById(productId);
@@ -365,6 +367,274 @@ describe('Checkout Service', () => {
       expect(orders).toHaveLength(0);
     });
 
+    it('should restore stock if order creation fails after decrement', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      vi.spyOn(Order, 'create').mockImplementation(() => {
+        throw new Error('order creation failed');
+      });
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow('order creation failed');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+
+      vi.restoreAllMocks();
+    });
+
+    it('should restore stock if order save fails after decrement', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalSave = orderRepo.save.bind(orderRepo);
+      orderRepo.save = async () => {
+        throw new Error('order save failed');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow('order save failed');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+
+      orderRepo.save = originalSave;
+    });
+
+    it('should preserve original error when payment save fails', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalSave = paymentRepo.save.bind(paymentRepo);
+      paymentRepo.save = async () => {
+        throw new Error('payment provider unavailable');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow('payment provider unavailable');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+
+      paymentRepo.save = originalSave;
+    });
+
+    it('should restore stock if clear cart fails after decrement', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalClearCart = cartService.clearCart.bind(cartService);
+      cartService.clearCart = async () => {
+        throw new Error('clear cart failed');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow('clear cart failed');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+
+      cartService.clearCart = originalClearCart;
+    });
+
+    it('should throw STOCK_ROLLBACK_FAILED when rollback fails', async () => {
+      const productId2 = 'product-2';
+      const validProduct2 = Product.create({
+        vendorId,
+        categoryId: 'category-1',
+        name: 'Test Product 2',
+        description: 'Test Description 2',
+        price: 50,
+        quantity: 10,
+        status: ProductStatus.ACTIVE,
+      });
+      validProduct2.id = productId2;
+      await productRepo.save(validProduct2);
+
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
+      const freshProduct2 = Product.reconstruct({ ...validProduct2, quantity: 10 });
+      await productRepo.update(freshProduct2);
+
+      await cartService.addItem(consumerId, productId, 2);
+      await cartService.addItem(consumerId, productId2, 3);
+
+      // First decrement succeeds (product 1), second fails (product 2)
+      const originalDecrement = productRepo.decrementStock.bind(productRepo);
+      let decrementCallCount = 0;
+      productRepo.decrementStock = async (pid, amount) => {
+        decrementCallCount++;
+        if (decrementCallCount === 2) {
+          throw new Error('decrement failed');
+        }
+        return originalDecrement(pid, amount);
+      };
+
+      // Rollback (incrementStock) fails
+      productRepo.incrementStock = async () => {
+        throw new Error('rollback failed');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.STOCK_ROLLBACK_FAILED);
+
+      productRepo.decrementStock = originalDecrement;
+    });
+
+    it('should not rollback when no decrement occurred (failure before decrement)', async () => {
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.CART_EMPTY);
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+    });
+
+    it('should not decrement or restore stock twice on duplicate failure', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalSave = orderRepo.save.bind(orderRepo);
+      orderRepo.save = async () => {
+        throw new Error('save failed');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow('save failed');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(10);
+
+      orderRepo.save = originalSave;
+    });
+
+    it('should surface STOCK_ROLLBACK_FAILED when post-decrement compensation fails', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalSave = orderRepo.save.bind(orderRepo);
+      orderRepo.save = async () => {
+        throw new Error('order save failed');
+      };
+
+      productRepo.incrementStock = async () => {
+        throw new Error('restore failed');
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.STOCK_ROLLBACK_FAILED);
+
+      orderRepo.save = originalSave;
+    });
+
+    it('should surface STOCK_ROLLBACK_FAILED when incrementStock misses product', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 2);
+
+      const originalSave = orderRepo.save.bind(orderRepo);
+      orderRepo.save = async () => {
+        throw new Error('order save failed');
+      };
+
+      productRepo.incrementStock = async () => {
+        throw new Error(ProductError.PRODUCT_NOT_FOUND);
+      };
+
+      await expect(checkoutService.checkout(consumerId, addressId))
+        .rejects.toThrow(OrderError.STOCK_ROLLBACK_FAILED);
+
+      orderRepo.save = originalSave;
+    });
+
+    it('should list multiple product ids when multiple restores fail', async () => {
+      const productId2 = 'product-2';
+      const validProduct2 = Product.create({
+        vendorId,
+        categoryId: 'category-1',
+        name: 'Test Product 2',
+        description: 'Test Description 2',
+        price: 50,
+        quantity: 10,
+        status: ProductStatus.ACTIVE,
+      });
+      validProduct2.id = productId2;
+      await productRepo.save(validProduct2);
+
+      const freshProduct1 = Product.reconstruct({ ...validProduct, quantity: 10 });
+      await productRepo.update(freshProduct1);
+      const freshProduct2 = Product.reconstruct({ ...validProduct2, quantity: 10 });
+      await productRepo.update(freshProduct2);
+
+      await cartService.addItem(consumerId, productId, 2);
+      await cartService.addItem(consumerId, productId2, 3);
+
+      const originalSave = orderRepo.save.bind(orderRepo);
+      orderRepo.save = async () => {
+        throw new Error('order save failed');
+      };
+
+      productRepo.incrementStock = async () => {
+        throw new Error('restore failed');
+      };
+
+      let caught: any;
+      try {
+        await checkoutService.checkout(consumerId, addressId);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeDefined();
+      expect(caught.message).toBe(OrderError.STOCK_ROLLBACK_FAILED);
+      expect(caught.cause).toBeDefined();
+      expect(caught.cause.message).toContain(productId);
+      expect(caught.cause.message).toContain(productId2);
+
+      orderRepo.save = originalSave;
+    });
+
+    it('should handle concurrent checkouts without overselling', async () => {
+      const freshProduct = Product.reconstruct({ ...validProduct, quantity: 5 });
+      await productRepo.update(freshProduct);
+
+      await cartService.addItem(consumerId, productId, 3);
+
+      const consumerId2 = 'consumer-2';
+      const validPerson2 = Person.create({
+        name: 'Test Consumer 2',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '12345678902' },
+        contactInfos: [{ type: 'email', value: 'test2@example.com', isPrimary: true }],
+        addresses: [validAddress],
+      });
+      validPerson2.id = consumerId2;
+      await personRepo.save(validPerson2);
+      await cartService.addItem(consumerId2, productId, 3);
+
+      const results = await Promise.allSettled([
+        checkoutService.checkout(consumerId, addressId),
+        checkoutService.checkout(consumerId2, addressId),
+      ]);
+
+      const statuses = results.map(r => r.status);
+      expect(statuses).toContain('fulfilled');
+      expect(statuses).toContain('rejected');
+
+      const product = await productRepo.findById(productId);
+      expect(product!.quantity).toBe(2);
+    });
   });
 
   describe('previewCheckout', () => {
@@ -521,5 +791,6 @@ describe('Checkout Service', () => {
       const payments = await paymentRepo.findByPersonId(consumerId);
       expect(payments).toHaveLength(0);
     });
+
   });
 });

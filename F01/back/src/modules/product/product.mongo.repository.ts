@@ -164,6 +164,31 @@ export class MongoProductRepository implements ProductRepository {
     await this.productsCollection.deleteOne({ _id: id });
   }
 
+  async decrementStock(productId: string, amount: number): Promise<boolean> {
+    const result = await this.productsCollection.updateOne(
+      { _id: productId, quantity: { $gte: amount } },
+      { $inc: { quantity: -amount }, $set: { updatedAt: new Date() } }
+    );
+    if (result.modifiedCount > 0) {
+      return true;
+    }
+    const exists = await this.productsCollection.findOne({ _id: productId }, { projection: { _id: 1 } });
+    if (!exists) {
+      throw new Error(ProductError.PRODUCT_NOT_FOUND);
+    }
+    return false;
+  }
+
+  async incrementStock(productId: string, amount: number): Promise<void> {
+    const result = await this.productsCollection.updateOne(
+      { _id: productId },
+      { $inc: { quantity: amount }, $set: { updatedAt: new Date() } }
+    );
+    if (result.matchedCount === 0) {
+      throw new Error(ProductError.PRODUCT_NOT_FOUND);
+    }
+  }
+
   private mapToProduct(doc: ProductDoc): Product {
     return Product.reconstruct({
       id: doc._id,

@@ -93,46 +93,104 @@ export class CheckoutService {
     // Validate and prepare vendor groups
     const vendorGroupsData = await this.prepareVendorGroups(cart);
 
-    // Decrement product stock (atomic-ish) with rollback on failure
-    await this.decrementStock(cart);
+    // Compensation state declared before try
+    const decremented: { productId: string; amount: number }[] = [];
+    let orderSaved = false;
+    let paymentSaved = false;
+    let savedOrder: Order | null = null;
+    let savedPayment: Payment | null = null;
+    let stockRestored = false;
 
-    // Create order
-    const order = Order.create({
-      personId: consumerId,
-      vendorGroups: vendorGroupsData,
-      shippingAddress: {
-        id: shippingAddress.id,
-        street: shippingAddress.street,
-        number: shippingAddress.number,
-        neighborhood: shippingAddress.neighborhood,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        isPrimary: shippingAddress.isPrimary || false
+    const compensateStock = async () => {
+      if (stockRestored || decremented.length === 0) {
+        return;
       }
-    });
-
-    // Create payment
-    const payment = Payment.create({
-      orderId: order.id,
-      personId: consumerId,
-      amount: order.totalAmount,
-      provider: 'stripe'
-    });
-
-    // Set mock provider payment intent ID
-    payment.providerTransactionId = 'mock_intent_123';
-
-    // Save order and payment
-    await this.orderRepo.save(order);
-    await this.paymentRepo.save(payment);
-
-    // Clear cart
-    await this.cartService.clearCart(consumerId);
-
-    return {
-      order,
-      clientSecret: 'mock_client_secret_for_testing'
+      stockRestored = true;
+      const failures: string[] = [];
+      for (const entry of decremented) {
+        try {
+          await this.productRepo.incrementStock(entry.productId, entry.amount);
+        } catch (restoreError) {
+          failures.push(entry.productId);
+          console.error('Stock rollback failed for product', entry.productId, restoreError);
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(`${OrderError.STOCK_ROLLBACK_FAILED}: ${failures.join(',')}`);
+      }
     };
+
+    const compensateRecords = async () => {
+      if (paymentSaved && savedPayment) {
+        try {
+          await this.paymentRepo.delete(savedPayment.id);
+        } catch (deleteError) {
+          console.error('Payment compensation failed', deleteError);
+        }
+      }
+      if (orderSaved && savedOrder) {
+        try {
+          await this.orderRepo.delete(savedOrder.id);
+        } catch (deleteError) {
+          console.error('Order compensation failed', deleteError);
+        }
+      }
+    };
+
+    try {
+      await this.decrementStock(cart, decremented);
+
+      // Create order
+      const order = Order.create({
+        personId: consumerId,
+        vendorGroups: vendorGroupsData,
+        shippingAddress: {
+          id: shippingAddress.id,
+          street: shippingAddress.street,
+          number: shippingAddress.number,
+          neighborhood: shippingAddress.neighborhood,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          isPrimary: shippingAddress.isPrimary || false
+        }
+      });
+
+      // Create payment
+      const payment = Payment.create({
+        orderId: order.id,
+        personId: consumerId,
+        amount: order.totalAmount,
+        provider: 'stripe'
+      });
+
+      // Set mock provider payment intent ID
+      payment.providerTransactionId = 'mock_intent_123';
+
+      // Save order and payment
+      await this.orderRepo.save(order);
+      orderSaved = true;
+      savedOrder = order;
+
+      await this.paymentRepo.save(payment);
+      paymentSaved = true;
+      savedPayment = payment;
+
+      // Clear cart
+      await this.cartService.clearCart(consumerId);
+
+      return {
+        order,
+        clientSecret: 'mock_client_secret_for_testing'
+      };
+    } catch (error) {
+      await compensateRecords();
+      try {
+        await compensateStock();
+      } catch (compensationError) {
+        throw new Error(OrderError.STOCK_ROLLBACK_FAILED, { cause: compensationError });
+      }
+      throw error;
+    }
   }
 
   async previewCheckout(consumerId: string, couponCodes?: string[]): Promise<CheckoutPreviewResponse> {
@@ -186,40 +244,18 @@ export class CheckoutService {
     };
   }
 
-  private async decrementStock(cart: Cart): Promise<void> {
-    const decremented: { productId: string; originalQuantity: number }[] = [];
+  private async decrementStock(cart: Cart, decremented: { productId: string; amount: number }[]): Promise<void> {
+    const aggregated = new Map<string, number>();
+    for (const item of cart.items) {
+      aggregated.set(item.productId, (aggregated.get(item.productId) || 0) + item.quantity);
+    }
 
-    try {
-      for (const cartItem of cart.items) {
-        const product = await this.productRepo.findById(cartItem.productId);
-        if (!product) {
-          throw new Error(OrderError.PRODUCT_NOT_FOUND);
-        }
-
-        if (product.quantity < cartItem.quantity) {
-          throw new Error(OrderError.INSUFFICIENT_STOCK);
-        }
-
-        const originalQuantity = product.quantity;
-        product.updateStock(originalQuantity - cartItem.quantity);
-        await this.productRepo.update(product);
-        decremented.push({ productId: product.id, originalQuantity });
+    for (const [productId, amount] of aggregated) {
+      const ok = await this.productRepo.decrementStock(productId, amount);
+      if (!ok) {
+        throw new Error(OrderError.INSUFFICIENT_STOCK);
       }
-    } catch (error) {
-      // Rollback previously decremented quantities
-      for (const entry of decremented) {
-        try {
-          const product = await this.productRepo.findById(entry.productId);
-          if (product) {
-            product.updateStock(entry.originalQuantity);
-            await this.productRepo.update(product);
-          }
-        } catch {
-          // Best-effort rollback; rethrow original failure below
-        }
-      }
-
-      throw new Error(OrderError.INSUFFICIENT_STOCK);
+      decremented.push({ productId, amount });
     }
   }
 
@@ -231,6 +267,11 @@ export class CheckoutService {
     // Group cart items by vendorId
     const itemsByVendor = new Map<string, typeof cart.items>();
 
+    const aggregateByProduct = new Map<string, number>();
+    for (const ci of cart.items) {
+      aggregateByProduct.set(ci.productId, (aggregateByProduct.get(ci.productId) || 0) + ci.quantity);
+    }
+
     for (const cartItem of cart.items) {
       // Get product
       const product = await this.productRepo.findById(cartItem.productId);
@@ -238,8 +279,9 @@ export class CheckoutService {
         throw new Error(OrderError.PRODUCT_NOT_FOUND);
       }
 
-      // Validate stock
-      if (product.quantity < cartItem.quantity) {
+      // Validate aggregate stock
+      const totalQuantity = aggregateByProduct.get(cartItem.productId) || cartItem.quantity;
+      if (product.quantity < totalQuantity) {
         throw new Error(OrderError.INSUFFICIENT_STOCK);
       }
 

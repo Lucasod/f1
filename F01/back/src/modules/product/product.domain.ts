@@ -393,6 +393,8 @@ export interface ProductRepository {
   findAll(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]>;
   update(product: Product): Promise<Product>;
   delete(id: string): Promise<void>;
+  decrementStock(productId: string, amount: number): Promise<boolean>;
+  incrementStock(productId: string, amount: number): Promise<void>;
 }
 
 export class InMemoryProductRepository implements ProductRepository {
@@ -534,6 +536,26 @@ export class InMemoryProductRepository implements ProductRepository {
 
       this.products.delete(id);
     }
+  }
+
+  async decrementStock(productId: string, amount: number): Promise<boolean> {
+    const product = this.products.get(productId);
+    if (!product) {
+      throw new Error(ProductError.PRODUCT_NOT_FOUND);
+    }
+    if (product.quantity < amount) {
+      return false;
+    }
+    product.updateStock(product.quantity - amount);
+    return true;
+  }
+
+  async incrementStock(productId: string, amount: number): Promise<void> {
+    const product = this.products.get(productId);
+    if (!product) {
+      throw new Error(ProductError.PRODUCT_NOT_FOUND);
+    }
+    product.updateStock(product.quantity + amount);
   }
 
   clear(): void {

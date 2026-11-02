@@ -20,8 +20,10 @@ import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
 import { CheckoutService } from './modules/checkout/checkout.service';
 import { createOrderRoutes } from './modules/order/order.routes';
 import { OrderService } from './modules/order/order.service';
+import { PaymentService } from './modules/order/payment.service';
 import { createPersonRoutes } from './modules/person/person.routes';
 import { createReviewRoutes } from './modules/review/review.routes';
+import { createPaymentRoutes } from './modules/order/payment.routes';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
 import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
@@ -67,6 +69,7 @@ let checkoutService!: CheckoutService;
 let orderService!: OrderService;
 let personService!: PersonService;
 let reviewService!: ReviewService;
+let paymentService!: PaymentService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -83,6 +86,7 @@ function initializeServices(): void {
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
   reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
+  paymentService = new PaymentService(paymentRepo, orderRepo);
 }
 
 // Seed the catalog only when empty, but always reconcile demo accounts.
@@ -206,6 +210,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Order routes
       app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
+      // Payment routes (T-1004)
+      app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService }));
+
       // Person routes
       app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
 
@@ -265,6 +272,9 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Order routes
         app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
+
+        // Payment routes (T-1004)
+        app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService }));
 
         // Person routes
         app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));

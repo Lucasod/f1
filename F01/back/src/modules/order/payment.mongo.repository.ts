@@ -117,6 +117,10 @@ export class MongoPaymentRepository implements PaymentRepository {
     return this.save(payment);
   }
 
+  async delete(id: string): Promise<void> {
+    await this.paymentsCollection.deleteOne({ _id: id });
+  }
+
   private mapToPayment(doc: PaymentDoc): Payment {
     const paymentData: PaymentData = {
       id: doc._id,
