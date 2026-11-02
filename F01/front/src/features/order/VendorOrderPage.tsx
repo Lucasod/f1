@@ -41,8 +41,7 @@ function formatDate(dateString: string): string {
 
 /**
  * Map vendor group status to display label and badge variant
- * Per CD-063: pending(warning), confirmed(default), preparing(info), ready_for_pickup(info),
- * out_for_delivery(info), delivered(success), cancelled(error), refunded(error)
+ * Statuses follow the backend OrderVendorGroup state machine.
  */
 function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): {
   label: string;
@@ -55,11 +54,10 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): {
     pending: { label: 'PENDENTE', variant: 'warning' },
     confirmed: { label: 'CONFIRMADO', variant: 'default' },
     preparing: { label: 'PREPARANDO', variant: 'info' },
-    ready_for_pickup: { label: 'PRONTO_PARA_RETIRADA', variant: 'info' },
-    out_for_delivery: { label: 'SAIU_PARA_ENTREGA', variant: 'info' },
+    shipped: { label: 'ENVIADO', variant: 'info' },
     delivered: { label: 'ENTREGUE', variant: 'success' },
     cancelled: { label: 'CANCELADO', variant: 'error' },
-    refunded: { label: 'REEMBOLSADO', variant: 'error' },
+    returned: { label: 'DEVOLVIDO', variant: 'error' },
   };
 
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
@@ -73,11 +71,10 @@ const VENDOR_GROUP_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'pending', label: 'PENDENTE' },
   { value: 'confirmed', label: 'CONFIRMADO' },
   { value: 'preparing', label: 'PREPARANDO' },
-  { value: 'ready_for_pickup', label: 'PRONTO_PARA_RETIRADA' },
-  { value: 'out_for_delivery', label: 'SAIU_PARA_ENTREGA' },
+  { value: 'shipped', label: 'ENVIADO' },
   { value: 'delivered', label: 'ENTREGUE' },
   { value: 'cancelled', label: 'CANCELADO' },
-  { value: 'refunded', label: 'REEMBOLSADO' },
+  { value: 'returned', label: 'DEVOLVIDO' },
 ];
 
 /**
@@ -87,12 +84,11 @@ function getNextVendorGroupStatuses(currentStatus: OrderVendorGroupStatus): Orde
   const transitions: Record<OrderVendorGroupStatus, OrderVendorGroupStatus[]> = {
     pending: ['confirmed', 'cancelled'],
     confirmed: ['preparing', 'cancelled'],
-    preparing: ['ready_for_pickup', 'cancelled'],
-    ready_for_pickup: ['out_for_delivery', 'cancelled'],
-    out_for_delivery: ['delivered', 'cancelled'],
-    delivered: ['refunded'],
+    preparing: ['shipped', 'cancelled'],
+    shipped: ['delivered', 'cancelled', 'returned'],
+    delivered: ['returned'],
     cancelled: [],
-    refunded: [],
+    returned: [],
   };
   return transitions[currentStatus] || [];
 }

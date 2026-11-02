@@ -437,26 +437,24 @@ Baseado em:
 ```
 **Índices `coupons`:** `{ vendor_id: 1, code: 1 }` unique, `{ vendor_id: 1, status: 1 }`, `{ ends_at: 1 }` (TTL cleanup)
 
-**PROPOSTA P3a — Esquema `reviews`:**
+**Current implementation note (2026-11-01):** Q-017 is resolved by CD-067..CD-072. The schema proposal below is historical; it does not match the current runtime. The current review repository stores camelCase fields in MongoDB, uses string IDs, publishes immediately, has no vendor response, and stores owned review-image URLs from the temporary local adapter.
+
+**Historical P3a proposal — superseded:**
 ```javascript
 {
-  _id: ObjectId,
-  product_id: ObjectId,
-  consumer_id: ObjectId, // verified purchaser (CD-017)
-  order_item_id: ObjectId, // proof of purchase
-  rating: Number, // 1-5 — **PENDENTE Q-017**
-  comment: String,
-  images: [ObjectId], // refs to product_pics — **OWNERSHIP PENDENTE Q-017** (owned vs shared)
-  status: "published" | "hidden", // post-moderation — **PENDENTE Q-017**
-  vendor_response: { // single response — **PENDENTE Q-017**
-    text: String,
-    responded_at: DateTime
-  }?,
-  created_at: DateTime,
-  updated_at: DateTime
+  id: String,
+  productId: String,
+  consumerId: String,
+  orderItemId: String,
+  rating: Integer, // 1-5 (CD-070)
+  comment: String?,
+  images: [String], // URLs from temporary local storage; future S3 adapter (CD-071)
+  status: "published" | "hidden" | "rejected", // CD-067, CD-070
+  createdAt: Date,
+  updatedAt: Date
 }
 ```
-**Índices `reviews`:** `{ product_id: 1, status: 1, created_at: -1 }`, `{ consumer_id: 1 }`, `{ order_item_id: 1 }` unique (one review per purchase)
+**Current indexes `reviews`:** `{ productId: 1, status: 1, createdAt: -1 }`, `{ consumerId: 1 }`, `{ orderItemId: 1 }` unique (one review per delivered purchase).
 
 ---
 

@@ -5,6 +5,7 @@ import { useCart } from '@/features/cart/useCart';
 import { useCheckoutPreview, useCheckoutMutations, useCheckoutState } from './useCheckout';
 import { checkoutApi, CheckoutPreviewVendorGroup, CheckoutPreviewItem } from '@/shared/api/checkout';
 import { Order, Address } from '@/shared/api/order';
+import { personApi } from '@/shared/api/person';
 import {
   Card,
   CardHeader,
@@ -128,11 +129,8 @@ function RadioGroup({
  * Fetch user addresses from API
  */
 async function fetchUserAddresses(): Promise<Address[]> {
-  const response = await fetch('/api/v1/person/addresses');
-  if (!response.ok) {
-    throw new Error('Failed to fetch addresses');
-  }
-  return response.json();
+  const { person } = await personApi.getMe();
+  return person.addresses;
 }
 
 interface CheckoutStep {

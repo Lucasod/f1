@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { OnboardingForm } from './OnboardingForm';
 import { vendorApi, VendorApiException } from '@/shared/api/vendor';
+import { useAuthStore } from '@/app/providers/authStore';
 import type { Vendor } from '@/shared/api/vendor';
 
 // Mock APIs - use actual VendorApiException class for instanceof checks
@@ -20,6 +21,7 @@ vi.mock('@/shared/api/vendor', async (importOriginal) => {
 });
 
 const mockedVendorApi = vi.mocked(vendorApi);
+const refreshUserProfile = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/app/providers/AuthProvider', async () => {
   const actual = await vi.importActual('@/app/providers/AuthProvider');
@@ -61,6 +63,7 @@ const renderForm = (initialPath = '/vendor/onboard') => {
 describe('OnboardingForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAuthStore.setState({ refreshUserProfile });
     mockedVendorApi.onboard.mockResolvedValue({
       vendor: createVendor(),
     });
@@ -320,6 +323,7 @@ describe('OnboardingForm', () => {
       await waitFor(() => {
         expect(screen.getByTestId('dashboard')).toBeInTheDocument();
       });
+      expect(refreshUserProfile).toHaveBeenCalledOnce();
     });
 
     it('should show loading state during submission', async () => {

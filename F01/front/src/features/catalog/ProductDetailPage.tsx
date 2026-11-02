@@ -53,12 +53,11 @@ function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
   const target = event.target as HTMLImageElement;
   const currentSrc = target.src;
 
-  // Compare pathnames to avoid infinite loop (target.src returns absolute URL)
-  const currentPathname = new URL(currentSrc, window.location.origin).pathname;
-  const placeholderPathname = PLACEHOLDER_IMAGE;
+  // Compare full URLs to avoid infinite loop (target.src returns absolute URL)
+  const placeholderUrl = new URL(PLACEHOLDER_IMAGE, window.location.origin).href;
 
   // Safeguard: prevent infinite retries if placeholder itself fails
-  if (currentPathname !== placeholderPathname) {
+  if (currentSrc !== placeholderUrl) {
     target.src = PLACEHOLDER_IMAGE;
   }
 }
@@ -71,6 +70,8 @@ function ProductDetailContent() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showAddedMessage, setShowAddedMessage] = useState(false);
+  const [cartError, setCartError] = useState<string | null>(null);
+  const [addedTimeoutId, setAddedTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const addItemMutation = useAddItem();
 
@@ -87,12 +88,21 @@ function ProductDetailContent() {
   const statusLabel = product ? getStatusLabel(product.status, product.quantity) : 'Unknown';
 
   // Reset quantity when product changes - use useEffect to avoid render-time setState
-  const maxQuantity = product?.quantity ?? 1;
+  const maxQuantity = isOutOfStock ? 0 : (product?.quantity ?? 1);
   useEffect(() => {
     if (quantity > maxQuantity) {
       setQuantity(Math.max(1, maxQuantity));
     }
   }, [maxQuantity]);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (addedTimeoutId) {
+        clearTimeout(addedTimeoutId);
+      }
+    };
+  }, [addedTimeoutId]);
 
   const handleIncrement = useCallback(() => {
     if (quantity < maxQuantity) {
@@ -114,6 +124,16 @@ function ProductDetailContent() {
   const handleAddToCart = useCallback(async () => {
     if (!product || isOutOfStock) return;
 
+    // Clear previous error and added message at start
+    setCartError(null);
+    setShowAddedMessage(false);
+    
+    // Clear any pending timeout
+    if (addedTimeoutId) {
+      clearTimeout(addedTimeoutId);
+      setAddedTimeoutId(null);
+    }
+
     try {
       const input: CartItemInput = {
         productId: product.id,
@@ -121,12 +141,32 @@ function ProductDetailContent() {
       };
       await addItemMutation.mutateAsync(input);
       setShowAddedMessage(true);
-      setTimeout(() => setShowAddedMessage(false), 2000);
+      const timeoutId = setTimeout(() => setShowAddedMessage(false), 2000);
+      setAddedTimeoutId(timeoutId);
     } catch (err) {
       console.error('Failed to add to cart:', err);
-      // Error handling could be enhanced with a toast notification
+      
+      // Distinguish error types and set user-facing message
+      const errorWithStatus = err as Error & {
+        status?: number;
+        code?: string;
+        response?: { status?: number };
+      };
+      const status = errorWithStatus.status ?? errorWithStatus.response?.status;
+      
+      if (status === 401 || status === 403) {
+        setCartError('Please log in to add items to your cart');
+      } else if (status === 409) {
+        setCartError(errorWithStatus.code === 'PRODUCT_NOT_AVAILABLE'
+          ? 'This product is no longer available'
+          : 'Insufficient stock for the requested quantity');
+      } else if (status && status >= 500) {
+        setCartError('Server error. Please try again later');
+      } else {
+        setCartError(err instanceof Error ? err.message : 'Failed to add to cart');
+      }
     }
-  }, [product, quantity, isOutOfStock, addItemMutation]);
+  }, [product, quantity, isOutOfStock, addItemMutation, addedTimeoutId]);
 
   const handleBrowseProducts = useCallback(() => {
     navigate('/products');
@@ -265,7 +305,7 @@ function ProductDetailContent() {
             {/* Price */}
             <div className="mb-6">
               <span className="text-3xl font-bold text-gray-900">
-                ${product.price.toFixed(2)}
+                R$ {product.price.toFixed(2).replace('.', ',')}
               </span>
             </div>
 
@@ -308,7 +348,10 @@ function ProductDetailContent() {
                       type="number"
                       id="quantity"
                       value={quantity}
-                      onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        handleQuantityChange(isNaN(val) ? 1 : val);
+                      }}
                       min={1}
                       max={maxQuantity}
                       disabled={isOutOfStock}
@@ -345,17 +388,24 @@ function ProductDetailContent() {
                       Out of Stock
                     </Button>
                   ) : (
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      fullWidth={true}
-                      isLoading={addItemMutation.isPending}
-                      loadingText={showAddedMessage ? 'Added!' : 'Adding...'}
-                      onClick={handleAddToCart}
-                      className="w-full sm:w-auto"
-                    >
-                      {showAddedMessage ? 'Added!' : 'Add to Cart'}
-                    </Button>
+                    <>
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        fullWidth={true}
+                        isLoading={addItemMutation.isPending}
+                        loadingText={showAddedMessage ? 'Added!' : 'Adding...'}
+                        onClick={handleAddToCart}
+                        className="w-full sm:w-auto"
+                      >
+                        {showAddedMessage ? 'Added!' : 'Add to Cart'}
+                      </Button>
+                      {cartError && (
+                        <p className="text-red-600 text-sm mt-2" role="alert">
+                          {cartError}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

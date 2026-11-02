@@ -58,12 +58,11 @@ export function ProductCard({ product }: ProductCardProps) {
     const target = event.target as HTMLImageElement;
     const currentSrc = target.src;
 
-    // Compare pathnames to avoid infinite loop (target.src returns absolute URL)
-    const currentPathname = new URL(currentSrc, window.location.origin).pathname;
-    const placeholderPathname = PLACEHOLDER_IMAGE;
+    // Compare full URLs to avoid infinite loop (target.src returns absolute URL)
+    const placeholderUrl = new URL(PLACEHOLDER_IMAGE, window.location.origin).href;
 
     // Safeguard: prevent infinite retries if placeholder itself fails
-    if (currentPathname !== placeholderPathname) {
+    if (currentSrc !== placeholderUrl) {
       target.src = PLACEHOLDER_IMAGE;
     }
   };
@@ -95,7 +94,7 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.name}
           </h3>
           <p className="mt-1 text-lg font-bold text-gray-900">
-            ${product.price.toFixed(2)}
+            R$ {product.price.toFixed(2).replace('.', ',')}
           </p>
         </div>
       </Link>

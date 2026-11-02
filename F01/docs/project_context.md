@@ -4,7 +4,7 @@
 
 **Project:** FS-01 — Multi-Vendor E-Commerce Marketplace  
 **Period:** 19/10/2026 to 19/11/2026 (estimated 14 days effort)  
-**Current Stage:** Initial implementation merged (authentication, vendor onboarding); P4/P5 blocked pending explicit human authorization. Documentation reconciliation in progress.
+**Current Stage:** P4 implementation is authorized through `MAX_AUTHORIZED_PHASE = 4`; P5 remains blocked pending separate explicit human authorization. Authentication and vendor onboarding are implemented. The current execution status is tracked in `F01/docs/task_list.md` and the latest run record.
 
 ## Planned Technologies
 
@@ -15,8 +15,10 @@
 | Database | MongoDB |
 | Search & Filtering | Elasticsearch |
 | Caching & Sessions | Redis |
-| Payments | Stripe Connect or Razorpay (test mode) |
+| Payments | Stripe Connect (Separate Charges and Transfers; test-mode integration still pending) |
 | Image Storage | AWS S3 |
+
+**Temporary local-development boundary:** Product and review images currently use a local storage adapter, and checkout returns a payment placeholder. These allow local development without provider accounts. They do not replace the target S3/Stripe Connect integrations and do not count as their completion. Implement and validate the real provider integrations when required by the authorized task and configured environment.
 
 ## Official Deliverables
 
@@ -37,12 +39,12 @@
 6. Integrate payments and commissions with Stripe Connect or Razorpay (test mode)
 7. Implement reviews, coupons, PDF invoices, admin dashboard, separate frontend/backend deploy
 
-> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4/P5 remain blocked pending explicit human authorization; MAX_AUTHORIZED_PHASE = 4 (P5 blocked, explicit human authorization granted for P4 on 2026-10-27).
+> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4 is authorized; `MAX_AUTHORIZED_PHASE = 4`. P5 requires separate explicit human authorization and is not authorized.
 
 ## Scope Boundaries
 
 - **In scope:** Multi-vendor marketplace core domain (users, vendors, products, orders, payments, commissions, reviews, coupons, admin)
-- **Out of scope for P4/P5 (blocked):** Further implementation details, specific class designs, database schema optimization, API endpoint specifications, infrastructure provisioning. Initial implementation (auth, vendor onboarding) completed in P0-P3.
+- **P5 only (not authorized):** Deployment, demo, presentation, and other P5 deliverables. P4 implementation remains in scope under the existing authorization.
 
 ## Source References
 

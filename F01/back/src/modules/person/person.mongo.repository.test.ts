@@ -249,6 +249,44 @@ describeIfMongo('MongoPersonRepository Contract Tests', () => {
       expect(found!.email).toBe('persist@example.com');
     });
 
+    it('should preserve contact and address IDs across profile updates', async () => {
+      const person = Person.create({
+        name: 'Stable IDs',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224727' },
+        contactInfos: [{ type: 'email', value: 'stable@example.com', isPrimary: true }],
+        addresses: [{
+          street: 'Rua A',
+          number: '10',
+          neighborhood: 'Centro',
+          city: 'São Paulo',
+          state: 'SP',
+          isPrimary: true
+        }]
+      });
+
+      await repo.save(person);
+      const found = await repo.findById(person.id);
+      expect(found).not.toBeNull();
+      const contactId = found!.contactInfos[0].id;
+      const addressId = found!.addresses[0].id;
+
+      found!.updateContact(contactId, { value: 'stable-updated@example.com' });
+      found!.updateAddress(addressId, { street: 'Rua B' });
+      found!.updateName('Updated Stable IDs');
+      await repo.update(found!);
+
+      const reloaded = await repo.findById(person.id);
+      expect(reloaded!.contactInfos[0]).toMatchObject({
+        id: contactId,
+        value: 'stable-updated@example.com'
+      });
+      expect(reloaded!.addresses[0]).toMatchObject({
+        id: addressId,
+        street: 'Rua B'
+      });
+      expect(reloaded!.mainInfo.name).toBe('Updated Stable IDs');
+    });
+
     it('should delete person', async () => {
       const person = Person.create({
         name: 'Delete Test',

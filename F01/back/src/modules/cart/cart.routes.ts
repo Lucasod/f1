@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { CartService } from './cart.service';
-import { CartError } from './cart.domain';
+import { CartError, generateGuestCartId, isValidGuestCartId, isGuestCartId } from './cart.domain';
 import { PersonRepository } from '../person/person.domain';
-import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
+import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest, OptionalAuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
 
 export interface CartRoutesConfig {
@@ -16,21 +16,64 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
   const router = Router();
 
   const authMw = authMiddleware(authService);
+  const optionalAuthMw = optionalAuthMiddleware(authService);
   const requireConsumer = requireRole(PersonRole.CONSUMER);
 
-  // GET /cart - Get current cart (auth required, CONSUMER role)
-  router.get('/', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // Helper to determine cart ID from request
+  const getCartId = (req: OptionalAuthenticatedRequest): string => {
+    if (req.user) {
+      return req.user.sub;
+    }
+    
+    const guestCartIdHeader = req.headers['x-guest-cart-id'];
+    if (guestCartIdHeader !== undefined) {
+      if (typeof guestCartIdHeader === 'string'
+        && isGuestCartId(guestCartIdHeader)
+        && isValidGuestCartId(guestCartIdHeader)) {
+        return guestCartIdHeader;
+      }
+      throw new Error(CartError.GUEST_CART_ID_INVALID);
+    }
+
+    return generateGuestCartId();
+  };
+
+  // Helper to check if request is from guest
+  const isGuestRequest = (req: OptionalAuthenticatedRequest): boolean => {
+    return !req.user;
+  };
+
+  // Helper to add guest cart ID to response
+  const addGuestCartHeader = (req: OptionalAuthenticatedRequest, res: Response, cartId: string): void => {
+    if (isGuestRequest(req)) {
+      res.setHeader('X-Guest-Cart-Id', cartId);
+    }
+  };
+
+  // GET /cart - Get current cart (works for both auth and guest)
+  router.get('/', optionalAuthMw as RequestHandler, (async (req: OptionalAuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const consumerId = req.user.sub;
-      const cart = await cartService.getCart(consumerId);
-      return res.json({ cart: cartToResponse(cart) });
+      const cartId = getCartId(req);
+      const isGuest = isGuestRequest(req);
+      const cart = await cartService.getCart(cartId);
+      
+      const response: any = { cart: cartToResponse(cart) };
+      if (isGuest) {
+        response.guestCartId = cartId;
+      }
+      addGuestCartHeader(req, res, cartId);
+      
+      return res.json(response);
     } catch (error) {
+      if (error instanceof Error && error.message === CartError.GUEST_CART_ID_INVALID) {
+        return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+      }
       next(error);
     }
   }) as RequestHandler);
 
-  // POST /cart/items - Add item to cart (auth required, CONSUMER role)
-  router.post('/items', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // POST /cart/items - Add item to cart (works for both auth and guest)
+  router.post('/items', optionalAuthMw as RequestHandler, (async (req: OptionalAuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { productId, quantity } = req.body;
 
@@ -42,10 +85,17 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
         return res.status(400).json({ error: CartError.INVALID_QUANTITY, message: 'Quantity must be a positive integer' });
       }
 
-      const consumerId = req.user.sub;
-      const cart = await cartService.addItem(consumerId, productId, quantity);
+      const cartId = getCartId(req);
+      const isGuest = isGuestRequest(req);
+      const cart = await cartService.addItem(cartId, productId, quantity);
 
-      return res.status(201).json({ cart: cartToResponse(cart) });
+      const response: any = { cart: cartToResponse(cart) };
+      if (isGuest) {
+        response.guestCartId = cartId;
+      }
+      addGuestCartHeader(req, res, cartId);
+
+      return res.status(201).json(response);
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -57,18 +107,22 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(404).json({ error: CartError.VENDOR_NOT_FOUND, message: 'Vendor not found' });
           case CartError.STOCK_INSUFFICIENT:
             return res.status(409).json({ error: CartError.STOCK_INSUFFICIENT, message: 'Insufficient stock' });
+          case CartError.PRODUCT_NOT_AVAILABLE:
+            return res.status(409).json({ error: CartError.PRODUCT_NOT_AVAILABLE, message: 'Product is not available' });
           case 'CONSUMER_ID_REQUIRED':
             return res.status(400).json({ error: 'CONSUMER_ID_REQUIRED', message: 'Consumer ID is required' });
           case 'INVALID_UNIT_PRICE':
             return res.status(400).json({ error: 'INVALID_UNIT_PRICE', message: 'Invalid unit price' });
+          case CartError.GUEST_CART_ID_INVALID:
+            return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
         }
       }
       next(error);
     }
   }) as RequestHandler);
 
-  // PATCH /cart/items/:productId - Update item quantity (auth required, CONSUMER role)
-  router.patch('/items/:productId', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // PATCH /cart/items/:productId - Update item quantity (works for both auth and guest)
+  router.patch('/items/:productId', optionalAuthMw as RequestHandler, (async (req: OptionalAuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
       const { quantity } = req.body;
@@ -81,10 +135,17 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
         return res.status(400).json({ error: CartError.INVALID_QUANTITY, message: 'Quantity must be a non-negative integer' });
       }
 
-      const consumerId = req.user.sub;
-      const cart = await cartService.updateItemQuantity(consumerId, productId, quantity);
+      const cartId = getCartId(req);
+      const isGuest = isGuestRequest(req);
+      const cart = await cartService.updateItemQuantity(cartId, productId, quantity);
 
-      return res.json({ cart: cartToResponse(cart) });
+      const response: any = { cart: cartToResponse(cart) };
+      if (isGuest) {
+        response.guestCartId = cartId;
+      }
+      addGuestCartHeader(req, res, cartId);
+
+      return res.json(response);
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -94,18 +155,22 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(404).json({ error: CartError.PRODUCT_NOT_FOUND, message: 'Product not found' });
           case CartError.STOCK_INSUFFICIENT:
             return res.status(409).json({ error: CartError.STOCK_INSUFFICIENT, message: 'Insufficient stock' });
+          case CartError.PRODUCT_NOT_AVAILABLE:
+            return res.status(409).json({ error: CartError.PRODUCT_NOT_AVAILABLE, message: 'Product is not available' });
           case CartError.CART_NOT_FOUND:
             return res.status(404).json({ error: CartError.CART_NOT_FOUND, message: 'Cart not found' });
           case CartError.CART_ITEM_NOT_FOUND:
             return res.status(404).json({ error: CartError.CART_ITEM_NOT_FOUND, message: 'Cart item not found' });
+          case CartError.GUEST_CART_ID_INVALID:
+            return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
         }
       }
       next(error);
     }
   }) as RequestHandler);
 
-  // DELETE /cart/items/:productId - Remove item from cart (auth required, CONSUMER role)
-  router.delete('/items/:productId', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // DELETE /cart/items/:productId - Remove item from cart (works for both auth and guest)
+  router.delete('/items/:productId', optionalAuthMw as RequestHandler, (async (req: OptionalAuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
 
@@ -113,10 +178,17 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
         return res.status(400).json({ error: 'PRODUCT_ID_REQUIRED', message: 'Product ID is required' });
       }
 
-      const consumerId = req.user.sub;
-      const cart = await cartService.removeItem(consumerId, productId);
+      const cartId = getCartId(req);
+      const isGuest = isGuestRequest(req);
+      const cart = await cartService.removeItem(cartId, productId);
 
-      return res.json({ cart: cartToResponse(cart) });
+      const response: any = { cart: cartToResponse(cart) };
+      if (isGuest) {
+        response.guestCartId = cartId;
+      }
+      addGuestCartHeader(req, res, cartId);
+
+      return res.json(response);
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -126,6 +198,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(404).json({ error: CartError.CART_ITEM_NOT_FOUND, message: 'Cart item not found' });
           case CartError.PRODUCT_NOT_FOUND:
             return res.status(404).json({ error: CartError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+          case CartError.GUEST_CART_ID_INVALID:
+            return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
         }
       }
       next(error);
@@ -141,6 +215,10 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
         return res.status(400).json({ error: 'GUEST_CART_ID_REQUIRED', message: 'Guest cart ID is required' });
       }
 
+      if (!isGuestCartId(guestCartId) || !isValidGuestCartId(guestCartId)) {
+        return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+      }
+
       const consumerId = req.user.sub;
       const cart = await cartService.mergeGuestCart(guestCartId, consumerId);
 
@@ -150,10 +228,16 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
         switch (error.message) {
           case CartError.CART_NOT_FOUND:
             return res.status(404).json({ error: CartError.CART_NOT_FOUND, message: 'Cart not found' });
-          case CartError.CART_EMPTY:
-            return res.status(400).json({ error: CartError.CART_EMPTY, message: 'Cart is empty' });
           case 'CONSUMER_ID_REQUIRED':
             return res.status(400).json({ error: 'CONSUMER_ID_REQUIRED', message: 'Consumer ID is required' });
+          case CartError.GUEST_CART_ID_INVALID:
+            return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+          case CartError.PRODUCT_NOT_FOUND:
+            return res.status(404).json({ error: CartError.PRODUCT_NOT_FOUND, message: 'Product not found' });
+          case CartError.PRODUCT_NOT_AVAILABLE:
+            return res.status(409).json({ error: CartError.PRODUCT_NOT_AVAILABLE, message: 'Product is not available' });
+          case CartError.STOCK_INSUFFICIENT:
+            return res.status(409).json({ error: CartError.STOCK_INSUFFICIENT, message: 'Insufficient stock' });
         }
       }
       next(error);

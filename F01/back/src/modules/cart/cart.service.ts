@@ -2,7 +2,10 @@ import {
   Cart,
   CartItem,
   CartError,
-  CartRepository
+  CartRepository,
+  generateGuestCartId,
+  isValidGuestCartId,
+  isGuestCartId
 } from './cart.domain';
 import { ProductRepository } from '../product/product.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
@@ -36,9 +39,8 @@ export class CartService {
       throw new Error(CartError.PRODUCT_NOT_FOUND);
     }
 
-    // Validate stock sufficient
-    if (product.quantity < quantity) {
-      throw new Error(CartError.STOCK_INSUFFICIENT);
+    if (!product.isAvailable) {
+      throw new Error(CartError.PRODUCT_NOT_AVAILABLE);
     }
 
     // Get vendorId from product
@@ -50,18 +52,14 @@ export class CartService {
       throw new Error(CartError.VENDOR_NOT_FOUND);
     }
 
-    // Get or create cart
-    let cart = await this.cartRepo.findById(consumerId);
-    const isNewCart = !cart;
-    if (isNewCart) {
-      cart = Cart.create(consumerId);
-    }
-
-    // Add item to cart
-    cart!.addItem(productId, vendorId, quantity, product.price);
-
-    // Save cart: use save() for new carts, update() for existing carts
-    return isNewCart ? this.cartRepo.save(cart!) : this.cartRepo.update(cart!);
+    return this.cartRepo.addItem(
+      consumerId,
+      productId,
+      vendorId,
+      quantity,
+      product.price,
+      product.quantity
+    );
   }
 
   async updateItemQuantity(consumerId: string, productId: string, quantity: number): Promise<Cart> {
@@ -70,46 +68,33 @@ export class CartService {
       throw new Error(CartError.INVALID_QUANTITY);
     }
 
-    // If quantity > 0, validate product exists and stock
+    let maxStock = Number.MAX_SAFE_INTEGER;
     if (quantity > 0) {
       const product = await this.productRepo.findById(productId);
       if (!product) {
         throw new Error(CartError.PRODUCT_NOT_FOUND);
       }
 
-      if (product.quantity < quantity) {
-        throw new Error(CartError.STOCK_INSUFFICIENT);
+      if (!product.isAvailable) {
+        throw new Error(CartError.PRODUCT_NOT_AVAILABLE);
       }
+
+      maxStock = product.quantity;
     }
 
-    // Get cart
-    const cart = await this.cartRepo.findById(consumerId);
-    if (!cart) {
-      throw new Error(CartError.CART_NOT_FOUND);
-    }
-
-    // Update item quantity
-    cart.updateItemQuantity(productId, quantity);
-
-    // Save cart
-    return this.cartRepo.update(cart);
+    return this.cartRepo.updateItemQuantity(consumerId, productId, quantity, maxStock);
   }
 
   async removeItem(consumerId: string, productId: string): Promise<Cart> {
-    // Get cart
-    const cart = await this.cartRepo.findById(consumerId);
-    if (!cart) {
-      throw new Error(CartError.CART_NOT_FOUND);
-    }
-
-    // Remove item from cart
-    cart.removeItem(productId);
-
-    // Save cart
-    return this.cartRepo.update(cart);
+    return this.cartRepo.removeItem(consumerId, productId);
   }
 
   async getCart(consumerId: string): Promise<Cart> {
+    // Validate guest cart ID format if it's a guest cart
+    if (isGuestCartId(consumerId) && !isValidGuestCartId(consumerId)) {
+      throw new Error(CartError.GUEST_CART_ID_INVALID);
+    }
+    
     let cart = await this.cartRepo.findById(consumerId);
     if (!cart) {
       cart = Cart.create(consumerId);
@@ -119,30 +104,30 @@ export class CartService {
   }
 
   async mergeGuestCart(guestId: string, userId: string): Promise<Cart> {
-    // Get guest cart
     const guestCart = await this.cartRepo.findById(guestId);
     if (!guestCart || guestCart.isEmpty) {
-      // No guest cart to merge, get or create user cart
       return this.getCart(userId);
     }
 
-    // Get or create user cart
-    let userCart = await this.cartRepo.findById(userId);
-    const isNewUserCart = !userCart;
-    if (isNewUserCart) {
-      userCart = Cart.create(userId);
+    const userCart = await this.cartRepo.findById(userId);
+    const stockByProduct: Record<string, number> = {};
+    for (const guestItem of guestCart.getItems()) {
+      const product = await this.productRepo.findById(guestItem.productId);
+      if (!product) {
+        throw new Error(CartError.PRODUCT_NOT_FOUND);
+      }
+      if (!product.isAvailable) {
+        throw new Error(CartError.PRODUCT_NOT_AVAILABLE);
+      }
+
+      const currentQuantity = userCart?.getItem(guestItem.productId)?.quantity ?? 0;
+      if (currentQuantity + guestItem.quantity > product.quantity) {
+        throw new Error(CartError.STOCK_INSUFFICIENT);
+      }
+      stockByProduct[guestItem.productId] = product.quantity;
     }
 
-    // Merge guest cart items into user cart
-    userCart!.mergeGuestCart(guestCart.getItems());
-
-    // Save user cart: use save() for new carts, update() for existing carts
-    await (isNewUserCart ? this.cartRepo.save(userCart!) : this.cartRepo.update(userCart!));
-
-    // Delete guest cart
-    await this.cartRepo.delete(guestId);
-
-    return userCart!;
+    return this.cartRepo.mergeGuestCart(guestId, userId, stockByProduct);
   }
 
   async clearCart(consumerId: string): Promise<void> {
@@ -151,5 +136,35 @@ export class CartService {
       cart.clear();
       await this.cartRepo.update(cart);
     }
+  }
+
+  async getOrCreateGuestCart(guestId?: string): Promise<Cart> {
+    let resolvedGuestId: string;
+
+    if (guestId !== undefined && guestId !== null) {
+      if (guestId == null || guestId.trim().length === 0 || !isGuestCartId(guestId) || !isValidGuestCartId(guestId)) {
+        throw new Error(CartError.GUEST_CART_ID_INVALID);
+      }
+      resolvedGuestId = guestId;
+    } else {
+      resolvedGuestId = generateGuestCartId();
+    }
+
+    let cart = await this.cartRepo.findById(resolvedGuestId);
+    if (!cart) {
+      cart = Cart.create(resolvedGuestId);
+      try {
+        await this.cartRepo.save(cart);
+      } catch (saveError) {
+        // If save fails (e.g., duplicate key race), retry findById
+        const existingCart = await this.cartRepo.findById(resolvedGuestId);
+        if (existingCart) {
+          return existingCart;
+        }
+        // If still not found, re-throw the original error
+        throw saveError;
+      }
+    }
+    return cart;
   }
 }

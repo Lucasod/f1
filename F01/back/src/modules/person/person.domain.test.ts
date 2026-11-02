@@ -40,6 +40,32 @@ class InMemoryPersonRepository implements PersonRepository {
     return null;
   }
 
+  async update(person: Person): Promise<Person> {
+    // Fetch existing person to clean up old email index entries
+    const existingPerson = this.persons.get(person.id);
+    if (existingPerson) {
+      // Remove old emails from index
+      for (const contact of existingPerson.contactInfos) {
+        if (contact.type === 'email') {
+          this.emailIndex.delete(contact.value.toLowerCase());
+        }
+      }
+    }
+    
+    // Re-validate email uniqueness with new contacts
+    for (const contact of person.contactInfos) {
+      if (contact.type === 'email') {
+        const existingId = this.emailIndex.get(contact.value.toLowerCase());
+        if (existingId && existingId !== person.id) {
+          throw new Error('EMAIL_ALREADY_EXISTS');
+        }
+        this.emailIndex.set(contact.value.toLowerCase(), person.id);
+      }
+    }
+    this.persons.set(person.id, person);
+    return person;
+  }
+
   async delete(id: string): Promise<void> {
     const person = this.persons.get(id);
     if (person) {
@@ -85,6 +111,7 @@ describe('Person Domain', () => {
       expect(person.contactInfos[0].type).toBe('email');
       expect(person.contactInfos[0].value).toBe('john@example.com');
       expect(person.contactInfos[0].isPrimary).toBe(true);
+      expect(person.contactInfos[0].id).toBeDefined();
       expect(person.roles).toEqual([]);
       expect(person.credential).toBeNull();
       expect(person.createdAt).toBeInstanceOf(Date);
@@ -125,6 +152,22 @@ describe('Person Domain', () => {
         contactInfos: [{ type: 'email', value: 'invalid-email', isPrimary: true }],
         addresses: []
       })).toThrow('INVALID_EMAIL_FORMAT');
+    });
+
+    it('should generate IDs for contacts when creating person', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [
+          { type: 'email', value: 'john@example.com', isPrimary: true },
+          { type: 'phone', value: '+5511999999999', isPrimary: false }
+        ],
+        addresses: []
+      });
+
+      expect(person.contactInfos[0].id).toBeDefined();
+      expect(person.contactInfos[1].id).toBeDefined();
+      expect(person.contactInfos[0].id).not.toBe(person.contactInfos[1].id);
     });
 
     it('should allow adding roles', () => {
@@ -190,6 +233,151 @@ describe('Person Domain', () => {
 
       person.setCredential('hashed-password');
       expect(() => person.setCredential('another-hash')).toThrow('CREDENTIAL_ALREADY_SET');
+    });
+
+    it('should add contact with generated ID', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      person.addContact({ type: 'phone', value: '+5511999999999', isPrimary: false, id: '' });
+
+      expect(person.contactInfos).toHaveLength(2);
+      expect(person.contactInfos[1].type).toBe('phone');
+      expect(person.contactInfos[1].id).toBeDefined();
+    });
+
+    it('should remove contact by ID', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [
+          { type: 'email', value: 'john@example.com', isPrimary: true },
+          { type: 'phone', value: '+5511999999999', isPrimary: false }
+        ],
+        addresses: []
+      });
+
+      const phoneContactId = person.contactInfos[1].id;
+      person.removeContact(phoneContactId);
+
+      expect(person.contactInfos).toHaveLength(1);
+      expect(person.contactInfos[0].type).toBe('email');
+    });
+
+    it('should reject removing non-existent contact by ID', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      expect(() => person.removeContact('non-existent-id')).toThrow('CONTACT_NOT_FOUND');
+    });
+
+    it('should reject removing last email contact', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      const emailContactId = person.contactInfos[0].id;
+      expect(() => person.removeContact(emailContactId)).toThrow('EMAIL_REQUIRED');
+    });
+
+    it('should update contact by ID', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      const emailContactId = person.contactInfos[0].id;
+      person.updateContact(emailContactId, { value: 'updated@example.com' });
+
+      expect(person.contactInfos[0].value).toBe('updated@example.com');
+      expect(person.contactInfos[0].id).toBe(emailContactId);
+    });
+
+    it('should reject updating non-existent contact by ID', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      expect(() => person.updateContact('non-existent-id', { value: 'test@example.com' })).toThrow('CONTACT_NOT_FOUND');
+    });
+
+    it('should reject invalid email format when updating email', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      const emailContactId = person.contactInfos[0].id;
+      expect(() => person.updateContact(emailContactId, { value: 'invalid-email' })).toThrow('INVALID_EMAIL_FORMAT');
+    });
+
+    it('should reject removing last email by updating to non-email', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      const emailContactId = person.contactInfos[0].id;
+      expect(() => person.updateContact(emailContactId, { type: 'phone', value: '+5511999999999' })).toThrow('EMAIL_REQUIRED');
+    });
+
+    it('should update contact infos and generate IDs for contacts without them', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      const newContacts = [
+        { type: 'email', value: 'new@example.com', isPrimary: true },
+        { type: 'phone', value: '+5511999999999', isPrimary: false }
+      ];
+      person.updateContactInfos(newContacts);
+
+      expect(person.contactInfos).toHaveLength(2);
+      expect(person.contactInfos[0].id).toBeDefined();
+      expect(person.contactInfos[1].id).toBeDefined();
+    });
+
+    it('should preserve existing contact IDs when updating contact infos', () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true, id: 'existing-id' }],
+        addresses: []
+      });
+
+      const newContacts = [
+        { type: 'email', value: 'new@example.com', isPrimary: true, id: 'existing-id' },
+        { type: 'phone', value: '+5511999999999', isPrimary: false }
+      ];
+      person.updateContactInfos(newContacts);
+
+      expect(person.contactInfos).toHaveLength(2);
+      expect(person.contactInfos[0].id).toBe('existing-id');
+      expect(person.contactInfos[1].id).toBeDefined();
+      expect(person.contactInfos[1].id).not.toBe('existing-id');
     });
   });
 
@@ -276,6 +464,37 @@ describe('Person Domain', () => {
 
       expect(found).not.toBeNull();
       expect(found!.mainInfo.taxIdValue).toBe('52998224725');
+    });
+
+    it('should clean up old email index entries on update', async () => {
+      const person = Person.create({
+        name: 'John Doe',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'john@example.com', isPrimary: true }],
+        addresses: []
+      });
+
+      await repo.save(person);
+
+      // Update person with new email
+      const updatedPerson = Person.reconstruct({
+        ...person,
+        contactInfos: [
+          { type: 'email', value: 'john.new@example.com', isPrimary: true, id: person.contactInfos[0].id }
+        ],
+        updatedAt: new Date()
+      });
+
+      await repo.update(updatedPerson);
+
+      // Old email should not be in index
+      const oldEmailPerson = await repo.findByEmail('john@example.com');
+      expect(oldEmailPerson).toBeNull();
+
+      // New email should be in index
+      const newEmailPerson = await repo.findByEmail('john.new@example.com');
+      expect(newEmailPerson).not.toBeNull();
+      expect(newEmailPerson!.id).toBe(person.id);
     });
   });
 });

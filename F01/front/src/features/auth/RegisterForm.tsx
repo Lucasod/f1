@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { PersonRole } from '@/shared/types/person';
 import { Input, Select, Button, Card, ErrorAlert } from '@/components/ui';
@@ -73,6 +74,8 @@ const validateCnpj = (cnpj: string): boolean => {
 
 export function RegisterForm() {
   const { register, isLoading, error: authError, clearError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     taxIdType: 'CPF',
@@ -83,6 +86,8 @@ export function RegisterForm() {
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const from = (location.state as { from?: Location })?.from?.pathname || '/';
 
   const validateName = (value: string): string | undefined => {
     if (!value.trim()) return 'Name is required';
@@ -199,6 +204,8 @@ export function RegisterForm() {
         password: formData.password,
         role: PersonRole.CONSUMER
       });
+      // Redirect to the intended destination or home
+      navigate(from, { replace: true });
     } catch {
       // Error handled by auth store
     }

@@ -43,13 +43,13 @@ function formatDate(dateString: string): string {
  */
 function getOrderStatusConfig(status: OrderStatus): { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' } {
   const statusMap: Record<OrderStatus, { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' }> = {
-    pending: { label: 'PENDING_PAYMENT', variant: 'warning' },
-    confirmed: { label: 'PAID', variant: 'default' },
+    pending_payment: { label: 'PENDING_PAYMENT', variant: 'warning' },
+    paid: { label: 'PAID', variant: 'default' },
     processing: { label: 'PROCESSING', variant: 'info' },
     shipped: { label: 'SHIPPED', variant: 'info' },
     delivered: { label: 'DELIVERED', variant: 'success' },
     cancelled: { label: 'CANCELLED', variant: 'error' },
-    refunded: { label: 'FAILED_PAYMENT', variant: 'error' },
+    failed_payment: { label: 'FAILED_PAYMENT', variant: 'error' },
   };
 
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
@@ -63,11 +63,10 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): { label: st
     pending: { label: 'PENDING', variant: 'warning' },
     confirmed: { label: 'CONFIRMED', variant: 'default' },
     preparing: { label: 'PREPARING', variant: 'info' },
-    ready_for_pickup: { label: 'READY_FOR_PICKUP', variant: 'info' },
-    out_for_delivery: { label: 'OUT_FOR_DELIVERY', variant: 'info' },
+    shipped: { label: 'SHIPPED', variant: 'info' },
     delivered: { label: 'DELIVERED', variant: 'success' },
     cancelled: { label: 'CANCELLED', variant: 'error' },
-    refunded: { label: 'REFUNDED', variant: 'error' },
+    returned: { label: 'RETURNED', variant: 'error' },
   };
 
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
@@ -77,14 +76,14 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): { label: st
  * Timeline steps for order status tracking
  */
 const TIMELINE_STEPS: { status: OrderStatus; label: string; description: string }[] = [
-  { status: 'pending', label: 'PENDING_PAYMENT', description: 'Aguardando pagamento' },
-  { status: 'confirmed', label: 'PAID', description: 'Pagamento confirmado' },
+  { status: 'pending_payment', label: 'PENDING_PAYMENT', description: 'Aguardando pagamento' },
+  { status: 'paid', label: 'PAID', description: 'Pagamento confirmado' },
   { status: 'processing', label: 'PROCESSING', description: 'Em preparação' },
   { status: 'shipped', label: 'SHIPPED', description: 'Enviado para entrega' },
   { status: 'delivered', label: 'DELIVERED', description: 'Entregue' },
 ];
 
-const TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'refunded'];
+const TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'failed_payment'];
 
 interface VendorGroupCardProps {
   vendorGroup: OrderVendorGroup;
@@ -113,12 +112,11 @@ function VendorGroupCard({
     const transitions: Record<OrderVendorGroupStatus, OrderVendorGroupStatus[]> = {
       pending: ['confirmed', 'cancelled'],
       confirmed: ['preparing', 'cancelled'],
-      preparing: ['ready_for_pickup', 'cancelled'],
-      ready_for_pickup: ['out_for_delivery', 'cancelled'],
-      out_for_delivery: ['delivered', 'cancelled'],
-      delivered: ['refunded'],
+      preparing: ['shipped', 'cancelled'],
+      shipped: ['delivered', 'cancelled', 'returned'],
+      delivered: ['returned'],
       cancelled: [],
-      refunded: [],
+      returned: [],
     };
     return transitions[currentStatus] || [];
   };
@@ -457,13 +455,13 @@ export function OrderDetailPage() {
   // Determine available next statuses for admin
   const getNextOrderStatuses = (currentStatus: OrderStatus): OrderStatus[] => {
     const transitions: Record<OrderStatus, OrderStatus[]> = {
-      pending: ['confirmed', 'cancelled'],
-      confirmed: ['processing', 'cancelled'],
+      pending_payment: ['paid', 'failed_payment', 'cancelled'],
+      paid: ['processing', 'cancelled', 'failed_payment'],
       processing: ['shipped', 'cancelled'],
       shipped: ['delivered', 'cancelled'],
-      delivered: ['refunded'],
+      delivered: ['cancelled'],
       cancelled: [],
-      refunded: [],
+      failed_payment: ['pending_payment', 'cancelled'],
     };
     return transitions[currentStatus] || [];
   };

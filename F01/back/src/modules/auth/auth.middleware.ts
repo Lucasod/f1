@@ -6,6 +6,10 @@ export interface AuthenticatedRequest extends Request {
   user: JWTPayload;
 }
 
+export interface OptionalAuthenticatedRequest extends Request {
+  user?: JWTPayload;
+}
+
 export function authMiddleware(authService: AuthService) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const authHeader = req.headers.authorization;
@@ -80,4 +84,35 @@ export function requireVendor() {
 
 export function requireAdmin() {
   return requireRole(PersonRole.ADMIN);
+}
+
+export function optionalAuthMiddleware(authService: AuthService) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      (req as OptionalAuthenticatedRequest).user = undefined;
+      next();
+      return;
+    }
+
+    const token = authHeader.substring(7);
+
+    try {
+      const payload = authService.verifyToken(token);
+      
+      if (payload.type !== 'access') {
+        (req as OptionalAuthenticatedRequest).user = undefined;
+        next();
+        return;
+      }
+
+      (req as OptionalAuthenticatedRequest).user = payload;
+      next();
+    } catch (error) {
+      // Invalid or expired token - treat as unauthenticated, don't reject
+      (req as OptionalAuthenticatedRequest).user = undefined;
+      next();
+    }
+  };
 }

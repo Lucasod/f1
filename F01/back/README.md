@@ -2,7 +2,7 @@
 
 ## Overview
 
-Node.js/Express/TypeScript backend for the FS-01 Marketplace. Provides REST APIs for authentication, vendor onboarding, and person management with JWT-based auth, MongoDB persistence, Redis caching, and Elasticsearch search integration.
+Node.js/Express/TypeScript backend for the FS-01 Marketplace. Provides REST APIs for authentication, marketplace resources, and account management with JWT-based auth, MongoDB persistence for configured domains, and Redis-backed carts. Product and review images, orders, and payments are local/in-memory during development; this is temporary and does not replace the planned S3 and Stripe integrations.
 
 ---
 
@@ -22,15 +22,16 @@ src/
 │   │   ├── credential.domain.ts # Password hashing/validation
 │   │   └── *.test.ts        # Unit & integration tests
 │   ├── vendor/              # Vendor onboarding & management
-│   │   ├── vendor.service.ts
-│   │   ├── vendor.routes.ts # /api/v1/vendor endpoints
-│   │   ├── vendor.domain.ts
-│   │   └── *.test.ts
-│   └── person/              # Person domain (consumer/vendor/admin)
-│       ├── person.domain.ts
-│       └── *.test.ts
-└── tests/
-    └── health.test.ts       # Health endpoint test
+│   ├── person/              # Person domain (consumer/vendor/admin)
+│   ├── cart/                # Authenticated and guest Redis carts
+│   ├── checkout/            # Authenticated checkout
+│   ├── order/               # Order/payment lifecycle (in-memory in current runtime)
+│   ├── product/             # Catalog and local product image storage
+│   └── review/              # MongoDB reviews and locally stored owned images
+└── shared/
+    ├── database/            # MongoDB connection and indexes
+    ├── storage/             # StorageAdapter and local implementation
+    └── tests/               # API and integration test suites
 ```
 
 ---
@@ -43,11 +44,11 @@ src/
 | Framework | Express 4.21 |
 | Database | MongoDB 6.9 (native driver) |
 | Cache | Redis 7 (ioredis) |
-| Search | Elasticsearch 8.15 |
+| Search | Elasticsearch planned; search adapter is not yet connected |
 | Auth | JWT (jsonwebtoken), bcryptjs |
-| Validation | Zod 3.23 |
+| Validation | Module-level validation; Zod is not used by all routes |
 | Security | Helmet, CORS |
-| Testing | Vitest 2.1, Supertest 7 |
+| Testing | Vitest 4, Supertest 7 |
 | Dev Tooling | tsx (watch), ESLint-ready |
 
 ---
@@ -61,9 +62,26 @@ npm run start        # Run production build (node dist/index.js)
 npm run test         # Run all tests once (vitest run)
 npm run test:watch   # Watch mode for tests
 npm run test:coverage # Run tests with coverage report
+npm run seed         # Seed development demo data
 ```
 
+The development seed creates three vendors, one consumer, one admin, categories, and products. Demo account credentials are `consumer@example.com` / `SecurePass123!` and `admin@example.com` / `SecurePass123!`. The admin is created only through the trusted seed path; public registration must not grant the ADMIN role.
+
+When seeding in production with `SEED_FORCE=true`, set deployment-managed passwords for every seeded account:
+`SEED_VENDOR_TECH_STORE_PASSWORD`, `SEED_VENDOR_FASHION_HUB_PASSWORD`,
+`SEED_VENDOR_BOOK_WORLD_PASSWORD`, `SEED_CONSUMER_PASSWORD`, and `SEED_ADMIN_PASSWORD`.
+The seed validates all required secrets before writing data and fails rather than using development credentials if any is missing.
+
 ---
+
+## Local Development Integrations
+
+- Product and review images use the local `StorageAdapter`; image API paths and object-key conventions are compatible with a future storage adapter. No AWS/S3 request is made.
+- Checkout returns a placeholder client secret for local flow testing. It does not authorize or capture a real payment. No Stripe SDK, Connect account, webhook, transfer, or provider refund is configured.
+- The runtime uses MongoDB repositories for people, vendors, categories, products, and reviews. Orders and payments are in-memory and reset on process restart.
+- Elasticsearch is planned but is not connected.
+
+These are temporary development boundaries. Configure and validate the actual providers when the project reaches their integration requirement; do not treat local behavior as provider integration completion.
 
 ## Environment Variables
 
@@ -76,7 +94,7 @@ Defined in `src/config/index.ts`. All have development defaults; **required in p
 | `MONGO_URI` | `mongodb://localhost:27017/fs01_marketplace` | MongoDB connection string |
 | `MONGO_DB_NAME` | `fs01_marketplace` | Database name |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
-| `ELASTICSEARCH_URL` | `http://localhost:9200` | Elasticsearch URL |
+| `ELASTICSEARCH_URL` | `http://localhost:9200` | Reserved for future Elasticsearch integration |
 | `JWT_SECRET` | `dev-secret-change-in-production` | JWT signing secret |
 | `JWT_EXPIRES_IN` | `24h` | Access token TTL |
 | `CORS_ORIGIN` | (empty) | Comma-separated allowed origins |

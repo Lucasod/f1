@@ -189,6 +189,46 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('changePassword', () => {
+    let personId: string;
+
+    beforeEach(async () => {
+      const result = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: testPassword,
+        role: PersonRole.CONSUMER
+      });
+      personId = result.person.id;
+    });
+
+    it('should replace the credential after verifying the current password', async () => {
+      const nextPassword = 'NewSecurePass456!';
+
+      await authService.changePassword(personId, testPassword, nextPassword);
+
+      await expect(authService.login({ email: 'john@example.com', password: nextPassword }))
+        .resolves.toBeDefined();
+      await expect(authService.login({ email: 'john@example.com', password: testPassword }))
+        .rejects.toThrow(AuthError.INVALID_CREDENTIALS);
+    });
+
+    it('should reject an incorrect current password', async () => {
+      await expect(authService.changePassword(personId, 'WrongPass123!', 'NewSecurePass456!'))
+        .rejects.toThrow(AuthError.INVALID_CURRENT_PASSWORD);
+    });
+
+    it('should reject a weak new password without changing the existing credential', async () => {
+      await expect(authService.changePassword(personId, testPassword, 'weak'))
+        .rejects.toThrow(AuthError.WEAK_PASSWORD);
+
+      await expect(authService.login({ email: 'john@example.com', password: testPassword }))
+        .resolves.toBeDefined();
+    });
+  });
+
   describe('refreshToken', () => {
     it('should generate new tokens with valid refresh token', async () => {
       const registerResult = await authService.register({

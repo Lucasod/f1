@@ -1,7 +1,7 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { AuthService, AuthError, RegisterInput, LoginInput } from './auth.service';
-import { PersonRepository } from '../person/person.domain';
 import { PersonRole } from '../person/person.domain';
+import { authMiddleware, AuthenticatedRequest } from './auth.middleware';
 
 export interface AuthRoutesConfig {
   authService: AuthService;
@@ -9,6 +9,7 @@ export interface AuthRoutesConfig {
 
 export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
   const router = Router();
+  const authMw = authMiddleware(authService);
 
   // POST /api/v1/auth/register
   router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
@@ -125,6 +126,35 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
       next(error);
     }
   });
+
+  // PATCH /api/v1/auth/change-password
+  router.patch('/change-password', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { currentPassword, newPassword } = req.body as {
+        currentPassword?: string;
+        newPassword?: string;
+      };
+
+      if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return res.status(400).json({ error: 'PASSWORDS_REQUIRED', message: 'Current and new passwords are required' });
+      }
+
+      await authService.changePassword(req.user.sub, currentPassword, newPassword);
+      return res.json({ message: 'PASSWORD_CHANGED' });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case AuthError.INVALID_CURRENT_PASSWORD:
+            return res.status(400).json({ error: AuthError.INVALID_CURRENT_PASSWORD, message: 'Current password is incorrect' });
+          case AuthError.WEAK_PASSWORD:
+            return res.status(400).json({ error: AuthError.WEAK_PASSWORD, message: 'New password does not meet requirements' });
+          case AuthError.PERSON_NOT_FOUND:
+            return res.status(404).json({ error: AuthError.PERSON_NOT_FOUND, message: 'User not found' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
 
   return router;
 }

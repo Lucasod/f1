@@ -6,7 +6,9 @@ export enum CartError {
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
   VENDOR_NOT_FOUND = 'VENDOR_NOT_FOUND',
   STOCK_INSUFFICIENT = 'STOCK_INSUFFICIENT',
+  PRODUCT_NOT_AVAILABLE = 'PRODUCT_NOT_AVAILABLE',
   CART_EMPTY = 'CART_EMPTY',
+  GUEST_CART_ID_INVALID = 'GUEST_CART_ID_INVALID',
 }
 
 export interface CartItem {
@@ -26,6 +28,25 @@ export interface CartData {
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+const GUEST_CART_PREFIX = 'guest:';
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function generateGuestCartId(): string {
+  return `${GUEST_CART_PREFIX}${crypto.randomUUID()}`;
+}
+
+export function isGuestCartId(id: string): boolean {
+  return id.startsWith(GUEST_CART_PREFIX);
+}
+
+export function isValidGuestCartId(id: string): boolean {
+  if (!isGuestCartId(id)) {
+    return false;
+  }
+  const uuidPart = id.slice(GUEST_CART_PREFIX.length);
+  return UUID_V4_REGEX.test(uuidPart);
 }
 
 export class Cart {
@@ -156,7 +177,7 @@ export class Cart {
         });
       }
     }
-    this.updateTimestamp();
+    this.incrementVersion();
   }
 
   incrementVersion(): void {
@@ -191,6 +212,17 @@ export interface CartRepository {
   findById(id: string): Promise<Cart | null>;
   update(cart: Cart): Promise<Cart>;
   delete(id: string): Promise<void>;
+  addItem(
+    cartId: string,
+    productId: string,
+    vendorId: string,
+    quantity: number,
+    unitPrice: number,
+    maxStock?: number
+  ): Promise<Cart>;
+  updateItemQuantity(cartId: string, productId: string, quantity: number, maxStock?: number): Promise<Cart>;
+  removeItem(cartId: string, productId: string): Promise<Cart>;
+  mergeGuestCart(guestId: string, userId: string, stockByProduct?: Record<string, number>): Promise<Cart>;
 }
 
 export class InMemoryCartRepository implements CartRepository {
@@ -216,6 +248,100 @@ export class InMemoryCartRepository implements CartRepository {
 
   async delete(id: string): Promise<void> {
     this.carts.delete(id);
+  }
+
+  async addItem(
+    cartId: string,
+    productId: string,
+    vendorId: string,
+    quantity: number,
+    unitPrice: number,
+    maxStock = Number.MAX_SAFE_INTEGER
+  ): Promise<Cart> {
+    let cart = this.carts.get(cartId);
+    const isNewCart = !cart;
+    if (!cart) {
+      cart = Cart.create(cartId);
+    }
+
+    const combinedQuantity = (cart.getItem(productId)?.quantity ?? 0) + quantity;
+    if (combinedQuantity > maxStock) {
+      throw new Error(CartError.STOCK_INSUFFICIENT);
+    }
+
+    cart.addItem(productId, vendorId, quantity, unitPrice);
+    if (!isNewCart) {
+      cart.incrementVersion();
+    }
+    this.carts.set(cartId, cart);
+    return cart;
+  }
+
+  async updateItemQuantity(
+    cartId: string,
+    productId: string,
+    quantity: number,
+    maxStock = Number.MAX_SAFE_INTEGER
+  ): Promise<Cart> {
+    const cart = this.carts.get(cartId);
+    if (!cart) {
+      throw new Error(CartError.CART_NOT_FOUND);
+    }
+    if (quantity > maxStock) {
+      throw new Error(CartError.STOCK_INSUFFICIENT);
+    }
+
+    cart.updateItemQuantity(productId, quantity);
+    cart.incrementVersion();
+    return cart;
+  }
+
+  async removeItem(cartId: string, productId: string): Promise<Cart> {
+    const cart = this.carts.get(cartId);
+    if (!cart) {
+      throw new Error(CartError.CART_NOT_FOUND);
+    }
+    cart.removeItem(productId);
+    cart.incrementVersion();
+    return cart;
+  }
+
+  async mergeGuestCart(
+    guestId: string,
+    userId: string,
+    stockByProduct: Record<string, number> = {}
+  ): Promise<Cart> {
+    const guestCart = this.carts.get(guestId);
+    let userCart = this.carts.get(userId);
+
+    if (guestCart && !guestCart.isEmpty) {
+      for (const guestItem of guestCart.getItems()) {
+        const combinedQuantity = (userCart?.getItem(guestItem.productId)?.quantity ?? 0) + guestItem.quantity;
+        const maxStock = stockByProduct[guestItem.productId];
+        if (maxStock !== undefined && combinedQuantity > maxStock) {
+          throw new Error(CartError.STOCK_INSUFFICIENT);
+        }
+      }
+    }
+
+    if (!userCart) {
+      if (guestCart && !guestCart.isEmpty) {
+        userCart = Cart.reconstruct({ ...guestCart.toJSON(), id: userId });
+        this.carts.set(userId, userCart);
+        this.carts.delete(guestId);
+        return userCart;
+      } else {
+        userCart = Cart.create(userId);
+      }
+      this.carts.set(userId, userCart);
+    }
+
+    if (guestCart && !guestCart.isEmpty) {
+      userCart.mergeGuestCart(guestCart.getItems());
+      this.carts.delete(guestId);
+    }
+
+    return userCart;
   }
 
   clear(): void {

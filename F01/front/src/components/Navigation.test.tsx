@@ -28,6 +28,7 @@ const createMockStore = (overrides: Partial<ReturnType<typeof useAuthStore>> = {
   register: vi.fn(),
   logout: vi.fn(),
   refreshAccessToken: vi.fn(),
+  refreshUserProfile: vi.fn(),
   hasRole: vi.fn(() => false),
   clearError: vi.fn(),
   initializeAuth: vi.fn(),
@@ -58,7 +59,7 @@ describe('Navigation', () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
-  it('shows Browse Products for authenticated CONSUMER', () => {
+  it('shows consumer account links and seller conversion for a CONSUMER', () => {
     mockUseAuthStore.mockReturnValue(createMockStore({
       user: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] },
       isAuthenticated: true,
@@ -68,10 +69,29 @@ describe('Navigation', () => {
     renderWithProvider(<Navigation />);
 
     expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /consumer dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /my orders/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /my profile/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /become a seller/i })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /vendor dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /vendor products/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps consumer links after a consumer also becomes a vendor', () => {
+    mockUseAuthStore.mockReturnValue(createMockStore({
+      user: { id: '1', name: 'Jane', email: 'jane@example.com', roles: ['CONSUMER', 'VENDOR'] },
+      isAuthenticated: true,
+      hasRole: vi.fn((role) => role === 'CONSUMER' || role === 'VENDOR')
+    }));
+
+    renderWithProvider(<Navigation />);
+
+    expect(screen.getByRole('menuitem', { name: /consumer dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /my orders/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /vendor dashboard/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /become a seller/i })).not.toBeInTheDocument();
   });
 
   it('shows Vendor Dashboard and Vendor Products for VENDOR role', () => {

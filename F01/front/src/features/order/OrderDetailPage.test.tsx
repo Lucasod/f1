@@ -112,7 +112,7 @@ const mockVendorGroup2: OrderVendorGroup = {
 const mockOrder: Order = {
   id: 'order-1',
   personId: 'user-1',
-  status: 'confirmed',
+  status: 'paid',
   vendorGroups: [mockVendorGroup1, mockVendorGroup2],
   shippingAddress: mockAddress,
   totalAmount: 119.97,
@@ -321,7 +321,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(screen.getByText(/R\$ 119,97/i)).toBeInTheDocument();
   });
 
-  it('displays timeline tracker with correct step highlighting for confirmed status', async () => {
+  it('displays timeline tracker with correct step highlighting for paid status', async () => {
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -399,7 +399,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Admin should see order status update buttons in the header
-    // Available next statuses for 'confirmed' are 'processing', 'cancelled'
+    // Available next statuses for 'paid' include 'processing' and 'cancelled'
     const processingButtons = screen.getAllByRole('button', { name: /PROCESSING/i });
     const cancelledButtons = screen.getAllByRole('button', { name: /CANCELLED/i });
     expect(processingButtons.length).toBeGreaterThanOrEqual(1);
@@ -476,9 +476,9 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(screen.getByText(/pedido cancelado/i)).toBeInTheDocument();
   });
 
-  it('shows terminal status indicator in timeline for refunded order', async () => {
-    const refundedOrder = { ...mockOrder, status: 'refunded' as OrderStatus };
-    vi.mocked(orderApi.getById).mockResolvedValue({ order: refundedOrder });
+  it('shows terminal status indicator in timeline for failed payment', async () => {
+    const failedPaymentOrder = { ...mockOrder, status: 'failed_payment' as OrderStatus };
+    vi.mocked(orderApi.getById).mockResolvedValue({ order: failedPaymentOrder });
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());

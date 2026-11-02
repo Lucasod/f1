@@ -43,10 +43,6 @@ interface ContactInfoDoc {
   is_primary: boolean;
 }
 
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
 export class MongoPersonRepository implements PersonRepository {
   private peopleCollection: Collection<PersonDoc>;
   private mainInfosCollection: Collection<MainInfoDoc>;
@@ -140,7 +136,7 @@ export class MongoPersonRepository implements PersonRepository {
     await this.addressesCollection.deleteMany({ person_id: personId });
     if (person.addresses.length > 0) {
       const addressDocs: AddressDoc[] = person.addresses.map(addr => ({
-        _id: generateId(),
+        _id: addr.id,
         person_id: personId,
         street: addr.street,
         number: addr.number,
@@ -156,7 +152,7 @@ export class MongoPersonRepository implements PersonRepository {
     await this.contactInfosCollection.deleteMany({ person_id: personId });
     if (person.contactInfos.length > 0) {
       const contactDocs: ContactInfoDoc[] = person.contactInfos.map(contact => ({
-        _id: generateId(),
+        _id: contact.id,
         person_id: personId,
         type: contact.type,
         value: contact.value,
@@ -214,6 +210,11 @@ export class MongoPersonRepository implements PersonRepository {
     return this.findById(mainInfoDoc.person_id);
   }
 
+  async update(person: Person): Promise<Person> {
+    // Reuse save logic which handles updates/upserts
+    return this.save(person);
+  }
+
   async delete(id: string): Promise<void> {
     const personDoc = await this.peopleCollection.findOne({ _id: id });
     if (!personDoc) {
@@ -237,6 +238,7 @@ export class MongoPersonRepository implements PersonRepository {
     contactDocs: ContactInfoDoc[]
   ): Person {
     const contactInfos: ContactInfo[] = contactDocs.map(doc => ({
+      id: doc._id,
       type: doc.type,
       value: doc.value,
       isPrimary: doc.is_primary

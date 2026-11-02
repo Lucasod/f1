@@ -21,8 +21,8 @@ The platform will manage users, vendors, product catalogs, orders, payments, and
 - **Database:** MongoDB
 - **Search and Filtering:** Elasticsearch
 - **Caching and Sessions:** Redis
-- **Payments:** Stripe Connect or Razorpay, in test mode
-- **Image Storage:** AWS S3
+- **Payments:** Stripe Connect is the selected provider; current payment lifecycle is local/internal and has no live or test-mode provider connection yet
+- **Image Storage:** AWS S3 is the target; current product image uploads use local storage
 
 ## Planned Features
 

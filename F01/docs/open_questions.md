@@ -190,8 +190,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Redis hash per user: `cart:{userId}` with TTL 30d
 - Separate `cart_items` in MongoDB + Redis cache
 - Guest cart in localStorage → merge on login
-**Resolution:** Redis strategy analyzed and documented: Hash per consumer (`cart:{consumer_id}`), multi-vendor items with vendor_id, guest cart merge via Lua scripts, atomic operations. TTL values (cart, session) remain pending NFR-PERF-003 confirmation.  
-**State:** **PARTIALLY_RESOLVED (blocks T-901 pending NFR-PERF-003)** — Strategy documented (analysis_redis_schemas.md). TTLs (cart, session) pending NFR-PERF-003. Redis keys, sync, guest merge remain TECHNICAL_FUTURE for implementation.
+**Resolution:** Redis strategy analyzed and documented: hash per authenticated consumer, isolated anonymous guest cart IDs, multi-vendor items, atomic operations, and guest-to-consumer merge. The current cart implementation uses a configurable 30-day TTL as the existing P3a proposal/default. Cart/session TTL approval remains pending NFR-PERF-003.  
+**State:** **PARTIALLY_RESOLVED** — The pending TTL decision does not block implementing or testing the cart contract using the current configurable proposal. Do not describe 30 days as an approved business decision. Session timeout and final cart retention remain unapproved.
 
 ---
 
@@ -250,11 +250,11 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Scope: **RESOLVED** — Commercial receipt (PDF), not NF-e (CD-035)  
 - Generation trigger: **DEFERRED** — On-demand for MVP; automation (on payment/delivery/scheduled) post-MVP  
 - Storage: **RESOLVED** — S3 Standard-IA with naming convention (analysis_s3_naming.md Section 6)  
-- Glacier transition (90 days): **PENDING HUMAN DECISION (blocks T-703b, T-1103)**  
-- Object Lock/WORM (10 years): **PENDING HUMAN DECISION (blocks T-703b, T-1103)**  
-- Generation trigger automation: **PENDING HUMAN DECISION (blocks T-1103)**  
+- Glacier transition (90 days): **PENDING HUMAN DECISION** — applies to invoice retention only; does not block product-image storage.
+- Object Lock/WORM (10 years): **PENDING HUMAN DECISION** — applies to invoice retention only; does not block product-image storage.
+- Generation trigger automation: **PENDING HUMAN DECISION** — blocks only automated invoice generation; on-demand generation is the MVP behavior.
 - NF-e: **EXCLUDED** per CD-035  
-**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP: PDF receipt on-demand, S3 Standard-IA. Glacier/WORM/automation deferred pending human decision.
+**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP generation is on-demand with S3 Standard-IA storage. Glacier/WORM decisions affect invoice retention only; trigger automation remains deferred. These decisions do not block unrelated review, coupon, or admin-dashboard work.
 
 ---
 

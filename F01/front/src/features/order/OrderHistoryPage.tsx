@@ -36,13 +36,13 @@ function formatDate(dateString: string): string {
  */
 function getStatusConfig(status: OrderStatus): { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' } {
   const statusMap: Record<OrderStatus, { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' }> = {
-    pending: { label: 'PENDING_PAYMENT', variant: 'warning' },     // amber
-    confirmed: { label: 'PAID', variant: 'default' },                // blue
+    pending_payment: { label: 'PENDING_PAYMENT', variant: 'warning' },
+    paid: { label: 'PAID', variant: 'default' },
     processing: { label: 'PROCESSING', variant: 'info' },            // purple/cyan
     shipped: { label: 'SHIPPED', variant: 'info' },                  // indigo/cyan
     delivered: { label: 'DELIVERED', variant: 'success' },           // green
     cancelled: { label: 'CANCELLED', variant: 'error' },             // red
-    refunded: { label: 'FAILED_PAYMENT', variant: 'error' },         // red
+    failed_payment: { label: 'FAILED_PAYMENT', variant: 'error' },
   };
 
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
@@ -53,13 +53,13 @@ function getStatusConfig(status: OrderStatus): { label: string; variant: 'defaul
  */
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Todos os status' },
-  { value: 'pending', label: 'PENDING_PAYMENT' },
-  { value: 'confirmed', label: 'PAID' },
+  { value: 'pending_payment', label: 'PENDING_PAYMENT' },
+  { value: 'paid', label: 'PAID' },
   { value: 'processing', label: 'PROCESSING' },
   { value: 'shipped', label: 'SHIPPED' },
   { value: 'delivered', label: 'DELIVERED' },
   { value: 'cancelled', label: 'CANCELLED' },
-  { value: 'refunded', label: 'FAILED_PAYMENT' },
+  { value: 'failed_payment', label: 'FAILED_PAYMENT' },
 ];
 
 const DEFAULT_PAGE_SIZE = 10;

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAuthStore } from './authStore';
 import { authApi } from '@/shared/api/auth';
+import { cartApi } from '@/shared/api/cart';
+import { personApi } from '@/shared/api/person';
 
 vi.mock('@/shared/api/auth', () => ({
   authApi: {
@@ -10,9 +12,25 @@ vi.mock('@/shared/api/auth', () => ({
   }
 }));
 
+vi.mock('@/shared/api/cart', () => ({
+  cartApi: {
+    mergeGuestCart: vi.fn(),
+    clearGuestCartId: vi.fn()
+  }
+}));
+
+vi.mock('@/shared/api/person', () => ({
+  personApi: {
+    getMe: vi.fn(),
+  },
+}));
+
 const mockLogin = vi.mocked(authApi.login);
 const mockRegister = vi.mocked(authApi.register);
 const mockRefreshToken = vi.mocked(authApi.refreshToken);
+const mockMergeGuestCart = vi.mocked(cartApi.mergeGuestCart);
+const mockClearGuestCartId = vi.mocked(cartApi.clearGuestCartId);
+const mockGetMe = vi.mocked(personApi.getMe);
 
 describe('useAuthStore', () => {
   beforeEach(() => {
@@ -211,6 +229,39 @@ describe('useAuthStore', () => {
       });
     });
 
+    it('refreshes credentials and adopts current backend roles', async () => {
+      useAuthStore.setState({
+        user: { id: 'person-1', name: 'Consumer', email: 'consumer@example.com', roles: ['CONSUMER'] },
+        accessToken: 'old-access-token',
+        refreshToken: 'old-refresh-token',
+        isAuthenticated: true,
+      });
+      mockRefreshToken.mockResolvedValueOnce({
+        tokens: { accessToken: 'new-access-token', refreshToken: 'new-refresh-token' },
+      });
+      mockGetMe.mockResolvedValueOnce({
+        person: {
+          id: 'person-1',
+          name: 'Consumer',
+          roles: ['CONSUMER', 'VENDOR'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[],
+          mainInfo: { name: 'Consumer', taxIdType: 'CPF', taxIdValue: '***' },
+          contactInfos: [
+            { id: 'email-1', type: 'email', value: 'consumer@example.com', isPrimary: true },
+          ],
+          addresses: [],
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      });
+
+      await useAuthStore.getState().refreshUserProfile();
+
+      expect(mockGetMe).toHaveBeenCalledOnce();
+      expect(useAuthStore.getState().user?.roles).toEqual(['CONSUMER', 'VENDOR']);
+      expect(useAuthStore.getState().accessToken).toBe('new-access-token');
+      expect(localStorage.getItem('user')).toContain('"VENDOR"');
+    });
+
     it('should logout on refresh token failure', async () => {
       useAuthStore.setState({
         refreshToken: 'expired-refresh-token',
@@ -236,13 +287,13 @@ describe('useAuthStore', () => {
   });
 
   describe('initializeAuth', () => {
-    it('should restore auth from localStorage on init', () => {
+    it('should restore auth from localStorage on init', async () => {
       const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
       localStorage.setItem('accessToken', 'stored-access-token');
       localStorage.setItem('refreshToken', 'stored-refresh-token');
       localStorage.setItem('user', JSON.stringify(mockUser));
 
-      useAuthStore.getState().initializeAuth();
+      await useAuthStore.getState().initializeAuth();
 
       const state = useAuthStore.getState();
       expect(state.accessToken).toBe('stored-access-token');
@@ -251,10 +302,10 @@ describe('useAuthStore', () => {
       expect(state.isAuthenticated).toBe(true);
     });
 
-    it('should not restore if tokens missing', () => {
+    it('should not restore if tokens missing', async () => {
       localStorage.clear();
 
-      useAuthStore.getState().initializeAuth();
+      await useAuthStore.getState().initializeAuth();
 
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(false);
@@ -276,6 +327,111 @@ describe('useAuthStore', () => {
     it('should return false if not authenticated', () => {
       useAuthStore.setState({ isAuthenticated: false, user: null });
       expect(useAuthStore.getState().hasRole('CONSUMER')).toBe(false);
+    });
+  });
+
+  describe('mergeGuestCartOnLogin', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      localStorage.clear();
+    });
+
+    it('should merge guest cart on successful login', async () => {
+      const mockResponse = {
+        person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
+        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+      };
+
+      // Set guest cart ID in localStorage before login
+      localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
+
+      mockLogin.mockResolvedValueOnce(mockResponse);
+      mockMergeGuestCart.mockResolvedValueOnce({ cart: { id: '1', items: [], version: 1, updatedAt: new Date().toISOString() } });
+
+      await useAuthStore.getState().login('john@example.com', 'password123');
+
+      expect(mockMergeGuestCart).toHaveBeenCalledWith({ guestCartId: 'guest:12345678-1234-4123-8123-123456789abc' });
+      expect(mockClearGuestCartId).toHaveBeenCalled();
+    });
+
+    it('should not fail login if mergeGuestCart fails', async () => {
+      const mockResponse = {
+        person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
+        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+      };
+
+      // Set guest cart ID in localStorage before login
+      localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
+
+      mockLogin.mockResolvedValueOnce(mockResponse);
+      mockMergeGuestCart.mockRejectedValueOnce(new Error('MERGE_FAILED'));
+
+      await useAuthStore.getState().login('john@example.com', 'password123');
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.user).toEqual(mockResponse.person);
+      expect(mockMergeGuestCart).toHaveBeenCalled();
+    });
+
+    it('should not call mergeGuestCart when no guest cart ID in localStorage', async () => {
+      const mockResponse = {
+        person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
+        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+      };
+
+      mockLogin.mockResolvedValueOnce(mockResponse);
+      // No guestCartId in localStorage
+
+      await useAuthStore.getState().login('john@example.com', 'password123');
+
+      expect(mockMergeGuestCart).not.toHaveBeenCalled();
+      expect(mockClearGuestCartId).not.toHaveBeenCalled();
+    });
+
+    it('should merge guest cart on initializeAuth when authenticated', async () => {
+      const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
+      localStorage.setItem('accessToken', 'stored-access-token');
+      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
+
+      mockMergeGuestCart.mockResolvedValueOnce({ cart: { id: '1', items: [], version: 1, updatedAt: new Date().toISOString() } });
+
+      await useAuthStore.getState().initializeAuth();
+
+      expect(mockMergeGuestCart).toHaveBeenCalledWith({ guestCartId: 'guest:12345678-1234-4123-8123-123456789abc' });
+      expect(mockClearGuestCartId).toHaveBeenCalled();
+    });
+
+    it('should not call mergeGuestCart on initializeAuth when no guest cart ID', async () => {
+      const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
+      localStorage.setItem('accessToken', 'stored-access-token');
+      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      // No guestCartId in localStorage
+
+      await useAuthStore.getState().initializeAuth();
+
+      expect(mockMergeGuestCart).not.toHaveBeenCalled();
+      expect(mockClearGuestCartId).not.toHaveBeenCalled();
+    });
+
+    it('should not fail initializeAuth if mergeGuestCart fails', async () => {
+      const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
+      localStorage.setItem('accessToken', 'stored-access-token');
+      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
+
+      mockMergeGuestCart.mockRejectedValueOnce(new Error('MERGE_FAILED'));
+
+      // Should not throw
+      await useAuthStore.getState().initializeAuth();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.user).toEqual(mockUser);
     });
   });
 });

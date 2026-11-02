@@ -24,20 +24,19 @@ export type OrderVendorGroupStatus =
   | 'pending'
   | 'confirmed'
   | 'preparing'
-  | 'ready_for_pickup'
-  | 'out_for_delivery'
+  | 'shipped'
   | 'delivered'
   | 'cancelled'
-  | 'refunded';
+  | 'returned';
 
 export type OrderStatus =
-  | 'pending'
-  | 'confirmed'
+  | 'pending_payment'
+  | 'paid'
   | 'processing'
   | 'shipped'
   | 'delivered'
   | 'cancelled'
-  | 'refunded';
+  | 'failed_payment';
 
 export interface OrderVendorGroup {
   id: string;
@@ -71,6 +70,14 @@ export interface OrderListResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface ConsumerOrderSummary {
+  totalOrders: number;
+  totalSpent: number;
+  pendingOrders: number;
+  deliveredOrders: number;
+  recentOrders: Order[];
 }
 
 export interface OrderListParams {
@@ -144,6 +151,11 @@ export const orderApi = {
     const query = buildQueryString(params || {});
     const response = await apiClient.get(`/api/v1/orders?${query}`);
     return handleResponse<OrderListResponse>(response);
+  },
+
+  async getConsumerSummary(): Promise<{ summary: ConsumerOrderSummary }> {
+    const response = await apiClient.get('/api/v1/orders/summary');
+    return handleResponse<{ summary: ConsumerOrderSummary }>(response);
   },
 
   /**

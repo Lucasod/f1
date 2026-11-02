@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CartService } from './cart.service';
-import { Cart, CartError, InMemoryCartRepository, CartItem } from './cart.domain';
+import { Cart, CartError, InMemoryCartRepository, CartItem, generateGuestCartId, isValidGuestCartId } from './cart.domain';
 import { Product, ProductStatus, InMemoryProductRepository } from '../product/product.domain';
 import { Vendor, VendorStatus, InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { config } from '../../config';
@@ -113,6 +113,18 @@ describe('Cart Service', () => {
 
       expect(cart.items).toHaveLength(1);
       expect(cart.items[0].quantity).toBe(3); // 1 + 2
+    });
+
+    it('should reject additions that would exceed available stock', async () => {
+      const existingCart = Cart.create(consumerId);
+      existingCart.addItem(productId, vendorId, 9, price);
+      await cartRepo.save(existingCart);
+
+      mockProductRepo.findById.mockResolvedValue(validProduct);
+      mockVendorRepo.findById.mockResolvedValue(validVendor);
+
+      await expect(cartService.addItem(consumerId, productId, 2))
+        .rejects.toThrow(CartError.STOCK_INSUFFICIENT);
     });
 
     it('should throw PRODUCT_NOT_FOUND when product does not exist', async () => {
@@ -350,6 +362,22 @@ describe('Cart Service', () => {
     const vendorId = 'vendor-1';
     const price = 100;
 
+    beforeEach(() => {
+      mockProductRepo.findById.mockImplementation(async (id: string) => {
+        const product = Product.create({
+          vendorId,
+          categoryId: 'category-1',
+          name: 'Test Product',
+          description: 'Test Description',
+          price,
+          quantity: 20,
+          status: ProductStatus.ACTIVE,
+        });
+        product.id = id;
+        return product;
+      });
+    });
+
     it('should merge guest cart into user cart', async () => {
       // Create guest cart with items
       const guestCart = Cart.create(guestId);
@@ -429,6 +457,85 @@ describe('Cart Service', () => {
       expect(mergedCart.getItem('product-2')!.vendorId).toBe('vendor-2');
       expect(mergedCart.getItem('product-2')!.unitPrice).toBe(200);
     });
+
+    it('should reject a merge that exceeds current stock without changing either cart', async () => {
+      const guestCart = Cart.create(guestId);
+      guestCart.addItem('product-1', vendorId, 2, price);
+      await cartRepo.save(guestCart);
+
+      const userCart = Cart.create(userId);
+      userCart.addItem('product-1', vendorId, 1, price);
+      await cartRepo.save(userCart);
+
+      const lowStockProduct = Product.create({
+        vendorId,
+        categoryId: 'category-1',
+        name: 'Low Stock Product',
+        description: 'Test Description',
+        price,
+        quantity: 2,
+        status: ProductStatus.ACTIVE,
+      });
+      lowStockProduct.id = 'product-1';
+      mockProductRepo.findById.mockResolvedValue(lowStockProduct);
+
+      await expect(cartService.mergeGuestCart(guestId, userId))
+        .rejects.toThrow(CartError.STOCK_INSUFFICIENT);
+
+      expect((await cartRepo.findById(guestId))?.getItem('product-1')?.quantity).toBe(2);
+      expect((await cartRepo.findById(userId))?.getItem('product-1')?.quantity).toBe(1);
+    });
+
+    it('rechecks the combined quantity atomically if the user cart changes during merge', async () => {
+      const guestCart = Cart.create(guestId);
+      guestCart.addItem('product-1', vendorId, 2, price);
+      await cartRepo.save(guestCart);
+
+      const userCart = Cart.create(userId);
+      userCart.addItem('product-1', vendorId, 1, price);
+      await cartRepo.save(userCart);
+
+      const merge = cartRepo.mergeGuestCart.bind(cartRepo);
+      vi.spyOn(cartRepo, 'mergeGuestCart').mockImplementation(async (sourceId, destinationId, stockByProduct) => {
+        await cartRepo.addItem(destinationId, 'product-1', vendorId, 1, price);
+        return merge(sourceId, destinationId, stockByProduct);
+      });
+
+      const lowStockProduct = Product.create({
+        vendorId,
+        categoryId: 'category-1',
+        name: 'Low Stock Product',
+        description: 'Test Description',
+        price,
+        quantity: 3,
+        status: ProductStatus.ACTIVE,
+      });
+      lowStockProduct.id = 'product-1';
+      mockProductRepo.findById.mockResolvedValue(lowStockProduct);
+
+      await expect(cartService.mergeGuestCart(guestId, userId))
+        .rejects.toThrow(CartError.STOCK_INSUFFICIENT);
+
+      expect((await cartRepo.findById(guestId))?.getItem('product-1')?.quantity).toBe(2);
+      expect((await cartRepo.findById(userId))?.getItem('product-1')?.quantity).toBe(2);
+    });
+
+    it('should merge a guest cart only once when two login requests race', async () => {
+      const guestCart = Cart.create(guestId);
+      guestCart.addItem('product-1', vendorId, 2, price);
+      await cartRepo.save(guestCart);
+
+      const userCart = Cart.create(userId);
+      userCart.addItem('product-1', vendorId, 1, price);
+      await cartRepo.save(userCart);
+
+      await Promise.all([
+        cartService.mergeGuestCart(guestId, userId),
+        cartService.mergeGuestCart(guestId, userId),
+      ]);
+
+      expect((await cartRepo.findById(userId))?.getItem('product-1')?.quantity).toBe(3);
+    });
   });
 
   describe('clearCart', () => {
@@ -469,6 +576,63 @@ describe('Cart Service', () => {
 
       const clearedCart = await cartRepo.findById(consumerId);
       expect(clearedCart!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
+  });
+
+  describe('getOrCreateGuestCart', () => {
+    it('should create new guest cart when no ID provided', async () => {
+      const cart = await cartService.getOrCreateGuestCart();
+
+      expect(cart).toBeDefined();
+      expect(cart.id).toMatch(/^guest:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(cart.isEmpty).toBe(true);
+      expect(cart.totalItems).toBe(0);
+    });
+
+    it('should create new guest cart when valid ID provided', async () => {
+      const guestId = generateGuestCartId();
+      const cart = await cartService.getOrCreateGuestCart(guestId);
+
+      expect(cart).toBeDefined();
+      expect(cart.id).toBe(guestId);
+      expect(cart.isEmpty).toBe(true);
+    });
+
+    it('should return existing guest cart when valid ID provided', async () => {
+      const guestId = generateGuestCartId();
+      const existingCart = Cart.create(guestId);
+      existingCart.addItem('product-1', 'vendor-1', 2, 100);
+      await cartRepo.save(existingCart);
+
+      const cart = await cartService.getOrCreateGuestCart(guestId);
+
+      expect(cart.id).toBe(guestId);
+      expect(cart.items).toHaveLength(1);
+      expect(cart.totalItems).toBe(2);
+    });
+
+    it('should throw GUEST_CART_ID_INVALID when invalid guest ID format provided', async () => {
+      await expect(cartService.getOrCreateGuestCart('invalid-id'))
+        .rejects.toThrow(CartError.GUEST_CART_ID_INVALID);
+
+      await expect(cartService.getOrCreateGuestCart('guest:not-a-uuid'))
+        .rejects.toThrow(CartError.GUEST_CART_ID_INVALID);
+
+      await expect(cartService.getOrCreateGuestCart('user:12345678-1234-4123-8123-123456789abc'))
+        .rejects.toThrow(CartError.GUEST_CART_ID_INVALID);
+    });
+
+    it('should throw GUEST_CART_ID_INVALID when empty string provided', async () => {
+      await expect(cartService.getOrCreateGuestCart(''))
+        .rejects.toThrow(CartError.GUEST_CART_ID_INVALID);
+    });
+
+    it('should persist newly created guest cart', async () => {
+      const cart = await cartService.getOrCreateGuestCart();
+
+      const savedCart = await cartRepo.findById(cart.id);
+      expect(savedCart).not.toBeNull();
+      expect(savedCart!.isEmpty).toBe(true);
     });
   });
 });

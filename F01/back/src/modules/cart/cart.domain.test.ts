@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Cart, CartError, InMemoryCartRepository } from './cart.domain';
+import { Cart, CartError, InMemoryCartRepository, generateGuestCartId, isGuestCartId, isValidGuestCartId } from './cart.domain';
 
 describe('Cart Domain', () => {
   let repo: InMemoryCartRepository;
@@ -555,6 +555,54 @@ describe('Cart Domain', () => {
 
       expect(await repo.findById('consumer-1')).toBeNull();
       expect(await repo.findById('consumer-2')).toBeNull();
+    });
+  });
+
+  describe('Guest Cart Utilities', () => {
+    describe('generateGuestCartId', () => {
+      it('should generate a guest cart ID with correct prefix', () => {
+        const id = generateGuestCartId();
+        expect(id).toMatch(/^guest:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      });
+
+      it('should generate unique IDs on each call', () => {
+        const id1 = generateGuestCartId();
+        const id2 = generateGuestCartId();
+        expect(id1).not.toBe(id2);
+      });
+    });
+
+    describe('isGuestCartId', () => {
+      it('should return true for valid guest cart ID', () => {
+        expect(isGuestCartId('guest:12345678-1234-4123-8123-123456789abc')).toBe(true);
+        expect(isGuestCartId('guest:abcd')).toBe(true);
+      });
+
+      it('should return false for non-guest IDs', () => {
+        expect(isGuestCartId('user:123')).toBe(false);
+        expect(isGuestCartId('consumer-123')).toBe(false);
+        expect(isGuestCartId('')).toBe(false);
+        expect(isGuestCartId('guest')).toBe(false);
+      });
+    });
+
+    describe('isValidGuestCartId', () => {
+      it('should return true for valid v4 UUID guest cart ID', () => {
+        const validId = 'guest:12345678-1234-4123-8123-123456789abc';
+        expect(isValidGuestCartId(validId)).toBe(true);
+      });
+
+      it('should return false for invalid UUID format', () => {
+        expect(isValidGuestCartId('guest:not-a-uuid')).toBe(false);
+        expect(isValidGuestCartId('guest:12345678-1234-1123-8123-123456789abc')).toBe(false); // Not v4
+        expect(isValidGuestCartId('guest:12345678-1234-4123-7123-123456789abc')).toBe(false); // Invalid variant
+      });
+
+      it('should return false for non-guest IDs', () => {
+        expect(isValidGuestCartId('user:12345678-1234-4123-8123-123456789abc')).toBe(false);
+        expect(isValidGuestCartId('consumer-123')).toBe(false);
+        expect(isValidGuestCartId('')).toBe(false);
+      });
     });
   });
 });

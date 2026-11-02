@@ -8,6 +8,7 @@ import { InMemoryProductRepository, InMemoryCategoryRepository } from './modules
 import { AuthService } from './modules/auth/auth.service';
 import { VendorService } from './modules/vendor/vendor.service';
 import { ProductService } from './modules/product/product.service';
+import { PersonService } from './modules/person/person.service';
 import { createAuthRoutes } from './modules/auth/auth.routes';
 import { createVendorRoutes } from './modules/vendor/vendor.routes';
 import { createProductRoutes, createCategoryRoutes, createUploadRoutes } from './modules/product/product.routes';
@@ -19,6 +20,10 @@ import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
 import { CheckoutService } from './modules/checkout/checkout.service';
 import { createOrderRoutes } from './modules/order/order.routes';
 import { OrderService } from './modules/order/order.service';
+import { createPersonRoutes } from './modules/person/person.routes';
+import { createReviewRoutes } from './modules/review/review.routes';
+import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
+import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runSeed } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
@@ -28,6 +33,7 @@ import { MongoPersonRepository } from './modules/person/person.mongo.repository'
 import { MongoVendorRepository } from './modules/vendor/vendor.mongo.repository';
 import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
 import { MongoProductRepository } from './modules/product/product.mongo.repository';
+import { MongoReviewRepository } from './modules/review/review.mongo.repository';
 import { connectToMongo, initializeCollections, closeMongoConnection, getDb } from './shared/database/mongo.client';
 
 // Repository interfaces
@@ -48,6 +54,7 @@ let categoryRepo: CategoryRepository;
 let cartRepo: CartRepository;
 let orderRepo: OrderRepository;
 let paymentRepo: PaymentRepository;
+let reviewRepo: ReviewRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -56,6 +63,8 @@ let productService!: ProductService;
 let cartService!: CartService;
 let checkoutService!: CheckoutService;
 let orderService!: OrderService;
+let personService!: PersonService;
+let reviewService!: ReviewService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -70,6 +79,8 @@ function initializeServices(): void {
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
   checkoutService = new CheckoutService(orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config);
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
+  personService = new PersonService(personRepo);
+  reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 }
 
 // Run seed in development mode if product repo is empty
@@ -108,6 +119,7 @@ async function runStartupCleanup() {
         referencedUrls.push(...product.images);
       }
     }
+    referencedUrls.push(...await reviewService.getReviewImageUrls());
 
     const result = await storageAdapter.cleanupOrphanedFiles(referencedUrls);
     console.log(`Startup cleanup: removed ${result.deletedCount} orphaned files`);
@@ -167,6 +179,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       vendorRepo = new MongoVendorRepository(db);
       categoryRepo = new MongoCategoryRepository(db);
       productRepo = new MongoProductRepository(db);
+      reviewRepo = new MongoReviewRepository(db);
       orderRepo = new InMemoryOrderRepository();
       paymentRepo = new InMemoryPaymentRepository();
 
@@ -199,6 +212,12 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       // Order routes
       app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
+      // Person routes
+      app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
+
+      // Review routes
+      app.use('/api/v1', createReviewRoutes({ authService, reviewService }));
+
       // 404 handler - must be after all routes
       app.use((_req: Request, res: Response) => {
         res.status(404).json({ error: 'Not found' });
@@ -223,6 +242,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
         cartRepo = new InMemoryCartRepository();
         orderRepo = new InMemoryOrderRepository();
         paymentRepo = new InMemoryPaymentRepository();
+        reviewRepo = new InMemoryReviewRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -251,6 +271,12 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 
         // Order routes
         app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
+
+        // Person routes
+        app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
+
+        // Review routes
+        app.use('/api/v1', createReviewRoutes({ authService, reviewService }));
       } else {
         // In production, MongoDB is required
         console.error('❌ MongoDB is required in production mode. Exiting...');

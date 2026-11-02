@@ -346,4 +346,47 @@ describe('Auth Routes', () => {
       expect(response.body.error).toBe('MISSING_REFRESH_TOKEN');
     });
   });
+
+  describe('PATCH /api/v1/auth/change-password', () => {
+    let accessToken: string;
+
+    beforeEach(async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Password User',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'password-user@example.com',
+          password: testPassword,
+          role: PersonRole.CONSUMER
+        });
+      accessToken = response.body.tokens.accessToken;
+    });
+
+    it('requires authentication and the current password before replacing it', async () => {
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .send({ currentPassword: testPassword, newPassword: 'NewSecurePass456!' })
+        .expect(401);
+
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ currentPassword: 'WrongPass123!', newPassword: 'NewSecurePass456!' })
+        .expect(400)
+        .expect(({ body }) => expect(body.error).toBe('INVALID_CURRENT_PASSWORD'));
+
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ currentPassword: testPassword, newPassword: 'NewSecurePass456!' })
+        .expect(200);
+
+      await expect(authService.login({
+        email: 'password-user@example.com',
+        password: 'NewSecurePass456!'
+      })).resolves.toBeDefined();
+    });
+  });
 });

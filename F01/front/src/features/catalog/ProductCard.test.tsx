@@ -38,7 +38,7 @@ describe('ProductCard', () => {
 
   it('renders product price formatted as currency', () => {
     renderProductCard();
-    expect(screen.getByText('$29.99')).toBeInTheDocument();
+    expect(screen.getByText('R$ 29,99')).toBeInTheDocument();
   });
 
   it('renders product image with correct src and alt', () => {

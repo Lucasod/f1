@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { Input, Button, Card, ErrorAlert } from '@/components/ui';
 
@@ -10,10 +11,14 @@ interface FormErrors {
 
 export function LoginForm() {
   const { login, isLoading, error: authError, clearError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const from = (location.state as { from?: Location })?.from?.pathname || '/';
 
   const validateEmail = (value: string): string | undefined => {
     if (!value.trim()) return 'Email is required';
@@ -54,6 +59,8 @@ export function LoginForm() {
 
     try {
       await login(email, password);
+      // Redirect to the intended destination or home
+      navigate(from, { replace: true });
     } catch {
       // Error is handled by auth store
     }

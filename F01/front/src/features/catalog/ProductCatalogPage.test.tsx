@@ -104,8 +104,8 @@ describe('ProductCatalogPage', () => {
 
     expect(screen.getByText('Product 1')).toBeInTheDocument();
     expect(screen.getByText('Product 2')).toBeInTheDocument();
-    expect(screen.getByText('$10.00')).toBeInTheDocument();
-    expect(screen.getByText('$20.00')).toBeInTheDocument();
+    expect(screen.getByText('R$ 10,00')).toBeInTheDocument();
+    expect(screen.getByText('R$ 20,00')).toBeInTheDocument();
   });
 
   it('shows in-stock badge for available products', async () => {

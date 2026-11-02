@@ -1,5 +1,7 @@
 # Análise de Design — S3 Object Naming (Product Images, Invoices, Uploads)
 
+> **Limite atual de implementação:** A convenção abaixo orienta as chaves locais e a futura integração com S3. O runtime atual salva imagens de produto e avaliação usando `LocalStorageAdapter`; ele não chama AWS/S3. Local storage é temporário para desenvolvimento e não substitui T-703b.
+
 **Data:** 2026-10-25  
 **Executor:** code-orchestrator (T-304)  
 **Fase:** P3a — Logical & Physical Data Models  
@@ -129,13 +131,13 @@ reviews/{product_id}/{review_id}/thumbnails/{sequence:02d}.webp
 | **Ownership model** | **RESOLVIDO** (CD-071): owned images permitted per review; Q-017 RESOLVED |
 | **Max por review** | 5 imagens |
 | **Thumbnails** | WebP 200x200 |
-| **Moderação** | Post-moderation (Q-017 PARTIALLY_RESOLVED): publish imediato, admin pode ocultar |
+| **Moderação** | Post-moderation (CD-067): publish imediato; Admin pode ocultar ou rejeitar |
 
 ---
 
 ## 5.3 Nota sobre Q-017 (RESOLVIDO)
 
-Q-017 foi resolvido em MP-08 com 7 sub-decisões confirmadas (CD-067..CD-072). Conforme CD-071: **owned images are permitted for reviews** — reviews may include user-uploaded images stored under `reviews/{product_id}/{review_id}/`. A estrutura de pastas já suporta este modelo. Product_Pic remains associated with Product (CD-016); Review images are separate entities owned by the review author.
+Q-017 foi resolvido em MP-08 com 7 sub-decisões confirmadas (CD-067..CD-072). Conforme CD-071, owned images são permitidas para reviews, armazenadas em `reviews/{product_id}/{review_id}/`. A implementação atual usa armazenamento local e valida propriedade, tipo, tamanho e dimensões; integração com S3 continua separada e pendente. Product_Pic permanece associado a Product (CD-016); imagens de Review são separadas e pertencem ao autor da avaliação.
 
 ---
 

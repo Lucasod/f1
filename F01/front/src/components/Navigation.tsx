@@ -58,6 +58,33 @@ export function Navigation() {
                 </Link>
               </li>
 
+              {hasRole('CONSUMER') && (
+                <>
+                  <li role="none">
+                    <Link to="/dashboard" className={navLinkClassName(location.pathname === '/dashboard')} role="menuitem">
+                      Consumer Dashboard
+                    </Link>
+                  </li>
+                  <li role="none">
+                    <Link to="/orders" className={navLinkClassName(location.pathname.startsWith('/orders'))} role="menuitem">
+                      My Orders
+                    </Link>
+                  </li>
+                  <li role="none">
+                    <Link to="/profile" className={navLinkClassName(location.pathname === '/profile')} role="menuitem">
+                      My Profile
+                    </Link>
+                  </li>
+                  {!hasRole('VENDOR') && (
+                    <li role="none">
+                      <Link to="/vendor/onboard" className={navLinkClassName(location.pathname === '/vendor/onboard')} role="menuitem">
+                        Become a Seller
+                      </Link>
+                    </li>
+                  )}
+                </>
+              )}
+
               {hasRole('VENDOR') && (
                 <>
                   <li role="none">

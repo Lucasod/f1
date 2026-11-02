@@ -10,6 +10,16 @@ export enum PersonTaxIdError {
   ALL_DIGITS_SAME = 'ALL_DIGITS_SAME'
 }
 
+export enum PersonError {
+  PERSON_NOT_FOUND = 'PERSON_NOT_FOUND',
+  NAME_REQUIRED = 'NAME_REQUIRED',
+  EMAIL_REQUIRED = 'EMAIL_REQUIRED',
+  INVALID_EMAIL_FORMAT = 'INVALID_EMAIL_FORMAT',
+  ADDRESS_NOT_FOUND = 'ADDRESS_NOT_FOUND',
+  CONTACT_NOT_FOUND = 'CONTACT_NOT_FOUND',
+  TAX_ID_IMMUTABLE = 'TAX_ID_IMMUTABLE'
+}
+
 export interface PersonTaxIdResult {
   isValid: boolean;
   type?: 'CPF' | 'CNPJ';
@@ -24,6 +34,7 @@ export enum PersonRole {
 }
 
 export interface ContactInfo {
+  id: string;
   type: 'email' | 'phone' | 'whatsapp';
   value: string;
   isPrimary: boolean;
@@ -88,7 +99,9 @@ export class Person {
     this.updatedAt = data.updatedAt || new Date();
   }
 
-  static create(data: Omit<PersonData, 'id' | 'createdAt' | 'updatedAt' | 'roles' | 'credential'>): Person {
+  static create(data: Omit<PersonData, 'id' | 'createdAt' | 'updatedAt' | 'roles' | 'credential' | 'contactInfos'> & {
+    contactInfos: Array<Omit<ContactInfo, 'id'> & { id?: string }>;
+  }): Person {
     if (!data.name || data.name.trim().length === 0) {
       throw new Error('NAME_REQUIRED');
     }
@@ -108,8 +121,15 @@ export class Person {
       }
     }
 
+    // Generate IDs for contacts that don't have them
+    const contactsWithIds: ContactInfo[] = data.contactInfos.map(c => ({
+      ...c,
+      id: c.id || generateId()
+    }));
+
     return new Person({
       ...data,
+      contactInfos: contactsWithIds,
       roles: [],
       credential: null
     });
@@ -155,6 +175,135 @@ export class Person {
     const primaryEmailContact = this.contactInfos.find(c => c.type === 'email' && c.isPrimary);
     return primaryEmailContact ? primaryEmailContact.value : this.email;
   }
+
+  updateName(newName: string): void {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed.length === 0) {
+      throw new Error(PersonError.NAME_REQUIRED);
+    }
+    (this as any).name = trimmed;
+    (this as any).mainInfo = { ...this.mainInfo, name: trimmed };
+    (this as any).updatedAt = new Date();
+  }
+
+  replaceCredential(hashedPassword: string): void {
+    if (!hashedPassword) {
+      throw new Error('CREDENTIAL_REQUIRED');
+    }
+    (this as any).credential = hashedPassword;
+    (this as any).updatedAt = new Date();
+  }
+
+  updateContactInfos(contacts: ContactInfo[]): void {
+    if (!contacts || contacts.length === 0) {
+      throw new Error(PersonError.EMAIL_REQUIRED);
+    }
+    const hasEmail = contacts.some(c => c.type === 'email');
+    if (!hasEmail) {
+      throw new Error(PersonError.EMAIL_REQUIRED);
+    }
+    for (const contact of contacts) {
+      if (contact.type === 'email' && !validateEmail(contact.value)) {
+        throw new Error(PersonError.INVALID_EMAIL_FORMAT);
+      }
+    }
+    // Ensure all contacts have IDs (generate if missing for backward compatibility)
+    const contactsWithIds = contacts.map(c => (c.id ? c : { ...c, id: generateId() }));
+    (this as any).contactInfos = contactsWithIds;
+    (this as any).updatedAt = new Date();
+  }
+
+  updateAddresses(addresses: Address[]): void {
+    (this as any).addresses = addresses || [];
+    (this as any).updatedAt = new Date();
+  }
+
+  addAddress(address: Omit<Address, 'id'>): Address {
+    const newAddress: Address = {
+      ...address,
+      id: generateId()
+    };
+    (this as any).addresses = [...this.addresses, newAddress];
+    (this as any).updatedAt = new Date();
+    return newAddress;
+  }
+
+  removeAddress(addressId: string): void {
+    const index = this.addresses.findIndex(a => a.id === addressId);
+    if (index === -1) {
+      throw new Error(PersonError.ADDRESS_NOT_FOUND);
+    }
+    const newAddresses = [...this.addresses];
+    newAddresses.splice(index, 1);
+    (this as any).addresses = newAddresses;
+    (this as any).updatedAt = new Date();
+  }
+
+  updateAddress(addressId: string, updates: Partial<Address>): void {
+    const index = this.addresses.findIndex(a => a.id === addressId);
+    if (index === -1) {
+      throw new Error(PersonError.ADDRESS_NOT_FOUND);
+    }
+    const updatedAddress = { ...this.addresses[index], ...updates };
+    // Ensure id is not changed
+    updatedAddress.id = addressId;
+    const newAddresses = [...this.addresses];
+    newAddresses[index] = updatedAddress;
+    (this as any).addresses = newAddresses;
+    (this as any).updatedAt = new Date();
+  }
+
+  addContact(contact: Omit<ContactInfo, 'id'>): void {
+    if (contact.type === 'email' && !validateEmail(contact.value)) {
+      throw new Error(PersonError.INVALID_EMAIL_FORMAT);
+    }
+    const newContact: ContactInfo = { ...contact, id: generateId() };
+    (this as any).contactInfos = [...this.contactInfos, newContact];
+    (this as any).updatedAt = new Date();
+  }
+
+  removeContact(contactId: string): void {
+    const index = this.contactInfos.findIndex(c => c.id === contactId);
+    if (index === -1) {
+      throw new Error(PersonError.CONTACT_NOT_FOUND);
+    }
+    const newContacts = [...this.contactInfos];
+    newContacts.splice(index, 1);
+    
+    // Validate at least one email remains
+    const hasEmail = newContacts.some(c => c.type === 'email');
+    if (!hasEmail) {
+      throw new Error(PersonError.EMAIL_REQUIRED);
+    }
+    
+    (this as any).contactInfos = newContacts;
+    (this as any).updatedAt = new Date();
+  }
+
+  updateContact(contactId: string, updates: Partial<ContactInfo>): void {
+    const index = this.contactInfos.findIndex(c => c.id === contactId);
+    if (index === -1) {
+      throw new Error(PersonError.CONTACT_NOT_FOUND);
+    }
+    const updatedContact = { ...this.contactInfos[index], ...updates };
+    // Ensure id is not changed
+    updatedContact.id = contactId;
+    // Validate email format if updating email
+    if (updatedContact.type === 'email' && !validateEmail(updatedContact.value)) {
+      throw new Error(PersonError.INVALID_EMAIL_FORMAT);
+    }
+    const newContacts = [...this.contactInfos];
+    newContacts[index] = updatedContact;
+    
+    // Validate at least one email remains
+    const hasEmail = newContacts.some(c => c.type === 'email');
+    if (!hasEmail) {
+      throw new Error(PersonError.EMAIL_REQUIRED);
+    }
+    
+    (this as any).contactInfos = newContacts;
+    (this as any).updatedAt = new Date();
+  }
 }
 
 export interface PersonRepository {
@@ -162,6 +311,7 @@ export interface PersonRepository {
   findById(id: string): Promise<Person | null>;
   findByEmail(email: string): Promise<Person | null>;
   findByTaxId(type: 'CPF' | 'CNPJ', value: string): Promise<Person | null>;
+  update(person: Person): Promise<Person>;
   delete(id: string): Promise<void>;
 }
 
@@ -256,17 +406,10 @@ export function validatePersonTaxId(cpf: string | null | undefined, cnpj: string
 export class InMemoryPersonRepository implements PersonRepository {
   private persons: Map<string, Person> = new Map();
   private emailIndex: Map<string, string> = new Map();
+  private emailValuesByPerson: Map<string, string[]> = new Map();
 
   async save(person: Person): Promise<Person> {
-    for (const contact of person.contactInfos) {
-      if (contact.type === 'email') {
-        const existingId = this.emailIndex.get(contact.value.toLowerCase());
-        if (existingId && existingId !== person.id) {
-          throw new Error('EMAIL_ALREADY_EXISTS');
-        }
-        this.emailIndex.set(contact.value.toLowerCase(), person.id);
-      }
-    }
+    this.replaceEmailIndex(person);
     this.persons.set(person.id, person);
     return person;
   }
@@ -290,14 +433,43 @@ export class InMemoryPersonRepository implements PersonRepository {
     return null;
   }
 
+  async update(person: Person): Promise<Person> {
+    this.replaceEmailIndex(person);
+    this.persons.set(person.id, person);
+    return person;
+  }
+
+  private replaceEmailIndex(person: Person): void {
+    const newEmails = [...new Set(person.contactInfos
+      .filter(contact => contact.type === 'email')
+      .map(contact => contact.value.toLowerCase()))];
+
+    for (const email of newEmails) {
+      const existingId = this.emailIndex.get(email);
+      if (existingId && existingId !== person.id) {
+        throw new Error('EMAIL_ALREADY_EXISTS');
+      }
+    }
+
+    for (const email of this.emailValuesByPerson.get(person.id) ?? []) {
+      if (this.emailIndex.get(email) === person.id) {
+        this.emailIndex.delete(email);
+      }
+    }
+    for (const email of newEmails) {
+      this.emailIndex.set(email, person.id);
+    }
+    this.emailValuesByPerson.set(person.id, newEmails);
+  }
+
   async delete(id: string): Promise<void> {
-    const person = this.persons.get(id);
-    if (person) {
-      for (const contact of person.contactInfos) {
-        if (contact.type === 'email') {
-          this.emailIndex.delete(contact.value.toLowerCase());
+    if (this.persons.has(id)) {
+      for (const email of this.emailValuesByPerson.get(id) ?? []) {
+        if (this.emailIndex.get(email) === id) {
+          this.emailIndex.delete(email);
         }
       }
+      this.emailValuesByPerson.delete(id);
       this.persons.delete(id);
     }
   }
@@ -305,5 +477,6 @@ export class InMemoryPersonRepository implements PersonRepository {
   clear(): void {
     this.persons.clear();
     this.emailIndex.clear();
+    this.emailValuesByPerson.clear();
   }
 }

@@ -708,7 +708,7 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Decision:** Reviews may include user-uploaded images (owned images). These are distinct from vendor Product_Pic entities and stored separately.  
 **Justification:** User-generated content ownership clarity; separate moderation pipeline; simpler permissions (review author owns images).  
 **Source:** MP-08 consolidation for T-117/Q-017 (decision 7)  
-**Consequences:** Review entity includes optional images list (S3 paths); Product_Pic remains for vendor product images only; image upload validation and moderation for review images implemented separately.
+**Consequences:** Review entity includes optional owned-image references under the review's storage path; S3 is the target storage provider, while development currently uses the temporary local adapter. Product_Pic remains for vendor product images only. Review image validation, ownership checks, and moderation rules are distinct from product-image handling.
 
 ### CD-072: Review Eligibility State — DELIVERED
 **Status:** Confirmed (MP-08)  

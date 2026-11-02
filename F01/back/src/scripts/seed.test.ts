@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runSeed, resetDeterministicIdGenerator } from './seed.js';
+import { runSeed, resetDeterministicIdGenerator, validateSeedEnvironment } from './seed.js';
 import { InMemoryPersonRepository } from '../modules/person/person.domain.js';
 import { InMemoryVendorRepository } from '../modules/vendor/vendor.domain.js';
 import { InMemoryProductRepository, InMemoryCategoryRepository } from '../modules/product/product.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
+import { AuthService } from '../modules/auth/auth.service.js';
+import { ACCOUNTS } from './seed.js';
 
 describe('Seed Integration', () => {
   let personRepo: InMemoryPersonRepository;
@@ -31,6 +33,27 @@ describe('Seed Integration', () => {
   });
 
   describe('runSeed', () => {
+    it('requires deployment-managed passwords for every production seed account before seeding', () => {
+      expect(() => validateSeedEnvironment({
+        NODE_ENV: 'production',
+        SEED_FORCE: 'true',
+        SEED_VENDOR_TECH_STORE_PASSWORD: 'vendor-secret',
+        SEED_VENDOR_FASHION_HUB_PASSWORD: 'vendor-secret',
+        SEED_VENDOR_BOOK_WORLD_PASSWORD: 'vendor-secret',
+        SEED_CONSUMER_PASSWORD: 'consumer-secret',
+      })).toThrow('SEED_ADMIN_PASSWORD');
+
+      expect(() => validateSeedEnvironment({
+        NODE_ENV: 'production',
+        SEED_FORCE: 'true',
+        SEED_VENDOR_TECH_STORE_PASSWORD: 'vendor-secret',
+        SEED_VENDOR_FASHION_HUB_PASSWORD: 'vendor-secret',
+        SEED_VENDOR_BOOK_WORLD_PASSWORD: 'vendor-secret',
+        SEED_CONSUMER_PASSWORD: 'consumer-secret',
+        SEED_ADMIN_PASSWORD: 'admin-secret',
+      })).not.toThrow();
+    });
+
     it('should accept repository instances and populate them', async () => {
       await runSeed(repositories);
 
@@ -89,6 +112,25 @@ describe('Seed Integration', () => {
         expect(vendor).not.toBeNull();
         expect(vendor!.personId).toBe(person.id);
       }
+    });
+
+    it('creates usable consumer and admin demo accounts without combining their roles', async () => {
+      await runSeed(repositories);
+
+      const authService = new AuthService(personRepo, 'seed-test-secret', '24h');
+      for (const account of ACCOUNTS) {
+        const { person } = await authService.login({
+          email: account.email,
+          password: account.password,
+        });
+        expect(person.id).toBe(account.id);
+        expect(person.roles).toEqual([account.role]);
+      }
+
+      const persons = Array.from((personRepo as any).persons.values());
+      expect(persons).toHaveLength(5);
+      expect(persons.filter((person: any) => person.roles.includes('ADMIN'))).toHaveLength(1);
+      expect(persons.filter((person: any) => person.roles.includes('CONSUMER'))).toHaveLength(1);
     });
 
     it('should create exactly 12 products distributed across vendors and categories', async () => {

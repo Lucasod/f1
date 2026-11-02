@@ -1,5 +1,7 @@
 # Security Hardening Plan - FS-01 Marketplace
 
+> **Status:** This is a target security plan, not a statement that every control is implemented. Verify runtime controls in source and track them in `F01/docs/task_list.md`.
+
 ## Principles
 - Least privilege (CD-059 ownership, Admin Role+PermissionENUM CD-004)
 - Defense in depth
@@ -48,7 +50,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 ## Input Validation
 - **All inputs**: Zod schemas (derived from OpenAPI)
 - **File uploads**: Signed S3 URLs, max 10MB, type allowlist (images: jpeg/png/webp)
-- **No SQL/NoSQL injection**: Mongoose parameterized queries
+- **NoSQL injection**: The runtime uses the MongoDB Node.js driver, not Mongoose; validate inputs and keep query construction server-controlled
 - **XSS**: React auto-escapes, CSP blocks inline scripts
 
 ## Secrets Management

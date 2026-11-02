@@ -10,6 +10,7 @@ export enum AuthError {
   INVALID_EMAIL = 'INVALID_EMAIL',
   INVALID_TAX_ID = 'INVALID_TAX_ID',
   INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  INVALID_CURRENT_PASSWORD = 'INVALID_CURRENT_PASSWORD',
   INVALID_TOKEN = 'INVALID_TOKEN',
   TOKEN_EXPIRED = 'TOKEN_EXPIRED',
   PERSON_NOT_FOUND = 'PERSON_NOT_FOUND'
@@ -114,7 +115,7 @@ export class AuthService {
     const person = Person.create({
       name: input.name,
       mainInfo: { name: input.name, taxIdType: input.taxIdType, taxIdValue: input.taxIdValue },
-      contactInfos: [{ type: 'email', value: input.email, isPrimary: true }],
+      contactInfos: [{ type: 'email', value: input.email, isPrimary: true, id: '' }],
       addresses: []
     });
 
@@ -152,6 +153,30 @@ export class AuthService {
     const tokens = this.generateTokens(person);
 
     return { person, tokens };
+  }
+
+  async changePassword(personId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const person = await this.repo.findById(personId);
+    if (!person) {
+      throw new Error(AuthError.PERSON_NOT_FOUND);
+    }
+
+    if (!person.credential || !(await verifyPassword(currentPassword, person.credential))) {
+      throw new Error(AuthError.INVALID_CURRENT_PASSWORD);
+    }
+
+    let hashedPassword: string;
+    try {
+      hashedPassword = await hashPassword(newPassword);
+    } catch (error) {
+      if (error instanceof Error && Object.values(CredentialError).includes(error.message as CredentialError)) {
+        throw new Error(AuthError.WEAK_PASSWORD);
+      }
+      throw error;
+    }
+
+    person.replaceCredential(hashedPassword);
+    await this.repo.update(person);
   }
 
   async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {

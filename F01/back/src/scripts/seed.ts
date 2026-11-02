@@ -6,9 +6,28 @@ import { hashPassword } from '../modules/auth/credential.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
 export type { SeedRepositories };
 
-function validateSeedEnvironment(): void {
-  if (config.isProduction && process.env.SEED_FORCE !== 'true') {
+function getVendorSeedPasswordVariable(slug: string): string {
+  return `SEED_VENDOR_${slug.replace(/-/g, '_').toUpperCase()}_PASSWORD`;
+}
+
+export function validateSeedEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
+  if (environment.NODE_ENV === 'production' && environment.SEED_FORCE !== 'true') {
     throw new Error('Seed script requires SEED_FORCE=true to run in production environment');
+  }
+
+  if (environment.NODE_ENV === 'production') {
+    const requiredPasswordVariables = [
+      ...VENDORS.map(vendor => getVendorSeedPasswordVariable(vendor.slug)),
+      ...ACCOUNTS.map(account => `SEED_${account.role}_PASSWORD`),
+    ];
+    const missingPasswords = requiredPasswordVariables.filter(
+      name => !environment[name]?.trim(),
+    );
+    if (missingPasswords.length > 0) {
+      throw new Error(
+        `Production seed requires deployment-managed passwords: ${missingPasswords.join(', ')}`,
+      );
+    }
   }
 }
 
@@ -70,6 +89,15 @@ interface VendorSeedData {
   name: string;
   storeName: string;
   slug: string;
+}
+
+interface AccountSeedData {
+  id: string;
+  email: string;
+  name: string;
+  taxIdType: 'CPF' | 'CNPJ';
+  taxIdValue: string;
+  role: PersonRole.CONSUMER | PersonRole.ADMIN;
   password: string;
 }
 
@@ -102,7 +130,6 @@ const VENDORS: VendorSeedData[] = [
     name: 'Tech Store',
     storeName: 'Tech Store',
     slug: 'tech-store',
-    password: 'SecurePass123!',
   },
   {
     id: generateDeterministicSlugId('vendor', 'fashion-hub'),
@@ -112,7 +139,6 @@ const VENDORS: VendorSeedData[] = [
     name: 'Fashion Hub',
     storeName: 'Fashion Hub',
     slug: 'fashion-hub',
-    password: 'SecurePass123!',
   },
   {
     id: generateDeterministicSlugId('vendor', 'book-world'),
@@ -122,6 +148,26 @@ const VENDORS: VendorSeedData[] = [
     name: 'Book World',
     storeName: 'Book World',
     slug: 'book-world',
+  },
+];
+
+const ACCOUNTS: AccountSeedData[] = [
+  {
+    id: generateDeterministicSlugId('person', 'demo-consumer'),
+    email: 'consumer@example.com',
+    name: 'Demo Consumer',
+    taxIdType: 'CPF',
+    taxIdValue: '11144477735',
+    role: PersonRole.CONSUMER,
+    password: 'SecurePass123!',
+  },
+  {
+    id: generateDeterministicSlugId('person', 'demo-admin'),
+    email: 'admin@example.com',
+    name: 'Demo Admin',
+    taxIdType: 'CNPJ',
+    taxIdValue: '11222333000262',
+    role: PersonRole.ADMIN,
     password: 'SecurePass123!',
   },
 ];
@@ -374,7 +420,12 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
     (person as any).id = vendorData.personId;
 
     // Hash password and set credential
-    const hashedPassword = await hashPassword(vendorData.password);
+    const passwordVariable = getVendorSeedPasswordVariable(vendorData.slug);
+    const vendorPassword = process.env[passwordVariable] ?? 'SecurePass123!';
+    if (config.isProduction && !process.env[passwordVariable]?.trim()) {
+      throw new Error(`${passwordVariable} is required when seeding vendor accounts in production`);
+    }
+    const hashedPassword = await hashPassword(vendorPassword);
     person.setCredential(hashedPassword);
 
     // Add VENDOR role
@@ -401,7 +452,33 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
 
   console.log(`✅ Created ${VENDORS.length} vendors`);
 
-  // 5. Create products
+  // 5. Create demo consumer and admin accounts directly in the trusted seed path.
+  console.log('👤 Creating demo accounts...');
+  for (const account of ACCOUNTS) {
+    const passwordVariable = `SEED_${account.role}_PASSWORD`;
+    const password = process.env[passwordVariable];
+    if (config.isProduction && !password) {
+      throw new Error(`${passwordVariable} is required when seeding demo accounts in production`);
+    }
+
+    const person = Person.create({
+      name: account.name,
+      mainInfo: {
+        name: account.name,
+        taxIdType: account.taxIdType,
+        taxIdValue: account.taxIdValue,
+      },
+      contactInfos: [{ type: 'email', value: account.email, isPrimary: true }],
+      addresses: [],
+    });
+    (person as any).id = account.id;
+    person.addRole(account.role);
+    person.setCredential(await hashPassword(password ?? account.password));
+    await personRepo.save(person);
+    console.log(`  ✅ Created ${account.role.toLowerCase()} account: ${account.email}`);
+  }
+
+  // 6. Create products
   console.log('📦 Creating products...');
 
   for (const prodData of PRODUCTS) {
@@ -434,19 +511,20 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
 
   console.log(`✅ Created ${PRODUCTS.length} products`);
 
-  // 6. Summary
+  // 7. Summary
   console.log('\n📊 Seed Summary:');
   console.log(`  Categories: ${CATEGORIES.length}`);
   console.log(`  Vendors: ${VENDORS.length}`);
+  console.log(`  Demo accounts: ${ACCOUNTS.length}`);
   console.log(`  Products: ${PRODUCTS.length}`);
   console.log('\n✨ Seed completed successfully!');
 }
 
 export {
-  validateSeedEnvironment,
   generateDeterministicHashId,
   resetDeterministicIdGenerator,
   CATEGORIES,
   VENDORS,
+  ACCOUNTS,
   PRODUCTS,
 };

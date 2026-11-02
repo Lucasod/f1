@@ -13,6 +13,7 @@ export interface Cart {
   items: CartItem[];
   version: number;
   updatedAt: string;
+  guestCartId?: string;
 }
 
 export interface CartItemInput {
@@ -53,12 +54,18 @@ async function handleResponse<T>(response: Response): Promise<T> {
       errorData.error
     );
   }
-  return response.json();
+  const data = await response.json();
+  // Store guest cart ID from response body if present
+  const guestCartId = data?.guestCartId ?? data?.cart?.guestCartId;
+  if (guestCartId) {
+    apiClient.setGuestCartId(guestCartId);
+  }
+  return data;
 }
 
 export const cartApi = {
   /**
-   * Get the current user's cart
+   * Get the current user's cart (works for both authenticated and guest users)
    */
   async getCart(): Promise<{ cart: Cart }> {
     const response = await apiClient.get('/api/v1/cart');
@@ -66,7 +73,7 @@ export const cartApi = {
   },
 
   /**
-   * Add an item to the cart
+   * Add an item to the cart (works for both authenticated and guest users)
    */
   async addItem(input: CartItemInput): Promise<{ cart: Cart }> {
     const response = await apiClient.post('/api/v1/cart/items', input);
@@ -95,5 +102,12 @@ export const cartApi = {
   async mergeGuestCart(input: MergeGuestCartInput): Promise<{ cart: Cart }> {
     const response = await apiClient.post('/api/v1/cart/merge-guest', input);
     return handleResponse<{ cart: Cart }>(response);
+  },
+
+  /**
+   * Clear the guest cart ID from localStorage (call after successful merge)
+   */
+  clearGuestCartId(): void {
+    apiClient.clearGuestCartId();
   },
 };

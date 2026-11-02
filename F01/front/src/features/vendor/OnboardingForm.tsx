@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { vendorApi, VendorOnboardInput, VendorApiException } from '@/shared/api/vendor';
 import { Input, Button, Card, ErrorAlert, Spinner } from '@/components/ui';
+import { useAuthStore } from '@/app/providers/authStore';
 
 export function OnboardingForm() {
   const navigate = useNavigate();
+  const refreshUserProfile = useAuthStore(state => state.refreshUserProfile);
 
   const [formData, setFormData] = useState<VendorOnboardInput>({
     storeName: '',
@@ -125,6 +127,13 @@ export function OnboardingForm() {
 
     try {
       await vendorApi.onboard(formData);
+      try {
+        await refreshUserProfile();
+      } catch (sessionError) {
+        console.error('Vendor onboarding succeeded but session refresh failed:', sessionError);
+        setError('Your store was created, but your session could not be updated. Sign in again to access the Vendor Dashboard.');
+        return;
+      }
       navigate('/vendor/dashboard');
     } catch (err) {
       if (err instanceof VendorApiException) {

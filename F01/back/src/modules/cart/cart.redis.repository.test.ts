@@ -35,16 +35,16 @@ class TestRedisClient extends RedisMock {
       if (script.includes('unit_price = tonumber(ARGV[7])')) {
         return this.handleAddItem(keys[0], argv);
       }
-      if (script.includes('local qty = tonumber(ARGV[2])') && script.includes('if qty > 0')) {
+      if (script.includes('local max_stock = tonumber(ARGV[5])') && script.includes('local new_items = {}')) {
         return this.handleUpdateItemQuantity(keys[0], argv);
       }
-      if (script.includes('product_id ~= ARGV[1]')) {
+      if (script.includes('local new_items = {}') && script.includes('local found = false')) {
         return this.handleRemoveItem(keys[0], argv);
       }
-      if (script.includes('return cjson.encode({') && script.includes('items = cjson.decode(cart[2])') && script.includes('version = tonumber(cart[6])')) {
+      if (script.includes('items = cjson.decode(items_data)') && script.includes('updated_at = updated_at')) {
         return this.handleGetCart(keys[0]);
       }
-      if (script.includes('guest_cart') && script.includes('user_cart')) {
+      if (script.includes('guest_items_data') && script.includes('user_items_data')) {
         return this.handleMergeGuestCart(keys[0], keys[1], argv);
       }
       if (script.includes('redis.call(\'DEL\'') || script.includes('redis.call("DEL"')) {
@@ -80,6 +80,7 @@ private handleAddItem(key: string, argv: string[]): string {
     const quantity = parseInt(quantityStr, 10);
     const unitPrice = parseFloat(unitPriceStr);
     const ttl = parseInt(ttlStr, 10);
+    const maxStock = parseInt(argv[7] || Number.MAX_SAFE_INTEGER.toString(), 10);
 
     let cartData = this.getCartData(key);
     let items = cartData?.items || [];
@@ -87,8 +88,14 @@ private handleAddItem(key: string, argv: string[]): string {
 
     const foundIndex = items.findIndex((item: any) => item.product_id === productId);
     if (foundIndex >= 0) {
+      if (items[foundIndex].quantity + quantity > maxStock) {
+        return 'STOCK_INSUFFICIENT';
+      }
       items[foundIndex].quantity += quantity; // Merge: add to existing quantity
     } else {
+      if (quantity > maxStock) {
+        return 'STOCK_INSUFFICIENT';
+      }
       items.push({
         product_id: productId,
         vendor_id: vendorId,
@@ -108,9 +115,12 @@ private handleAddItem(key: string, argv: string[]): string {
     const [productId, quantityStr, updatedAt, ttlStr] = argv;
     const quantity = parseInt(quantityStr, 10);
     const ttl = parseInt(ttlStr, 10);
+    const maxStock = parseInt(argv[4] || Number.MAX_SAFE_INTEGER.toString(), 10);
 
     const cartData = this.getCartData(key);
     if (!cartData) return null;
+    if (quantity > maxStock) return 'STOCK_INSUFFICIENT';
+    if (!cartData.items.some((item: any) => item.product_id === productId)) return 'CART_ITEM_NOT_FOUND';
 
     let items = cartData.items;
     const newItems = items
@@ -137,6 +147,7 @@ private handleAddItem(key: string, argv: string[]): string {
 
     const cartData = this.getCartData(key);
     if (!cartData) return null;
+    if (!cartData.items.some((item: any) => item.product_id === productId)) return 'CART_ITEM_NOT_FOUND';
 
     const items = cartData.items.filter((item: any) => item.product_id !== productId);
     const version = cartData.version + 1;
@@ -349,6 +360,16 @@ describe('RedisCartRepository', () => {
       expect(updated.items).toHaveLength(1);
       expect(updated.items[0].quantity).toBe(5); // 2 + 3
       expect(updated.items[0].unitPrice).toBe(15); // Original unitPrice preserved
+    });
+
+    it('should atomically reject additions above the current stock limit', async () => {
+      const cart = Cart.create('consumer-stock');
+      cart.addItem('prod-stock', 'vendor-1', 2, 15);
+      await repo.save(cart);
+
+      await expect(repo.addItem('consumer-stock', 'prod-stock', 'vendor-1', 3, 15, 4))
+        .rejects.toThrow(CartError.STOCK_INSUFFICIENT);
+      expect((await repo.findById('consumer-stock'))?.getItem('prod-stock')?.quantity).toBe(2);
     });
   });
 

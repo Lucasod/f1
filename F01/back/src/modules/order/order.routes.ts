@@ -18,6 +18,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
   const router = Router();
 
   const authMw = authMiddleware(authService);
+  const requireConsumer = requireRole(PersonRole.CONSUMER);
   const requireConsumerVendorAdmin = requireRole(PersonRole.CONSUMER, PersonRole.VENDOR, PersonRole.ADMIN);
   const requireVendorAdmin = requireRole(PersonRole.VENDOR, PersonRole.ADMIN);
   const requireAdmin = requireRole(PersonRole.ADMIN);
@@ -37,6 +38,8 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
 
       if (req.user.roles.includes(PersonRole.ADMIN)) {
         role = 'admin';
+      } else if (req.user.roles.includes(PersonRole.CONSUMER)) {
+        role = 'consumer';
       } else if (req.user.roles.includes(PersonRole.VENDOR)) {
         role = 'vendor';
         // Get vendor ID from person's vendor profile
@@ -74,6 +77,20 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
     }
   }) as RequestHandler);
 
+  router.get('/orders/summary', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const summary = await orderService.getConsumerSummary(req.user.sub);
+      return res.json({
+        summary: {
+          ...summary,
+          recentOrders: summary.recentOrders.map(orderToResponse),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
   // GET /orders/:orderId - Get order details (auth required)
   // Authorization: consumer owns order, vendor owns vendor group in order, admin any
   router.get('/orders/:orderId', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -85,21 +102,28 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
       }
 
-      let role: 'consumer' | 'vendor' | 'admin' = 'consumer';
-      let vendorId: string | undefined;
+      let order: Order | null = null;
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+      const isConsumer = req.user.roles.includes(PersonRole.CONSUMER);
+      const isVendor = req.user.roles.includes(PersonRole.VENDOR);
 
-      if (req.user.roles.includes(PersonRole.ADMIN)) {
-        role = 'admin';
-      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
-        role = 'vendor';
-        const vendor = await vendorRepo.findByPersonId(personId);
-        if (!vendor) {
-          return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+      if (isAdmin) {
+        order = await orderService.getOrderById(orderId, personId, 'admin');
+      } else {
+        if (isConsumer) {
+          order = await orderService.getOrderById(orderId, personId, 'consumer');
         }
-        vendorId = vendor.id;
-      }
 
-      const order = await orderService.getOrderById(orderId, personId, role, vendorId);
+        if (!order && isVendor) {
+          const vendor = await vendorRepo.findByPersonId(personId);
+          if (!vendor && !isConsumer) {
+            return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+          }
+          if (vendor) {
+            order = await orderService.getOrderById(orderId, personId, 'vendor', vendor.id);
+          }
+        }
+      }
 
       if (!order) {
         return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });

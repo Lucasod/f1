@@ -25,10 +25,7 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
 
   if (allowedRoles && allowedRoles.length > 0) {
     const hasRequiredRole = allowedRoles.some(role => hasRole(role));
-    // Admin has access to everything
-    const isAdmin = hasRole('ADMIN');
-    
-    if (!hasRequiredRole && !isAdmin) {
+    if (!hasRequiredRole) {
       return (
         <div className="min-h-screen flex items-center justify-center p-4">
           <div className="max-w-md text-center">

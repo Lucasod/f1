@@ -204,10 +204,10 @@ export class LocalStorageAdapter implements StorageAdapter {
   }
 
   /**
-   * Scan storage directory for files not referenced by any Product.images[]
+   * Scan storage directory for files not referenced by products or reviews
    * and remove orphaned files.
    * 
-   * @param referencedUrls - Array of URLs that are currently referenced by products
+   * @param referencedUrls - URLs currently referenced by products and reviews
    * @returns Object with count of deleted files and list of deleted file keys
    */
   async cleanupOrphanedFiles(referencedUrls: string[]): Promise<CleanupResult> {

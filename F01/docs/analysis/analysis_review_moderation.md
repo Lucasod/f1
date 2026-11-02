@@ -1,5 +1,7 @@
 # Review Moderation & Display Analysis — T-117 / Q-017
 
+> Historical analysis snapshot. MP-08 resolved Q-017 in CD-067..CD-072. Any pending-decision labels and PAID-state suggestions below are superseded: reviews publish immediately, Admin may hide/reject them, rating is 1-5 with arithmetic-mean aggregation, and eligibility requires a DELIVERED order. Owned review images are implemented with temporary local storage; the S3 adapter remains a separate future integration.
+
 ## Context
 
 **Confirmed (CD-017):**
@@ -15,11 +17,11 @@
 - Review submission rejected for consumers without purchase
 - Note: Exact qualifying state (PAID vs DELIVERED) pending Q-017 resolution
 
-**Current State (Q-017):** PARTIALLY_RESOLVED — Verified purchase confirmed. Moderation policy, vendor response, badge, aggregation method remain PENDING.
+**State at time of this analysis:** PARTIALLY_RESOLVED. Q-017 is now RESOLVED by CD-067..CD-072.
 
 ---
 
-## Pending Decisions Requiring Business Approval
+## Historical Options (Resolved by CD-067..CD-072)
 
 ### 1. Moderation Policy
 
@@ -191,7 +193,7 @@
 
 ### 5. Review Eligibility State (Refining CD-017 / FR-RW-001)
 
-**Current:** FR-RW-001 uses PAID as minimum (per CD-063 cross-machine rules). **Reference:** FR-RW-001 acceptance criteria explicitly states "Order_Item with Order in PAID state or beyond".
+**Historical source text:** FR-RW-001 previously used PAID as a minimum. Its current acceptance criteria requires the Order to be DELIVERED per CD-072.
 
 **Options:**
 - **PAID** — Payment captured, order confirmed (minimum threshold per FR-RW-001)
@@ -205,11 +207,13 @@
 
 **Recommendation:** **DELIVERED** (confirmed per CD-072, MP-08) — This analysis was superseded by CD-072 which confirms DELIVERED as the qualifying state for verified purchases.
 
-**Business Decision Required:** Yes — affects review velocity and trust.
+**Decision:** Resolved as DELIVERED by CD-072.
 
 ---
 
 ### 6. Review Images
+
+> Historical options below were resolved by CD-071: owned images are permitted. Current implementation stores validated review-owned files locally and limits each review to five images. Local storage is temporary; the S3 adapter is not yet connected.
 
 **Current (conceptual_model.md Sec 14):** Review has `Product_Pic_List` (plural), relationship to Product_Pic ambiguous.
 
@@ -220,7 +224,7 @@
 
 **Recommendation:** **Owned images** — Review images are distinct (user-generated content), stored separately from vendor product images. Simpler ownership/permissions.
 
-**Business Decision Required:** Yes — affects storage, moderation, display.
+**Decision:** Owned images permitted (CD-071). The API currently uploads them to temporary local storage.
 
 ---
 
@@ -228,23 +232,23 @@
 
 | Decision Point | Recommendation | Requires Business Approval |
 |----------------|----------------|----------------------------|
-| Moderation Policy | Post-moderation (publish immediately, admin can hide) | **YES** |
-| Vendor Response | Single public response per review | **YES** |
-| Verified Purchase Badge | Show explicit badge on all reviews | **YES** |
-| Rating Scale | 1-5 stars | **YES** |
-| Rating Aggregation | Simple arithmetic mean (default) | **YES** (scale); aggregation = default with note |
-| Verified Purchase State | PAID (Order payment captured) | **YES** |
-| Review Images | Owned images (user-uploaded, separate from product images) | **YES** |
+| Moderation Policy | Post-moderation (publish immediately, admin can hide/reject) | Resolved: CD-067 |
+| Vendor Response | Not permitted | Resolved: CD-068 |
+| Verified Purchase Badge | Not displayed | Resolved: CD-069 |
+| Rating Scale | 1-5 stars | Resolved: CD-070 |
+| Rating Aggregation | Simple arithmetic mean | Resolved: CD-070 |
+| Verified Purchase State | DELIVERED | Resolved: CD-072 |
+| Review Images | Owned images; temporary local storage currently, S3 adapter not connected | Resolved: CD-071 |
 
 ---
 
-## Technical Details (TECHNICAL_FUTURE — Implementation Phase)
+## Technical Details (implementation status)
 
 Per project rules, these remain for implementation:
 - Review.status values: `published`, `hidden`, `rejected`, `pending_report`
 - Admin moderation UI (report queue, hide/reject actions)
 - Rating recalculation triggers (on review create/update/delete/hide)
-- Image upload for reviews (S3, validation, moderation)
+- Review images use temporary local storage with owner checks and image validation; the S3 adapter remains a separate future integration
 - Review sorting (newest, highest rated, most helpful)
 - Pagination for product review lists
 
@@ -256,7 +260,7 @@ Per project rules, these remain for implementation:
 - **CD-023** — Order_Item keeps historical unit price
 - **CD-041** — Vendor auto-publish (philosophy alignment)
 - **CD-055** — Manual refresh MVP (no real-time)
-- **Q-017** — Review Moderation & Display (PARTIALLY_RESOLVED)
+- **Q-017** — Review Moderation & Display (RESOLVED by CD-067..CD-072)
 - **FR-RW-001** — Review Creation by Verified Purchaser
 - **FR-PEND-003** — Review moderation/display (Pendente)
 - **T-117** — Resolve Q-017 Review moderation/display

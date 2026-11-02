@@ -435,13 +435,13 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check label mappings from getStatusConfig:
-    // pending -> PENDING_PAYMENT
-    // confirmed -> PAID
+    // pending_payment -> PENDING_PAYMENT
+    // paid -> PAID
     // processing -> PROCESSING
     // shipped -> SHIPPED
     // delivered -> DELIVERED
     // cancelled -> CANCELLED
-    // refunded -> FAILED_PAYMENT
+    // failed_payment -> FAILED_PAYMENT
 
     // Find badges within order cards (not the select options)
     // The badge is the span with the status text inside the status column

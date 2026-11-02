@@ -125,7 +125,7 @@ describe('ProductDetailPage', () => {
     render(<ProductDetailPage />, { wrapper });
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    expect(screen.getByText('$29.99')).toBeInTheDocument();
+    expect(screen.getByText('R$ 29,99')).toBeInTheDocument();
   });
 
   it('displays stock status badge (in stock)', async () => {
@@ -490,7 +490,7 @@ describe('ProductDetailPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     
-    expect(screen.getByText('$199.99')).toBeInTheDocument();
+    expect(screen.getByText('R$ 199,99')).toBeInTheDocument();
   });
 
   it('shows card with product details', async () => {
@@ -501,7 +501,7 @@ describe('ProductDetailPage', () => {
     
     // Check that product details card exists
     expect(screen.getByText('Test Product')).toBeInTheDocument();
-    expect(screen.getByText('$29.99')).toBeInTheDocument();
+    expect(screen.getByText('R$ 29,99')).toBeInTheDocument();
     expect(screen.getByText('In Stock')).toBeInTheDocument();
   });
 
@@ -530,6 +530,134 @@ describe('ProductDetailPage', () => {
     // Wait for mutation to complete
     await waitFor(() => expect(consoleError).toHaveBeenCalledWith('Failed to add to cart:', expect.any(Error)));
     
+    // Check that user-visible error message appears
+    await waitFor(() => expect(screen.getByText(/failed to add to cart/i)).toBeInTheDocument());
+    
     consoleError.mockRestore();
+  });
+
+  it('shows auth error message for 401/403 errors', async () => {
+    const authError = new Error('Unauthorized');
+    (authError as any).status = 401;
+    vi.mocked(cartApi.addItem).mockRejectedValueOnce(authError);
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    
+    const addToCartButton = screen.getByRole('button', { name: /add to cart/i });
+    fireEvent.click(addToCartButton);
+
+    await waitFor(() => expect(screen.getByText(/please log in to add items to your cart/i)).toBeInTheDocument());
+  });
+
+  it('shows stock conflict error message for 409 errors', async () => {
+    const conflictError = new Error('Insufficient stock');
+    (conflictError as any).status = 409;
+    vi.mocked(cartApi.addItem).mockRejectedValueOnce(conflictError);
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    
+    const addToCartButton = screen.getByRole('button', { name: /add to cart/i });
+    fireEvent.click(addToCartButton);
+
+    await waitFor(() => expect(screen.getByText(/insufficient stock/i)).toBeInTheDocument());
+  });
+
+  it('distinguishes an unavailable product from insufficient stock', async () => {
+    const unavailableError = new Error('Product is not available');
+    Object.assign(unavailableError, { status: 409, code: 'PRODUCT_NOT_AVAILABLE' });
+    vi.mocked(cartApi.addItem).mockRejectedValueOnce(unavailableError);
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
+
+    await waitFor(() => expect(screen.getByText(/product is no longer available/i)).toBeInTheDocument());
+    expect(screen.queryByText(/insufficient stock/i)).not.toBeInTheDocument();
+  });
+
+  it('shows server error message for 5xx errors', async () => {
+    const serverError = new Error('Internal Server Error');
+    (serverError as any).status = 500;
+    vi.mocked(cartApi.addItem).mockRejectedValueOnce(serverError);
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    
+    const addToCartButton = screen.getByRole('button', { name: /add to cart/i });
+    fireEvent.click(addToCartButton);
+
+    await waitFor(() => expect(screen.getByText(/server error/i)).toBeInTheDocument());
+  });
+
+  it('clears error message on new add to cart attempt', async () => {
+    vi.mocked(cartApi.addItem).mockRejectedValueOnce(new Error('Failed to add to cart'));
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    
+    const addToCartButton = screen.getByRole('button', { name: /add to cart/i });
+    fireEvent.click(addToCartButton);
+
+    await waitFor(() => expect(screen.getByText(/failed to add to cart/i)).toBeInTheDocument());
+
+    // Reset mock to succeed
+    vi.mocked(cartApi.addItem).mockResolvedValue({ 
+      cart: { id: 'cart-1', items: [], version: 1, updatedAt: new Date().toISOString() } 
+    });
+
+    // Click again - error should clear
+    fireEvent.click(addToCartButton);
+
+    await waitFor(() => expect(screen.queryByText(/failed to add to cart/i)).not.toBeInTheDocument());
+  });
+
+  it('shows "Added!" message and clears it after timeout (race condition fix)', async () => {
+    let resolveAddItem: (value: { cart: { id: string; items: { productId: string; vendorId: string; quantity: number; unitPrice: number; addedAt: string }[]; version: number; updatedAt: string } }) => void;
+    const addItemPromise = new Promise<{ cart: { id: string; items: { productId: string; vendorId: string; quantity: number; unitPrice: number; addedAt: string }[]; version: number; updatedAt: string } }>((resolve) => {
+      resolveAddItem = resolve;
+    });
+    vi.mocked(cartApi.addItem).mockReturnValue(addItemPromise);
+
+    const wrapper = createWrapper();
+    render(<ProductDetailPage />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    
+    const addToCartButton = screen.getByRole('button', { name: /add to cart/i });
+    fireEvent.click(addToCartButton);
+
+    // During mutation, button should show "Adding..." (loading state)
+    await waitFor(() => expect(screen.getByRole('button', { name: /adding/i })).toBeInTheDocument());
+    
+    // Resolve the mutation
+    await act(async () => {
+      resolveAddItem!({ cart: { id: 'cart-1', items: [], version: 1, updatedAt: new Date().toISOString() } });
+    });
+
+    // After mutation, button should show "Added!" for 2 seconds
+    expect(screen.getByRole('button', { name: /added/i })).toBeInTheDocument();
+
+    // Start a new mutation before timeout - should reset "Added!" state
+    const addItemPromise2 = new Promise<{ cart: { id: string; items: { productId: string; vendorId: string; quantity: number; unitPrice: number; addedAt: string }[]; version: number; updatedAt: string } }>((resolve) => {
+      resolveAddItem = resolve;
+    });
+    vi.mocked(cartApi.addItem).mockReturnValue(addItemPromise2);
+
+    fireEvent.click(addToCartButton);
+
+    // Should show "Adding..." again, not "Added!"
+    await waitFor(() => expect(screen.getByRole('button', { name: /adding/i })).toBeInTheDocument());
   });
 });

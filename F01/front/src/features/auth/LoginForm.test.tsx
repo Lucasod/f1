@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { LoginForm } from './LoginForm';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
@@ -15,7 +16,11 @@ vi.mock('@/shared/api/auth', () => ({
 const mockLogin = vi.mocked(authApi.login);
 
 const renderWithProvider = (component: React.ReactNode) => {
-  return render(<AuthProvider>{component}</AuthProvider>);
+  return render(
+    <MemoryRouter initialEntries={['/login']}>
+      <AuthProvider>{component}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe('LoginForm', () => {

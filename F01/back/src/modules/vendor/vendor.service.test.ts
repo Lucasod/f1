@@ -47,6 +47,7 @@ describe('Vendor Service', () => {
         addresses: []
       });
       person.addRole(PersonRole.CONSUMER);
+      person.setCredential('existing-hash');
       await personRepo.save(person);
 
       const vendor = await vendorService.onboardVendor(person.id, {
@@ -60,7 +61,10 @@ describe('Vendor Service', () => {
       
       // Verify person now has VENDOR role too (CD-002)
       const updatedPerson = await personRepo.findById(person.id);
-      expect(updatedPerson!.roles).toContain(PersonRole.VENDOR);
+      expect(updatedPerson!.roles).toEqual([PersonRole.CONSUMER, PersonRole.VENDOR]);
+      expect(updatedPerson!.id).toBe(person.id);
+      expect(updatedPerson!.credential).toBe('existing-hash');
+      expect(await personRepo.findByEmail('jane@consumer.com')).toBe(updatedPerson);
     });
 
     it('should use global commission config (CD-045)', async () => {

@@ -95,9 +95,13 @@ vi.mock('@/features/cart/useCart', () => ({
   useCart: () => mockUseCart,
 }));
 
-// Mock fetch for addresses
-const mockFetchAddresses = vi.fn();
-vi.stubGlobal('fetch', mockFetchAddresses);
+const mockPersonApi = vi.hoisted(() => ({
+  getMe: vi.fn(),
+}));
+
+vi.mock('@/shared/api/person', () => ({
+  personApi: mockPersonApi,
+}));
 
 // Mock AuthProvider and useAuth with mutable state
 const mockAuthState = {
@@ -282,7 +286,7 @@ const mockPreviewResponseWithDiscount: CheckoutPreviewResponse = {
 const mockOrder: Order = {
   id: 'order-123',
   personId: 'user-1',
-  status: 'confirmed',
+  status: 'paid',
   vendorGroups: [
     {
       id: 'vg-1',
@@ -340,7 +344,7 @@ const mockOrder: Order = {
 
 const resetMocks = () => {
   vi.clearAllMocks();
-  mockFetchAddresses.mockReset();
+  mockPersonApi.getMe.mockReset();
   mockCheckoutApi.preview.mockReset();
   mockCheckoutApi.checkout.mockReset();
   
@@ -392,9 +396,10 @@ const resetMocks = () => {
   mockAuthState.hasRole.mockImplementation((role: string) => role === 'CONSUMER');
   
   // Default fetch response
-  mockFetchAddresses.mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve(mockAddresses),
+  mockPersonApi.getMe.mockResolvedValue({
+    person: {
+      addresses: mockAddresses,
+    },
   });
 };
 
@@ -464,10 +469,7 @@ describe('CheckoutPage', () => {
   });
 
   it('shows error state when address fetch fails', async () => {
-    mockFetchAddresses.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-    });
+    mockPersonApi.getMe.mockRejectedValueOnce(new Error('Failed to fetch profile'));
 
     renderWithNav(<CheckoutPage />);
 
@@ -806,9 +808,10 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
   });
 
   it('shows empty addresses state when user has no addresses', async () => {
-    mockFetchAddresses.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve([]),
+    mockPersonApi.getMe.mockResolvedValueOnce({
+      person: {
+        addresses: [],
+      },
     });
 
     renderWithNav(<CheckoutPage />);
@@ -820,9 +823,10 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
   });
 
   it('navigates to address management when button clicked', async () => {
-    mockFetchAddresses.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve([]),
+    mockPersonApi.getMe.mockResolvedValueOnce({
+      person: {
+        addresses: [],
+      },
     });
 
     const { navigateMock } = renderWithNav(<CheckoutPage />);

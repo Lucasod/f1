@@ -99,7 +99,7 @@ const mockVendorGroup5: OrderVendorGroup = {
   id: 'ovg-5',
   orderId: 'order-5',
   vendorId: 'vendor-1',
-  status: 'ready_for_pickup',
+  status: 'shipped',
   items: [
     { id: 'item-6', productId: 'prod-6', productName: 'Produto Teste 6', vendorId: 'vendor-1', quantity: 2, unitPrice: 39.99, totalPrice: 79.98 },
   ],
@@ -406,16 +406,16 @@ describe('VendorOrderPage', () => {
     ovg1.getByRole('button', { name: /CONFIRMADO/i });
     ovg1.getByRole('button', { name: /CANCELADO/i });
 
-    // For 'preparing' status (ovg-2), valid next statuses are 'ready_for_pickup' and 'cancelled'
+    // For 'preparing' status (ovg-2), valid next statuses are 'shipped' and 'cancelled'
     const ovg2Card = screen.getByText(/OVG-2/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg2 = within(ovg2Card!);
-    ovg2.getByRole('button', { name: /PRONTO_PARA_RETIRADA/i });
+    ovg2.getByRole('button', { name: /ENVIADO/i });
     ovg2.getByRole('button', { name: /CANCELADO/i });
 
-    // For 'delivered' status (ovg-3), valid next status is 'refunded'
+    // For 'delivered' status (ovg-3), valid next status is 'returned'
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    ovg3.getByRole('button', { name: /REEMBOLSADO/i });
+    ovg3.getByRole('button', { name: /DEVOLVIDO/i });
   });
 
   it('clicking "Ver detalhes" navigates to /orders/:orderId', async () => {
@@ -470,11 +470,10 @@ describe('VendorOrderPage', () => {
     // pending -> PENDENTE
     // confirmed -> CONFIRMADO
     // preparing -> PREPARANDO
-    // ready_for_pickup -> PRONTO_PARA_RETIRADA
-    // out_for_delivery -> SAIU_PARA_ENTREGA
+    // shipped -> ENVIADO
     // delivered -> ENTREGUE
     // cancelled -> CANCELADO
-    // refunded -> REEMBOLSADO
+    // returned -> DEVOLVIDO
 
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
@@ -552,11 +551,11 @@ describe('VendorOrderPage', () => {
         { ...mockVendorGroup1, status: 'pending' },
         { ...mockVendorGroup2, status: 'confirmed' },
         { ...mockVendorGroup3, status: 'preparing' },
-        { ...mockVendorGroup4, status: 'ready_for_pickup' },
-        { ...mockVendorGroup5, status: 'out_for_delivery' },
+        { ...mockVendorGroup4, status: 'shipped' },
+        { ...mockVendorGroup5, status: 'delivered' },
         { ...mockVendorGroup3, status: 'delivered', id: 'ovg-6' },
         { ...mockVendorGroup1, status: 'cancelled', id: 'ovg-7' },
-        { ...mockVendorGroup1, status: 'refunded', id: 'ovg-8' },
+        { ...mockVendorGroup1, status: 'returned', id: 'ovg-8' },
       ],
       total: 8,
       page: 1,
@@ -584,28 +583,28 @@ describe('VendorOrderPage', () => {
     ovg2.getByRole('button', { name: /PREPARANDO/i });
     ovg2.getByRole('button', { name: /CANCELADO/i });
 
-    // Preparing (ovg-3): ready_for_pickup, cancelled
+    // Preparing (ovg-3): shipped, cancelled
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    ovg3.getByRole('button', { name: /PRONTO_PARA_RETIRADA/i });
+    ovg3.getByRole('button', { name: /ENVIADO/i });
     ovg3.getByRole('button', { name: /CANCELADO/i });
 
-    // Ready for pickup (ovg-4): out_for_delivery, cancelled
+    // Shipped (ovg-4): delivered, cancelled, returned
     const ovg4Card = screen.getByText(/OVG-4/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg4 = within(ovg4Card!);
-    ovg4.getByRole('button', { name: /SAIU_PARA_ENTREGA/i });
+    ovg4.getByRole('button', { name: /ENTREGUE/i });
     ovg4.getByRole('button', { name: /CANCELADO/i });
+    ovg4.getByRole('button', { name: /DEVOLVIDO/i });
 
-    // Out for delivery (ovg-5): delivered, cancelled
+    // Delivered (ovg-5): returned
     const ovg5Card = screen.getByText(/OVG-5/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg5 = within(ovg5Card!);
-    ovg5.getByRole('button', { name: /ENTREGUE/i });
-    ovg5.getByRole('button', { name: /CANCELADO/i });
+    ovg5.getByRole('button', { name: /DEVOLVIDO/i });
 
-    // Delivered (ovg-6): refunded
+    // Delivered (ovg-6): returned
     const ovg6Card = screen.getByText(/OVG-6/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg6 = within(ovg6Card!);
-    ovg6.getByRole('button', { name: /REEMBOLSADO/i });
+    ovg6.getByRole('button', { name: /DEVOLVIDO/i });
 
     // Cancelled (ovg-7): no next statuses (no buttons)
     // Refunded (ovg-8): no next statuses (no buttons)

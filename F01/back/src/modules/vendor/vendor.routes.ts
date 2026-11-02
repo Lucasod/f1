@@ -58,7 +58,7 @@ export function createVendorRoutes({ authService, vendorService, personRepo }: V
   }) as RequestHandler);
 
   // GET /api/v1/vendor/me
-  router.get('/me', authMw as RequestHandler, requireRole(PersonRole.VENDOR, PersonRole.ADMIN) as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  router.get('/me', authMw as RequestHandler, requireRole(PersonRole.CONSUMER, PersonRole.VENDOR, PersonRole.ADMIN) as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const personId = req.user.sub;
       const vendor = await vendorService.getVendorByPersonId(personId);
