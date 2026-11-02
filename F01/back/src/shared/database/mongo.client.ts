@@ -49,6 +49,7 @@ export async function initializeCollections(): Promise<void> {
   const ordersCollection = database.collection('orders');
   const paymentsCollection = database.collection('payments');
   const payoutsCollection = database.collection('payouts');
+  const invoicesCollection = database.collection('invoices');
 
   // Create indexes
   await Promise.all([
@@ -106,6 +107,11 @@ export async function initializeCollections(): Promise<void> {
     payoutsCollection.createIndex({ personId: 1 }),
     payoutsCollection.createIndex({ status: 1 }),
     payoutsCollection.createIndex({ createdAt: -1 }),
+
+    // Invoices indexes
+    invoicesCollection.createIndex({ orderId: 1 }, { unique: true }),
+    invoicesCollection.createIndex({ emissionAt: -1 }),
+    invoicesCollection.createIndex({ status: 1 }),
   ]);
 
   console.log('MongoDB collections and indexes initialized');

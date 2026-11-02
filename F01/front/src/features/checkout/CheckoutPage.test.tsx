@@ -337,7 +337,7 @@ const mockOrder: Order = {
   ],
   shippingAddress: mockAddresses[0],
   totalAmount: 109.97,
-  financialStatus: 'paid',
+  financialStatus: 'pending',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
 };

@@ -194,7 +194,7 @@ describeIfMongo('MongoOrderRepository Contract Tests', () => {
       expect(found!.vendorGroups[1].items).toHaveLength(1);
       expect(found!.vendorGroups[1].items[0].productName).toBe('Product 3');
       expect(found!.totalAmount).toBe(230); // 130 + 100
-      expect(found!.financialStatus).toBe(FinancialStatus.PAID);
+      expect(found!.financialStatus).toBe(FinancialStatus.PENDING);
       expect(found!.shippingAddress.street).toBe('Rua Teste');
       expect(found!.createdAt).toBeInstanceOf(Date);
       expect(found!.updatedAt).toBeInstanceOf(Date);

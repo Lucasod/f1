@@ -4,13 +4,17 @@ import { InvoiceService } from './invoice.service';
 import { Invoice, InvoiceError } from './invoice.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
+import { OrderRepository } from '../order/order.domain';
+import { VendorRepository } from '../vendor/vendor.domain';
 
 export interface InvoiceRoutesConfig {
   authService: AuthService;
   invoiceService: InvoiceService;
+  orderRepo: OrderRepository;
+  vendorRepo: VendorRepository;
 }
 
-export function createInvoiceRoutes({ authService, invoiceService }: InvoiceRoutesConfig): Router {
+export function createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }: InvoiceRoutesConfig): Router {
   const router = Router();
   const authMw = authMiddleware(authService);
   const requireAdmin = requireRole(PersonRole.ADMIN);
@@ -45,6 +49,18 @@ export function createInvoiceRoutes({ authService, invoiceService }: InvoiceRout
     return { page, limit };
   }
 
+  async function isInvoiceOwner(req: AuthenticatedRequest, invoice: Invoice): Promise<boolean> {
+    const personId = req.user.sub;
+    if (req.user.roles.includes(PersonRole.ADMIN)) return true;
+    const order = await orderRepo.findById(invoice.orderId);
+    if (req.user.roles.includes(PersonRole.CONSUMER) && order && order.personId === personId) return true;
+    if (req.user.roles.includes(PersonRole.VENDOR)) {
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (vendor && (invoice.vendorId === vendor.id || (order && order.vendorGroups.some(vg => vg.vendorId === vendor.id)))) return true;
+    }
+    return false;
+  }
+
   // GET /invoices - list invoices
   router.get('/', authMw as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -63,9 +79,26 @@ export function createInvoiceRoutes({ authService, invoiceService }: InvoiceRout
   }) as RequestHandler);
 
   // GET /invoices/order/:orderId - get invoice by order
-  router.get('/order/:orderId', authMw as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
+  router.get('/order/:orderId', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const orderId = readPathParameter(req.params.orderId);
+      const order = await orderRepo.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
+      const allowed = await (async () => {
+        const personId = req.user.sub;
+        if (req.user.roles.includes(PersonRole.ADMIN)) return true;
+        if (req.user.roles.includes(PersonRole.CONSUMER) && order.personId === personId) return true;
+        if (req.user.roles.includes(PersonRole.VENDOR)) {
+          const vendor = await vendorRepo.findByPersonId(personId);
+          if (vendor && order.vendorGroups.some(vg => vg.vendorId === vendor.id)) return true;
+        }
+        return false;
+      })();
+      if (!allowed) {
+        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
       const invoice = await invoiceService.getInvoiceByOrderId(orderId);
       if (!invoice) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
@@ -77,11 +110,15 @@ export function createInvoiceRoutes({ authService, invoiceService }: InvoiceRout
   }) as RequestHandler);
 
   // GET /invoices/:invoiceId - get invoice
-  router.get('/:invoiceId', authMw as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
+  router.get('/:invoiceId', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const invoiceId = readPathParameter(req.params.invoiceId);
       const invoice = await invoiceService.getInvoice(invoiceId);
       if (!invoice) {
+        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
+      const allowed = await isInvoiceOwner(req, invoice);
+      if (!allowed) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
       return res.json({ invoice: invoiceToResponse(invoice) });
@@ -102,11 +139,15 @@ export function createInvoiceRoutes({ authService, invoiceService }: InvoiceRout
   }) as RequestHandler);
 
   // GET /invoices/:invoiceId/download - download PDF
-  router.get('/:invoiceId/download', authMw as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
+  router.get('/:invoiceId/download', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const invoiceId = readPathParameter(req.params.invoiceId);
       const invoice = await invoiceService.getInvoice(invoiceId);
       if (!invoice) {
+        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
+      const allowed = await isInvoiceOwner(req, invoice);
+      if (!allowed) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
       return res.json({ pdfUrl: invoice.pdfUrl, url: invoice.pdfUrl });

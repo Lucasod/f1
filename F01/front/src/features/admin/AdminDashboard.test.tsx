@@ -48,7 +48,7 @@ const order: Order = {
     isPrimary: true,
   },
   totalAmount: 125.5,
-  financialStatus: 'paid',
+  financialStatus: 'pending',
   createdAt: '2026-10-28T10:00:00.000Z',
   updatedAt: '2026-10-28T10:00:00.000Z',
 };

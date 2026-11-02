@@ -25,9 +25,12 @@ import { createPersonRoutes } from './modules/person/person.routes';
 import { createReviewRoutes } from './modules/review/review.routes';
 import { createPaymentRoutes } from './modules/order/payment.routes';
 import { createPayoutRoutes } from './modules/payout/payout.routes';
+import { createInvoiceRoutes } from './modules/invoice/invoice.routes';
 import { PayoutService } from './modules/payout/payout.service';
+import { InvoiceService } from './modules/invoice/invoice.service';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
 import { InMemoryPayoutRepository, PayoutRepository } from './modules/payout/payout.domain';
+import { InMemoryInvoiceRepository, InvoiceRepository } from './modules/invoice/invoice.domain';
 import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
 import { runDevelopmentSeed as seedDevelopmentData } from './scripts/seed.js';
@@ -42,6 +45,7 @@ import { MongoReviewRepository } from './modules/review/review.mongo.repository'
 import { MongoOrderRepository } from './modules/order/order.mongo.repository';
 import { MongoPaymentRepository } from './modules/order/payment.mongo.repository';
 import { MongoPayoutRepository } from './modules/payout/payout.mongo.repository';
+import { MongoInvoiceRepository } from './modules/invoice/invoice.mongo.repository';
 import { connectToMongo, initializeCollections, closeMongoConnection, getDb } from './shared/database/mongo.client';
 
 // Repository interfaces
@@ -64,6 +68,7 @@ let orderRepo: OrderRepository;
 let paymentRepo: PaymentRepository;
 let reviewRepo: ReviewRepository;
 let payoutRepo: PayoutRepository;
+let invoiceRepo: InvoiceRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -76,6 +81,7 @@ let personService!: PersonService;
 let reviewService!: ReviewService;
 let paymentService!: PaymentService;
 let payoutService!: PayoutService;
+let invoiceService!: InvoiceService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -94,6 +100,7 @@ function initializeServices(): void {
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 paymentService = new PaymentService(paymentRepo, orderRepo);
 payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo);
+invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
 }
 
 // Seed the catalog only when empty, but always reconcile demo accounts.
@@ -188,6 +195,7 @@ reviewRepo = new MongoReviewRepository(db);
 orderRepo = new MongoOrderRepository(db);
 paymentRepo = new MongoPaymentRepository(db);
 payoutRepo = new MongoPayoutRepository(db);
+invoiceRepo = new MongoInvoiceRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -224,6 +232,9 @@ payoutRepo = new MongoPayoutRepository(db);
       // Payout routes (T-1003)
       app.use('/api/v1/payouts', createPayoutRoutes({ authService, payoutService, vendorRepo }));
 
+      // Invoice routes (T-1103)
+      app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
+
       // Person routes
       app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
 
@@ -256,6 +267,7 @@ payoutRepo = new MongoPayoutRepository(db);
 paymentRepo = new InMemoryPaymentRepository();
 reviewRepo = new InMemoryReviewRepository();
 payoutRepo = new InMemoryPayoutRepository();
+invoiceRepo = new InMemoryInvoiceRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -290,6 +302,9 @@ payoutRepo = new InMemoryPayoutRepository();
 
         // Payout routes (T-1003)
         app.use('/api/v1/payouts', createPayoutRoutes({ authService, payoutService, vendorRepo }));
+
+        // Invoice routes (T-1103)
+        app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
 
         // Person routes
         app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));

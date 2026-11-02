@@ -42,23 +42,18 @@ export class InvoiceService {
 
     const now = new Date();
     const key = generateInvoiceKey(order.id, now.getFullYear(), now.getMonth() + 1);
-    const buffer = Buffer.alloc(0);
-    let savedUrl = '';
-    let savedKey = key;
-    if (this.storageAdapter) {
-      const saved = await this.storageAdapter.save(buffer, key, 'application/pdf');
-      savedUrl = saved.url;
-      savedKey = saved.key ?? key;
-    } else {
-      savedUrl = key;
-    }
+    // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
+    // The generated key is used as both pdfUrl and pdfPath without calling the
+    // storage adapter, which only accepts image MIME types and rejects empty buffers.
+    const pdfUrl = key;
+    const pdfPath = key;
 
     const invoice = Invoice.create({
       orderId: order.id,
       vendorId: resolvedVendorId,
       emissionAt: now,
-      pdfUrl: savedUrl,
-      pdfPath: savedKey,
+      pdfUrl,
+      pdfPath,
       status: InvoiceStatus.GENERATED,
     });
 
@@ -110,15 +105,11 @@ export class InvoiceService {
 
     const now = new Date();
     const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
-    let savedUrl = key;
-    let savedKey = key;
-    if (this.storageAdapter) {
-      const saved = await this.storageAdapter.save(Buffer.alloc(0), key, 'application/pdf');
-      savedUrl = saved.url;
-      savedKey = saved.key ?? key;
-    }
-    invoice.pdfUrl = savedUrl;
-    invoice.pdfPath = savedKey;
+    // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
+    // The generated key is used as both pdfUrl and pdfPath without calling the
+    // storage adapter, which only accepts image MIME types and rejects empty buffers.
+    invoice.pdfUrl = key;
+    invoice.pdfPath = key;
     invoice.status = InvoiceStatus.GENERATED;
     invoice.updatedAt = new Date();
 

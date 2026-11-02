@@ -116,7 +116,7 @@ const mockOrder: Order = {
   vendorGroups: [mockVendorGroup1, mockVendorGroup2],
   shippingAddress: mockAddress,
   totalAmount: 119.97,
-  financialStatus: 'paid',
+  financialStatus: 'pending',
   createdAt: '2024-01-01T10:30:00Z',
   updatedAt: '2024-01-01T10:30:00Z',
 };

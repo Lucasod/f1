@@ -409,7 +409,8 @@ export function CheckoutPage() {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Pedido criado com sucesso</h1>
-            <p className="mt-2 text-gray-600">Seu pedido foi registrado. O pagamento será confirmado pelo provedor.</p>
+            <p className="mt-2 text-gray-600">Seu pedido foi registrado, mas o pagamento ainda está pendente.</p>
+            <p className="mt-1 text-sm text-gray-500">O pagamento será confirmado pelo provedor. A conclusão do pagamento depende da confirmação do provedor.</p>
           </div>
           
           <Card variant="elevated" padding="lg">

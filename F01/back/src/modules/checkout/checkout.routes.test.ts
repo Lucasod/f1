@@ -460,7 +460,7 @@ describe('Checkout Routes', () => {
         const order = response.body.order;
         expect(order.personId).toBe(consumerId);
         expect(order.status).toBe('pending_payment');
-        expect(order.financialStatus).toBe('paid');
+        expect(order.financialStatus).toBe('pending');
         expect(order.totalAmount).toBe(200);
         expect(order.vendorGroups).toHaveLength(1);
         expect(order.vendorGroups[0].vendorId).toBe(vendorId);

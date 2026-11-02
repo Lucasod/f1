@@ -106,7 +106,7 @@ describe('Checkout Service', () => {
       expect(result.order).toBeDefined();
       expect(result.order.personId).toBe(consumerId);
       expect(result.order.status).toBe(OrderStatus.PENDING_PAYMENT);
-      expect(result.order.financialStatus).toBe(FinancialStatus.PAID);
+      expect(result.order.financialStatus).toBe(FinancialStatus.PENDING);
       expect(result.order.vendorGroups).toHaveLength(1);
       expect(result.order.totalAmount).toBe(200); // 2 * 100
       expect(result.clientSecret).toBe('mock_client_secret_for_testing');

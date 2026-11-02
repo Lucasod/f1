@@ -60,7 +60,7 @@ const mockOrder1: Order = {
     isPrimary: true,
   },
   totalAmount: 59.98,
-  financialStatus: 'paid',
+  financialStatus: 'pending',
   createdAt: '2024-01-15T10:00:00Z',
   updatedAt: '2024-01-15T10:00:00Z',
 };
@@ -111,7 +111,7 @@ const mockOrder2: Order = {
     isPrimary: false,
   },
   totalAmount: 94.99,
-  financialStatus: 'paid',
+  financialStatus: 'pending',
   createdAt: '2024-01-20T14:30:00Z',
   updatedAt: '2024-01-20T14:30:00Z',
 };

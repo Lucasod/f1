@@ -33,6 +33,7 @@ export enum PaymentStatus {
 export const VALID_PAYMENT_STATUSES: PaymentStatus[] = Object.values(PaymentStatus);
 
 export enum FinancialStatus {
+  PENDING = 'pending',
   FULLY_REFUNDED = 'fully_refunded',
   PARTIALLY_REFUNDED = 'partially_refunded',
   PAID = 'paid'
@@ -405,7 +406,7 @@ export class Order {
       vendorGroups: vendorGroupInstances,
       shippingAddress: { ...data.shippingAddress },
       totalAmount,
-      financialStatus: FinancialStatus.PAID,
+      financialStatus: FinancialStatus.PENDING,
       createdAt: now,
       updatedAt: now
     });

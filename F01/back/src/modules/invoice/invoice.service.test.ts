@@ -54,7 +54,7 @@ describe('Invoice Service (T-1103)', () => {
       expect(invoice.status).toBe(InvoiceStatus.GENERATED);
       expect(invoice.orderId).toBe(order.id);
       expect(invoice.pdfUrl).toContain('invoices');
-      expect(storageAdapter.save).toHaveBeenCalled();
+      expect(storageAdapter.save).not.toHaveBeenCalled();
       expect(await invoiceRepo.findByOrderId(order.id)).not.toBeNull();
     });
 
