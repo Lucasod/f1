@@ -15,6 +15,7 @@ export enum PersonError {
   NAME_REQUIRED = 'NAME_REQUIRED',
   EMAIL_REQUIRED = 'EMAIL_REQUIRED',
   INVALID_EMAIL_FORMAT = 'INVALID_EMAIL_FORMAT',
+  EMAIL_ALREADY_EXISTS = 'EMAIL_ALREADY_EXISTS',
   ADDRESS_NOT_FOUND = 'ADDRESS_NOT_FOUND',
   CONTACT_NOT_FOUND = 'CONTACT_NOT_FOUND',
   TAX_ID_IMMUTABLE = 'TAX_ID_IMMUTABLE'
@@ -447,7 +448,7 @@ export class InMemoryPersonRepository implements PersonRepository {
     for (const email of newEmails) {
       const existingId = this.emailIndex.get(email);
       if (existingId && existingId !== person.id) {
-        throw new Error('EMAIL_ALREADY_EXISTS');
+        throw new Error(PersonError.EMAIL_ALREADY_EXISTS);
       }
     }
 

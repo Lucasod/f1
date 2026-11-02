@@ -17,9 +17,9 @@ import { OrderHistoryPage } from './features/order/OrderHistoryPage';
 import { OrderDetailPage } from './features/order/OrderDetailPage';
 import { VendorOrderPage } from './features/order/VendorOrderPage';
 import { ConsumerProfile } from './features/consumer/ConsumerProfile';
+import { AdminDashboard } from './features/admin/AdminDashboard';
 
 function App() {
-  // HMR Test 7 - with CHOKIDAR_USEPOLLING env
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -63,8 +63,7 @@ function App() {
             
             {/* Admin only routes */}
             <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
-              <Route path="/admin/dashboard" element={<div className="p-4">Admin Dashboard</div>} />
-              <Route path="/admin/users" element={<div className="p-4">Admin Users</div>} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
             </Route>
             
             {/* Redirect unknown routes to home */}

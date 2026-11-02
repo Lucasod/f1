@@ -43,10 +43,10 @@ describe('HomePage', () => {
   it('renders welcome message and call to action when not authenticated', () => {
     renderWithProvider(<HomePage />);
 
-    expect(screen.getByText('Welcome to FS-01 Marketplace - HMR Test Active')).toBeInTheDocument();
-    expect(screen.getByText('Your marketplace for buying and selling products. HMR Test Change - Third Attempt')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /discover products from independent sellers/i })).toBeInTheDocument();
+    expect(screen.getByText(/browse a growing selection of products/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /get started/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /create account/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /login/i })).not.toBeInTheDocument();
   });
 
@@ -59,10 +59,8 @@ describe('HomePage', () => {
 
     renderWithProvider(<HomePage />);
 
-    expect(screen.getByText('Welcome to FS-01 Marketplace - HMR Test Active')).toBeInTheDocument();
-    expect(screen.getByText('Your marketplace for buying and selling products. HMR Test Change - Third Attempt')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /discover products from independent sellers/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /get started/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /login/i })).not.toBeInTheDocument();
     // Navigation component handles role-based links, not HomePage
     expect(screen.queryByRole('link', { name: /vendor dashboard/i })).not.toBeInTheDocument();
@@ -78,10 +76,9 @@ describe('HomePage', () => {
 
     renderWithProvider(<HomePage />);
 
-    expect(screen.getByText('Welcome to FS-01 Marketplace - HMR Test Active')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /discover products from independent sellers/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /vendor dashboard/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /get started/i })).not.toBeInTheDocument();
   });
 
   it('renders same content for admin role', () => {
@@ -93,9 +90,8 @@ describe('HomePage', () => {
 
     renderWithProvider(<HomePage />);
 
-    expect(screen.getByText('Welcome to FS-01 Marketplace - HMR Test Active')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /discover products from independent sellers/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /admin dashboard/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse products/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /get started/i })).not.toBeInTheDocument();
   });
 });

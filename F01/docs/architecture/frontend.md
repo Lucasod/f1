@@ -19,20 +19,21 @@ Component-based architecture with clear separation of concerns. Server state vs 
 ```
 front/src/
 ├── app/                    # App-level setup
-│   ├── providers/          # Context providers (Auth, Query, Cart)
+│   ├── providers/          # Authentication context; QueryClientProvider is in main.tsx
 │   └── routes/             # Route definitions
 ├── features/               # Feature-based modules
-│   ├── auth/               # Login, register, password reset
-│   ├── cart/               # Cart page, mini-cart, merge guest
+│   ├── auth/               # Login and registration
+│   ├── admin/              # Admin-only operational order overview
+│   ├── cart/               # API-backed cart page and guest merge
 │   ├── checkout/           # Address, payment, confirmation
 │   ├── catalog/            # Catalog and product detail
 │   ├── order/              # Order history, tracking, details
 │   ├── consumer/           # Consumer dashboard and profile
 │   ├── vendor/             # Vendor dashboard, product mgmt
 │   └── home/               # Public home page
-├── shared/                 # Shared components & utilities
-│   ├── components/         # UI primitives (Button, Input, Card, Modal)
-│   │   └── ui/             # Design system components (created 2026-10-28)
+├── components/             # Shared navigation and UI design system
+│   └── ui/                 # UI primitives (Button, Input, Card, Modal)
+├── shared/                 # Shared API clients, hooks, and types
 │   ├── hooks/              # Custom hooks
 │   ├── utils/              # Helpers, formatters
 │   ├── api/                # Hand-written API clients
@@ -75,6 +76,7 @@ front/src/
 - **Client State**: Zustand (authentication state and persisted tokens)
 - **Cart state**: Server-backed through the Redis cart API; the browser stores the guest cart identifier
 - **URL State**: React Router (filters, pagination, search params)
+- **Sensitive order data**: TanStack Query keys include the authenticated person and roles; previous order results are not reused across identity changes.
 
 ## Key Patterns
 - API clients are hand-written; `F01/docs/api/openapi.yaml` is a contract reference, not a generated client source

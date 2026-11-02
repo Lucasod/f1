@@ -8,8 +8,9 @@ import { MongoPersonRepository } from '../modules/person/person.mongo.repository
 import { MongoVendorRepository } from '../modules/vendor/vendor.mongo.repository';
 import { MongoCategoryRepository } from '../modules/product/category.mongo.repository';
 import { MongoProductRepository } from '../modules/product/product.mongo.repository';
-import { runSeed } from '../scripts/seed';
+import { ACCOUNTS, createMongoSeedRepositories, runDevelopmentSeed, runSeed } from '../scripts/seed';
 import { SeedRepositories } from '../shared/seed.types';
+import { AuthService } from '../modules/auth/auth.service';
 
 // Test database configuration
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
@@ -426,6 +427,37 @@ describeIfMongo('MongoDB Integration Tests', () => {
       const firstVendorEmails = vendorPersonsAfterFirst.map(p => p.email).sort();
       const secondVendorEmails = vendorPersonsAfterSecond.map(p => p.email).sort();
       expect(firstVendorEmails).toEqual(secondVendorEmails);
+    });
+
+    it('recreates missing demo accounts in MongoDB without reseeding an existing catalog', async () => {
+      const mongoRepositories = createMongoSeedRepositories(db);
+
+      await runSeed(mongoRepositories);
+      const productsBefore = await productRepo.findAll();
+      for (const account of ACCOUNTS) {
+        await personRepo.delete(account.id);
+      }
+
+      await runDevelopmentSeed(mongoRepositories);
+
+      const productsAfter = await productRepo.findAll();
+      expect(productsAfter.map(product => product.id).sort())
+        .toEqual(productsBefore.map(product => product.id).sort());
+
+      const authService = new AuthService(personRepo, 'seed-test-secret', '24h');
+      for (const account of ACCOUNTS) {
+        const { person } = await authService.login({
+          email: account.email,
+          password: account.password,
+        });
+        expect(person.id).toBe(account.id);
+        expect(person.roles).toEqual([account.role]);
+      }
+
+      const consumer = await personRepo.findByEmail('consumer@example.com');
+      expect(consumer?.addresses).toHaveLength(1);
+      expect(await peopleCollection.countDocuments({ roles: 'ADMIN' })).toBe(1);
+      expect(await peopleCollection.countDocuments({ roles: 'CONSUMER' })).toBe(1);
     });
 
     it('should maintain referential integrity between seeded entities', async () => {

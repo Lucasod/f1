@@ -32,6 +32,8 @@ Current backend runtime: Node.js/TypeScript, Express 4, MongoDB Node.js driver, 
 
 MongoDB repositories are present for Person, Vendor, Category, Product, and Review. The runtime currently initializes Order and Payment with in-memory repositories; do not describe those records as MongoDB-persistent. Review eligibility therefore depends on the in-memory delivered-order repository. Product and review images currently use the local storage adapter temporarily. Local storage and payment placeholders support development only; neither replaces or completes the planned S3 and Stripe integrations.
 
+The development seed CLI writes through MongoDB repositories. Application startup seeds catalog data only when the catalog is empty, but reconciles the development Admin and Consumer accounts independently of catalog contents.
+
 ## Planned, Not Yet Implemented
 - Elasticsearch indexing/search adapter and mapping-dependent search APIs
 - Coupon, invoice, and wallet modules

@@ -25,7 +25,7 @@ import { createReviewRoutes } from './modules/review/review.routes';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
 import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
-import { runSeed } from './scripts/seed.js';
+import { runDevelopmentSeed as seedDevelopmentData } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
 
 // MongoDB repositories and client
@@ -83,19 +83,11 @@ function initializeServices(): void {
   reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 }
 
-// Run seed in development mode if product repo is empty
+// Seed the catalog only when empty, but always reconcile demo accounts.
 async function runDevelopmentSeed(): Promise<void> {
   if (config.nodeEnv !== 'development') {
     return;
   }
-
-  const existingProducts = await productRepo.findAll();
-  if (existingProducts.length > 0) {
-    console.log('Product repository not empty, skipping seed');
-    return;
-  }
-
-  console.log('🌱 Development mode detected with empty product repository, running seed...');
 
   const seedRepos: SeedRepositories = {
     personRepo,
@@ -104,7 +96,7 @@ async function runDevelopmentSeed(): Promise<void> {
     productRepo,
   };
 
-  await runSeed(seedRepos);
+  await seedDevelopmentData(seedRepos);
   console.log('✅ Development seed completed');
 }
 

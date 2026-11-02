@@ -4,6 +4,11 @@ import { Vendor, VendorStatus, VendorRepository } from '../modules/vendor/vendor
 import { Product, Category, ProductStatus, ProductRepository, CategoryRepository } from '../modules/product/product.domain.js';
 import { hashPassword } from '../modules/auth/credential.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
+import { Db } from 'mongodb';
+import { MongoPersonRepository } from '../modules/person/person.mongo.repository.js';
+import { MongoVendorRepository } from '../modules/vendor/vendor.mongo.repository.js';
+import { MongoCategoryRepository } from '../modules/product/category.mongo.repository.js';
+import { MongoProductRepository } from '../modules/product/product.mongo.repository.js';
 export type { SeedRepositories };
 
 function getVendorSeedPasswordVariable(slug: string): string {
@@ -303,12 +308,117 @@ const PRODUCTS: ProductSeedData[] = [
 // ============================================================================
 
 /**
- * Runs the seed process with the provided repositories.
- * If repositories are not provided, creates new instances (for CLI usage).
- *
- * @param repositories - Optional repositories to use for seeding. If omitted, new InMemory instances are created.
+ * Creates repositories backed by the supplied MongoDB database.
  */
-export async function runSeed(repositories?: SeedRepositories): Promise<void> {
+export function createMongoSeedRepositories(database: Db): SeedRepositories {
+  return {
+    personRepo: new MongoPersonRepository(database),
+    vendorRepo: new MongoVendorRepository(database),
+    categoryRepo: new MongoCategoryRepository(database),
+    productRepo: new MongoProductRepository(database),
+  };
+}
+
+async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
+  console.log('👤 Ensuring demo accounts...');
+  for (const account of ACCOUNTS) {
+    const passwordVariable = `SEED_${account.role}_PASSWORD`;
+    const password = process.env[passwordVariable];
+    if (config.isProduction && !password) {
+      throw new Error(`${passwordVariable} is required when seeding demo accounts in production`);
+    }
+
+    const existingPerson = await personRepo.findById(account.id);
+    const existingByEmail = await personRepo.findByEmail(account.email);
+    if (existingByEmail && existingByEmail.id !== account.id) {
+      throw new Error(`SEED_ACCOUNT_EMAIL_CONFLICT: ${account.email}`);
+    }
+
+    const existingByTaxId = await personRepo.findByTaxId(account.taxIdType, account.taxIdValue);
+    if (existingByTaxId && existingByTaxId.id !== account.id) {
+      throw new Error(`SEED_ACCOUNT_TAX_ID_CONFLICT: ${account.taxIdType}`);
+    }
+
+    const newPerson = Person.create({
+      name: account.name,
+      mainInfo: {
+        name: account.name,
+        taxIdType: account.taxIdType,
+        taxIdValue: account.taxIdValue,
+      },
+      contactInfos: [{ type: 'email', value: account.email, isPrimary: true }],
+      addresses: account.role === PersonRole.CONSUMER
+        ? [{
+            id: `address-${account.id}-home`,
+            street: 'Rua Exemplo',
+            number: '100',
+            neighborhood: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            isPrimary: true,
+          }]
+        : [],
+    });
+    const person = existingPerson ?? Person.reconstruct({
+      ...newPerson,
+      id: account.id,
+    });
+
+    if (existingPerson && (
+      person.mainInfo.taxIdType !== account.taxIdType
+      || person.mainInfo.taxIdValue !== account.taxIdValue
+    )) {
+      throw new Error(`SEED_ACCOUNT_IDENTITY_CONFLICT: ${account.email}`);
+    }
+
+    const hasConflictingRole = account.role === PersonRole.ADMIN
+      ? person.roles.some(role => role !== PersonRole.ADMIN)
+      : person.roles.includes(PersonRole.ADMIN);
+    if (hasConflictingRole) {
+      throw new Error(`SEED_ACCOUNT_ROLE_CONFLICT: ${account.email}`);
+    }
+
+    person.addRole(account.role);
+    if (!person.contactInfos.some(contact =>
+      contact.type === 'email' && contact.value.toLowerCase() === account.email.toLowerCase()
+    )) {
+      person.addContact({ type: 'email', value: account.email, isPrimary: true });
+    }
+    if (account.role === PersonRole.CONSUMER && person.addresses.length === 0) {
+      person.addAddress({
+        street: 'Rua Exemplo',
+        number: '100',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      });
+    }
+    if (!person.credential) {
+      person.setCredential(await hashPassword(password ?? account.password));
+    }
+
+    if (existingPerson) {
+      await personRepo.update(person);
+    } else {
+      await personRepo.save(person);
+    }
+    console.log(`  ✅ Ensured ${account.role.toLowerCase()} account: ${account.email}`);
+  }
+}
+
+export async function runDevelopmentSeed(repositories: SeedRepositories): Promise<void> {
+  const existingProducts = await repositories.productRepo.findAll();
+  if (existingProducts.length > 0) {
+    console.log('Product repository not empty, ensuring demo accounts without reseeding catalog');
+    await seedDemoAccounts(repositories.personRepo);
+    return;
+  }
+
+  await runSeed(repositories);
+}
+
+export async function runSeed(repositories: SeedRepositories): Promise<void> {
   console.log('🌱 Starting seed process...');
 
   // 1. Validate environment
@@ -316,31 +426,7 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
   validateSeedEnvironment();
   console.log('✅ Environment validation passed');
 
-  // 2. Initialize repositories (use provided or create new InMemory instances)
-  console.log('🔧 Initializing repositories...');
-
-  let personRepo: PersonRepository;
-  let vendorRepo: VendorRepository;
-  let categoryRepo: CategoryRepository;
-  let productRepo: ProductRepository;
-
-  if (repositories) {
-    personRepo = repositories.personRepo;
-    vendorRepo = repositories.vendorRepo;
-    categoryRepo = repositories.categoryRepo;
-    productRepo = repositories.productRepo;
-  } else {
-    // Dynamic imports for InMemory implementations to avoid coupling
-    const { InMemoryPersonRepository } = await import('../modules/person/person.domain.js');
-    const { InMemoryVendorRepository } = await import('../modules/vendor/vendor.domain.js');
-    const { InMemoryProductRepository, InMemoryCategoryRepository } = await import('../modules/product/product.domain.js');
-
-    personRepo = new InMemoryPersonRepository();
-    vendorRepo = new InMemoryVendorRepository();
-    categoryRepo = new InMemoryCategoryRepository();
-    productRepo = new InMemoryProductRepository();
-  }
-  console.log('✅ Repositories initialized');
+  const { personRepo, vendorRepo, categoryRepo, productRepo } = repositories;
 
   // 3. Create categories with hierarchy
   console.log('📦 Creating categories...');
@@ -452,31 +538,8 @@ export async function runSeed(repositories?: SeedRepositories): Promise<void> {
 
   console.log(`✅ Created ${VENDORS.length} vendors`);
 
-  // 5. Create demo consumer and admin accounts directly in the trusted seed path.
-  console.log('👤 Creating demo accounts...');
-  for (const account of ACCOUNTS) {
-    const passwordVariable = `SEED_${account.role}_PASSWORD`;
-    const password = process.env[passwordVariable];
-    if (config.isProduction && !password) {
-      throw new Error(`${passwordVariable} is required when seeding demo accounts in production`);
-    }
-
-    const person = Person.create({
-      name: account.name,
-      mainInfo: {
-        name: account.name,
-        taxIdType: account.taxIdType,
-        taxIdValue: account.taxIdValue,
-      },
-      contactInfos: [{ type: 'email', value: account.email, isPrimary: true }],
-      addresses: [],
-    });
-    (person as any).id = account.id;
-    person.addRole(account.role);
-    person.setCredential(await hashPassword(password ?? account.password));
-    await personRepo.save(person);
-    console.log(`  ✅ Created ${account.role.toLowerCase()} account: ${account.email}`);
-  }
+  // 5. Ensure demo accounts without overwriting existing profile data.
+  await seedDemoAccounts(personRepo);
 
   // 6. Create products
   console.log('📦 Creating products...');

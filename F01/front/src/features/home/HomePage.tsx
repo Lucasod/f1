@@ -7,10 +7,10 @@ export function HomePage() {
       <Card variant="elevated" padding="lg" className="text-center max-w-3xl mx-auto">
         <div className="text-4xl mb-4" aria-hidden="true">🛍️</div>
         <h2 className="text-3xl font-bold text-gray-900 mb-4">
-          Welcome to FS-01 Marketplace - HMR Test Active
+          Discover products from independent sellers
         </h2>
         <p className="text-gray-600 mb-8 text-lg">
-          Your marketplace for buying and selling products. HMR Test Change - Third Attempt
+          Browse a growing selection of products from trusted marketplace sellers.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center">

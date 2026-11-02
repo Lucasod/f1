@@ -1,5 +1,5 @@
 import { Db, Collection } from 'mongodb';
-import { Person, PersonRepository, PersonRole, ContactInfo, Address, MainInfo } from './person.domain';
+import { Person, PersonError, PersonRepository, PersonRole, ContactInfo, Address, MainInfo } from './person.domain';
 
 interface PersonDoc {
   _id: string;
@@ -70,7 +70,7 @@ export class MongoPersonRepository implements PersonRepository {
           person_id: { $ne: personId }
         });
         if (existingContact) {
-          throw new Error('EMAIL_ALREADY_EXISTS');
+          throw new Error(PersonError.EMAIL_ALREADY_EXISTS);
         }
       }
     }

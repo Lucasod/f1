@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { AuthService } from '../auth/auth.service';
-import { InMemoryPersonRepository, PersonRole } from '../person/person.domain';
+import { InMemoryPersonRepository, Person, PersonRole } from '../person/person.domain';
 import { InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { config } from '../../config';
+import { hashPassword } from '../auth/credential.domain';
 import {
   InMemoryOrderRepository,
   InMemoryPaymentRepository,
@@ -17,8 +18,10 @@ describe('Order routes ownership', () => {
   let app: express.Express;
   let ownerToken: string;
   let otherConsumerToken: string;
+  let adminToken: string;
   let orderId: string;
   let ownerPersonId: string;
+  let otherConsumerPersonId: string;
   let personRepository: InMemoryPersonRepository;
   let orderRepository: InMemoryOrderRepository;
   let authService: AuthService;
@@ -47,6 +50,25 @@ describe('Order routes ownership', () => {
     ownerToken = owner.tokens.accessToken;
     ownerPersonId = owner.person.id;
     otherConsumerToken = otherConsumer.tokens.accessToken;
+    otherConsumerPersonId = otherConsumer.person.id;
+
+    const adminPerson = Person.create({
+      name: 'Marketplace Admin',
+      mainInfo: {
+        name: 'Marketplace Admin',
+        taxIdType: 'CNPJ',
+        taxIdValue: '11222333000262',
+      },
+      contactInfos: [{ type: 'email', value: 'admin@example.com', isPrimary: true }],
+      addresses: [],
+    });
+    adminPerson.addRole(PersonRole.ADMIN);
+    adminPerson.setCredential(await hashPassword('SecurePass123!'));
+    await personRepository.save(adminPerson);
+    adminToken = (await authService.login({
+      email: 'admin@example.com',
+      password: 'SecurePass123!',
+    })).tokens.accessToken;
 
     orderRepository = new InMemoryOrderRepository();
     const paymentRepository = new InMemoryPaymentRepository();
@@ -112,6 +134,58 @@ describe('Order routes ownership', () => {
     await request(app)
       .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${otherConsumerToken}`)
+      .expect(404);
+  });
+
+  it('allows Admins to view marketplace orders while preserving Consumer ownership limits', async () => {
+    const otherOrder = Order.create({
+      personId: otherConsumerPersonId,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'other-order-product',
+          productName: 'Other Order Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 40,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'other-delivery-address',
+        street: 'Second Street',
+        number: '2',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    await orderRepository.save(otherOrder);
+
+    const adminList = await request(app)
+      .get('/api/v1/orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(adminList.body.total).toBe(2);
+    expect(adminList.body.orders.map((order: { id: string }) => order.id))
+      .toEqual(expect.arrayContaining([orderId, otherOrder.id]));
+
+    await request(app)
+      .get(`/api/v1/orders/${otherOrder.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const consumerList = await request(app)
+      .get('/api/v1/orders')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    expect(consumerList.body.total).toBe(1);
+    expect(consumerList.body.orders.map((order: { id: string }) => order.id)).toEqual([orderId]);
+
+    await request(app)
+      .get(`/api/v1/orders/${otherOrder.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
       .expect(404);
   });
 

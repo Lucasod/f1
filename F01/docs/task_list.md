@@ -128,7 +128,8 @@
 | T-603 | Frontend: Auth pages & context | Login, register, protected routes | T-502, T-601 | Auth flow works E2E (manual checklist executed, API-level E2E verified) | ✅ completed |
 
 > **Note on T-603:** Registration now defaults to CONSUMER role without role selector; backend rejects ADMIN (403) and defaults VENDOR → CONSUMER.
-| T-604 | Frontend: Role-based UI rendering | Hide/show per permissions (Admin vs Consumer vs Vendor) | T-603 | UI respects roles | ✅ completed |
+| T-604 | Frontend: Role-based UI and primary navigation | Role-specific links, public catalog/cart access, profile identification, responsive menu | T-603 | Global Home/catalog/cart/account navigation; cart quantity indicator; role-appropriate links; responsive menu | ✅ completed: shared navigation is integrated in App, cart count uses the API query, and focused UI tests pass |
+| T-608 | Backend: Persistent development demo seed | MongoDB-backed seed CLI and startup reconciliation of demo accounts independent of catalog contents | T-301, T-601 | Idempotent MongoDB seed; real Admin/Consumer login; hashed credentials; Consumer profile includes a development delivery address | ✅ completed: MongoDB CLI and startup reconciliation implemented and verified; catalog is not reseeded when already populated |
 
 ---
 
@@ -200,8 +201,8 @@
 | T-903 | Backend: Order lifecycle API | Status transitions, vendor group management and ownership (T-109) | T-109, T-602 | State machine and consumer/vendor ownership enforced by route tests | 🔄 in_progress: Core lifecycle routes exist; remaining transition/ownership coverage must be verified before completion |
 | T-904 | Frontend: Cart page | Quantity edit, remove, summary, guest persistence and login merge | T-502, T-901 | Cart UX uses real API for guests and authenticated consumers | ✅ completed |
 | T-905 | Frontend: Checkout flow | Address, shipping, and payment selection | T-502, T-902 | Authenticated checkout uses real profile/order APIs and provider-confirmed payment | 🔄 in_progress: Checkout UI is wired to authenticated APIs; provider payment is not integrated |
-| T-906 | Frontend: Order history, Consumer dashboard and tracking | Consumer and Vendor order views; Consumer dashboard uses actual order summary | T-502, T-903 | Consumer sees own history, status, recent orders and details; Vendor access remains scoped | ✅ completed |
-| T-907 | Consumer profile and account | View/update permitted personal data, contacts, addresses, and change password using existing APIs | T-601, T-602 | Real authenticated profile flows; validation and ownership tests cover permitted updates and errors | 🔄 in_progress: Consumer profile UI and authenticated person/contact/address/password APIs are implemented; completing route-level validation and ownership coverage remains |
+| T-906 | Frontend: Order history, Consumer dashboard and tracking | Consumer and Vendor order views; Consumer dashboard uses actual order summary | T-502, T-903 | Consumer sees own history, status, recent orders and details; Vendor access and cached order data remain identity-scoped | ✅ completed: API ownership tests and frontend cache-isolation regression tests pass |
+| T-907 | Consumer profile and account | View/update permitted personal data, contacts, addresses, and change password using existing APIs | T-601, T-602 | Real authenticated profile flows; validation and ownership tests cover permitted updates and errors | ✅ completed: Consumer profile UI and authenticated profile/contact/address/password APIs are verified; tests cover validation, duplicate-email conflicts, authentication, and ownership isolation |
 
 ---
 
@@ -225,10 +226,10 @@
 | T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list and owned images | T-117, T-903 | Review eligibility, moderation, ownership and listing enforced | 🔄 in_progress: MongoDB-backed API, delivered-order eligibility, one-review-per-item, public listing, Admin moderation and owner-only local image upload/retrieval implemented; local storage is temporary and T-903 orders remain in-memory |
 | T-1102 | Backend: Coupon API | CRUD, validation, and per-vendor application (T-116) | T-116, T-902 | Coupon rules enforced; mixed-cart calculation follows approved decision | ⏳ pending: CRUD/eligibility can proceed; mixed-cart discount remains pending in Q-016 |
 | T-1103 | Backend: PDF invoice generation | On-demand commercial PDF receipt, S3 Standard-IA storage and Order link (CD-035..CD-038, T-304) | T-118, T-304 | On-demand invoice generated and retrievable; retention decisions are explicit | ⏳ pending: On-demand behavior is defined; S3 credentials needed for real storage; Glacier/WORM/automation remain Q-018 |
-| T-1104 | Backend: Admin dashboard API | Aggregations and metrics (T-119) | T-119, T-602 | Admin-scoped actual marketplace metrics | ⏳ pending: Q-018 and Q-017 do not block this task |
+| T-1104 | Backend: Admin dashboard API | Admin-scoped aggregations and metrics | T-602 | Metrics follow an approved Admin dashboard scope | 🔴 blocked: Q-003 Admin metrics are not defined; T-119 covers Vendor metrics only |
 | T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Review UI uses actual review APIs and moderation status | ⏳ pending |
 | T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon UI follows approved discount rules | ⏳ pending: Mixed-cart discount behavior remains a Q-016 decision |
-| T-1107 | Frontend: Admin dashboard | Charts, tables, actions | T-502, T-1104 | Dashboard uses actual admin APIs with role/permission guards | ⏳ pending |
+| T-1107 | Frontend: Admin dashboard | Admin workspace and operational views | T-502, T-1104 | Admin UI uses actual APIs and enforces Admin-only access | 🔄 in_progress: real recent-order view is available; broader metrics/actions and user listing require approved scope/API contracts |
 
 ---
 
@@ -257,7 +258,8 @@ P0–P3 prerequisites → P4 implementation (authorized through phase 4)
                          ├── P4d: cart → checkout → orders (cart API/UI implemented; checkout/payment boundary remains)
                          ├── P4e: payments (internal lifecycle can proceed; Stripe/Connect integration remains)
                          └── P4f: independent work may proceed by dependency:
-                                  reviews/admin metrics can proceed after their own prerequisites;
+                                  reviews and the Admin recent-order view can proceed after their own prerequisites;
+                                  Admin metrics remain blocked by Q-003;
                                   coupon application depends on checkout and Q-016;
                                   invoice retention/automation decisions remain Q-018
 P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
@@ -271,9 +273,11 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 - **T-901 / T-904:** Completed for Redis-backed guest/authenticated cart behavior, stock validation, persistence, isolation, merge, and frontend API use. The configured 30-day TTL remains a proposal, not an approved policy.
 - **T-902 / T-903 / T-905:** Continue independently where possible. Do not mark checkout/payment complete while atomic stock/order handling and real provider confirmation remain unverified.
 - **T-906:** Consumer dashboard, order history and detail surfaces use authenticated order APIs; API tests verify Consumer ownership isolation.
-- **T-907:** Consumer profile/account coverage is newly tracked; validate profile, contact, address, and password flows before completion.
+- **T-907:** Completed after validating the Consumer profile UI, authenticated profile/contact/address routes, password-change flow, duplicate-email handling, and profile/address isolation between Consumers.
+- **T-608:** Development seed CLI uses MongoDB; startup reconciles the demo Admin and Consumer even when products already exist. Verified with the backend test suite and an isolated local MongoDB run.
 - **T-1001..T-1006:** Keep provider-dependent Stripe/Connect work distinct from internal payment lifecycle and commission logic. Do not report real Stripe integration from internal tests.
-- **T-1101 and T-1104:** Eligible independent P4 work after their listed prerequisites; Q-017 is resolved and Q-018 is unrelated.
+- **T-1101:** Eligible independent P4 work after its listed prerequisites; Q-017 is resolved.
+- **T-1104:** Admin metrics remain blocked by the undefined scope in Q-003; Q-018 is unrelated.
 - **T-1102:** Coupon CRUD and eligibility can proceed, but mixed-cart discount behavior remains pending Q-016.
 - **T-1103:** On-demand invoice generation is specified; real S3 storage and pending retention/automation decisions remain separate boundaries.
 - **P5:** All P5 tasks remain blocked by `MAX_AUTHORIZED_PHASE = 4`; no phase authorization was changed.

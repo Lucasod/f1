@@ -2351,3 +2351,35 @@ Proceed with independent authorized tasks: T-703a limitations remediation (if pr
 
 ---
 
+## MP-19: Marketplace Entry Points, Development Accounts, and Consumer Isolation
+**Date:** 2026-11-01
+**Objective:** Complete the authorized Marketplace experience work already in progress, verify the documentation against the implementation, and preserve the existing phase and Git safeguards.
+
+### Results
+
+- **T-608 — Development accounts:** The seed CLI now persists through MongoDB repositories, and application startup reconciles the Admin and Consumer accounts independently of whether the catalog is empty. Consumer development data includes a delivery address. Existing profile data and passwords are preserved; conflicts fail explicitly.
+- **T-604 — Primary navigation:** Shared responsive navigation is integrated in the application layout for public and authenticated experiences, with Home, catalog, cart/count, account identity, login/registration, and role-appropriate destinations.
+- **Admin — T-1107:** The Admin dashboard displays recent orders from the existing Admin API and links to details. It remains partial: metrics and user-management scope/API are not defined. T-1104 stays blocked by Q-003; no Admin metrics were invented.
+- **T-906/T-907 — Consumer experience:** Existing order/dashboard and profile UI use backend APIs. Profile routes now report duplicate email as HTTP 409 and avoid mutating the in-memory stored Person when a rejected contact change fails. Tests cover profile authentication, address validation/persistence, contact conflicts, address isolation, and password-change behavior.
+- **Order cache isolation:** An independent review found order query-cache data could cross account boundaries. Order list/detail/vendor queries and Consumer summaries now scope cache keys by person and roles and do not display placeholder data from a previous identity. Regression tests cover both order lists and Consumer summaries.
+- **Documentation review:** README, backend/frontend architecture, task statuses, and the current decisions agree on the temporary local image/payment boundaries, Mongo-backed demo seed, Admin metrics decision gap, and remaining in-memory order/payment persistence. Corrected the task-list summary that had grouped Admin metrics with independently eligible work despite T-1104 being blocked by Q-003. Older MP entries remain historical snapshots.
+
+### Validation and Review
+
+| Check | Result |
+|-------|--------|
+| Backend tests | 720 passed, 3 skipped |
+| Frontend tests | 552 passed |
+| Backend TypeScript build | PASS |
+| Frontend production build | PASS |
+| `git diff --check` | PASS |
+| Independent Code Reviewer | Initial cache-isolation finding fixed; focused follow-up review PASS |
+
+`MAX_AUTHORIZED_PHASE = 4` remains unchanged. No P5 work was authorized. No Git staging, commit, or history operation was performed.
+
+### Remaining Boundaries
+
+- T-1107 remains partial and T-1104 blocked until the Admin metrics scope/API is approved under Q-003.
+- Order and Payment repositories remain in-memory; this work does not claim database persistence for them.
+- S3 and Stripe/Connect integrations remain future provider work; local storage and payment placeholders are not provider integration.
+- No unrelated backlog task was started as part of this continuation.

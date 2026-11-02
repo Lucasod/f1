@@ -3,8 +3,10 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { cartApi, Cart, CartItemInput, MergeGuestCartInput } from '@/shared/api/cart';
 
 export function useCart() {
+  const { user, isAuthenticated } = useAuth();
+
   return useQuery<{ cart: Cart }, Error>({
-    queryKey: ['cart'],
+    queryKey: ['cart', isAuthenticated ? user?.id ?? 'authenticated' : 'guest'],
     queryFn: () => cartApi.getCart(),
     staleTime: 2 * 60 * 1000, // 2 minutes
   });

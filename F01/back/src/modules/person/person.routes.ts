@@ -108,6 +108,8 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
             return res.status(400).json({ error: PersonError.EMAIL_REQUIRED, message: 'At least one email contact is required' });
           case PersonError.INVALID_EMAIL_FORMAT:
             return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
+          case PersonError.EMAIL_ALREADY_EXISTS:
+            return res.status(409).json({ error: PersonError.EMAIL_ALREADY_EXISTS, message: 'Email already belongs to another person' });
         }
       }
       next(error);
@@ -150,6 +152,8 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
         switch (error.message) {
           case PersonError.INVALID_EMAIL_FORMAT:
             return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
+          case PersonError.EMAIL_ALREADY_EXISTS:
+            return res.status(409).json({ error: PersonError.EMAIL_ALREADY_EXISTS, message: 'Email already belongs to another person' });
         }
       }
       next(error);
@@ -229,6 +233,8 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
             return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
           case PersonError.EMAIL_REQUIRED:
             return res.status(400).json({ error: PersonError.EMAIL_REQUIRED, message: 'At least one email contact is required' });
+          case PersonError.EMAIL_ALREADY_EXISTS:
+            return res.status(409).json({ error: PersonError.EMAIL_ALREADY_EXISTS, message: 'Email already belongs to another person' });
         }
       }
       next(error);

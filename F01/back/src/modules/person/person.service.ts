@@ -27,8 +27,9 @@ export class PersonService {
       throw new Error(PersonError.PERSON_NOT_FOUND);
     }
 
-    person.updateContactInfos(contacts);
-    return this.personRepo.update(person);
+    const updatedPerson = this.clonePerson(person);
+    updatedPerson.updateContactInfos(contacts);
+    return this.personRepo.update(updatedPerson);
   }
 
   async updateAddresses(personId: string, addresses: Address[]): Promise<Person> {
@@ -77,8 +78,9 @@ export class PersonService {
       throw new Error(PersonError.PERSON_NOT_FOUND);
     }
 
-    person.addContact(contact);
-    return this.personRepo.update(person);
+    const updatedPerson = this.clonePerson(person);
+    updatedPerson.addContact(contact);
+    return this.personRepo.update(updatedPerson);
   }
 
   async removeContact(personId: string, contactId: string): Promise<Person> {
@@ -97,7 +99,20 @@ export class PersonService {
       throw new Error(PersonError.PERSON_NOT_FOUND);
     }
 
-    person.updateContact(contactId, updates);
-    return this.personRepo.update(person);
+    const updatedPerson = this.clonePerson(person);
+    updatedPerson.updateContact(contactId, updates);
+    return this.personRepo.update(updatedPerson);
+  }
+
+  private clonePerson(person: Person): Person {
+    return Person.reconstruct({
+      ...person,
+      mainInfo: { ...person.mainInfo },
+      contactInfos: person.contactInfos.map(contact => ({ ...contact })),
+      addresses: person.addresses.map(address => ({ ...address })),
+      roles: [...person.roles],
+      createdAt: new Date(person.createdAt),
+      updatedAt: new Date(person.updatedAt)
+    });
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runSeed, resetDeterministicIdGenerator, validateSeedEnvironment } from './seed.js';
-import { InMemoryPersonRepository } from '../modules/person/person.domain.js';
+import { runDevelopmentSeed, runSeed, resetDeterministicIdGenerator, validateSeedEnvironment } from './seed.js';
+import { InMemoryPersonRepository, Person, PersonRole } from '../modules/person/person.domain.js';
 import { InMemoryVendorRepository } from '../modules/vendor/vendor.domain.js';
 import { InMemoryProductRepository, InMemoryCategoryRepository } from '../modules/product/product.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
@@ -131,6 +131,72 @@ describe('Seed Integration', () => {
       expect(persons).toHaveLength(5);
       expect(persons.filter((person: any) => person.roles.includes('ADMIN'))).toHaveLength(1);
       expect(persons.filter((person: any) => person.roles.includes('CONSUMER'))).toHaveLength(1);
+    });
+
+    it('recreates persistent demo accounts when products already exist', async () => {
+      await runSeed(repositories);
+      const productsBefore = await productRepo.findAll();
+      const seededAccounts = await Promise.all(ACCOUNTS.map(account => personRepo.findById(account.id)));
+      for (const account of seededAccounts) {
+        expect(account).not.toBeNull();
+        await personRepo.delete(account!.id);
+      }
+
+      await runDevelopmentSeed(repositories);
+
+      expect(await productRepo.findAll()).toEqual(productsBefore);
+      const authService = new AuthService(personRepo, 'seed-test-secret', '24h');
+      for (const account of ACCOUNTS) {
+        const { person } = await authService.login({
+          email: account.email,
+          password: account.password,
+        });
+        expect(person.roles).toEqual([account.role]);
+      }
+
+      const consumer = await personRepo.findByEmail('consumer@example.com');
+      expect(consumer?.addresses).toHaveLength(1);
+      expect(Array.from((personRepo as any).persons.values())).toHaveLength(5);
+    });
+
+    it('preserves existing consumer profile data while reconciling demo accounts', async () => {
+      await runSeed(repositories);
+      const consumer = await personRepo.findByEmail('consumer@example.com');
+      expect(consumer).not.toBeNull();
+      consumer!.updateName('Updated Consumer Name');
+      consumer!.addAddress({
+        street: 'Rua Nova',
+        number: '200',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: false,
+      });
+      await personRepo.update(consumer!);
+
+      await runDevelopmentSeed(repositories);
+
+      const reconciledConsumer = await personRepo.findByEmail('consumer@example.com');
+      expect(reconciledConsumer?.name).toBe('Updated Consumer Name');
+      expect(reconciledConsumer?.addresses).toHaveLength(2);
+      await expect(new AuthService(personRepo, 'seed-test-secret', '24h').login({
+        email: 'consumer@example.com',
+        password: 'SecurePass123!',
+      })).resolves.toMatchObject({ person: { name: 'Updated Consumer Name' } });
+    });
+
+    it('rejects demo accounts with conflicting persisted roles', async () => {
+      await runSeed(repositories);
+      const admin = await personRepo.findByEmail('admin@example.com');
+      expect(admin).not.toBeNull();
+      const conflictingAdmin = Person.reconstruct({
+        ...admin!,
+        roles: [PersonRole.ADMIN, PersonRole.CONSUMER],
+      });
+      await personRepo.update(conflictingAdmin);
+
+      await expect(runDevelopmentSeed(repositories))
+        .rejects.toThrow('SEED_ACCOUNT_ROLE_CONFLICT: admin@example.com');
     });
 
     it('should create exactly 12 products distributed across vendors and categories', async () => {
@@ -277,11 +343,4 @@ describe('Seed Integration', () => {
     });
   });
 
-  describe('runSeed without repositories (CLI mode)', () => {
-    it('should create new repository instances when none provided', async () => {
-      // This tests the default behavior when repositories are not passed
-      // We can't easily test the internal instances, but we can verify it doesn't throw
-      await expect(runSeed()).resolves.not.toThrow();
-    });
-  });
 });

@@ -9,6 +9,7 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { getOrderQueryScope } from '@/features/order/useOrder';
 
 /**
  * Format currency in BRL (Brazilian Real)
@@ -50,7 +51,7 @@ function getOrderStatusConfig(status: OrderStatus): { label: string; variant: 'd
 
 export function ConsumerDashboard() {
   const navigate = useNavigate();
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
 
   const {
     data,
@@ -58,10 +59,9 @@ export function ConsumerDashboard() {
     error,
     refetch,
   } = useQuery<{ summary: ConsumerOrderSummary }, Error>({
-    queryKey: ['orders', 'consumer', 'summary'],
+    queryKey: ['orders', 'consumer', 'summary', getOrderQueryScope(user)],
     queryFn: () => orderApi.getConsumerSummary(),
     staleTime: 2 * 60 * 1000,
-    placeholderData: (previousData) => previousData,
   });
 
   const summary = data?.summary;

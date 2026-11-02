@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation } from './Navigation';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
+import { Cart } from '@/shared/api/cart';
 
 vi.mock('@/app/providers/authStore', () => ({
   useAuthStore: vi.fn()
@@ -11,11 +13,37 @@ vi.mock('@/app/providers/authStore', () => ({
 
 const mockUseAuthStore = vi.mocked(useAuthStore);
 
-const renderWithProvider = (component: React.ReactNode, initialEntries: string[] = ['/']) => {
+const renderWithProvider = (
+  component: React.ReactNode,
+  initialEntries: string[] = ['/'],
+  cartItems: Cart['items'] = []
+) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  queryClient.setQueryData(['cart', 'guest'], {
+    cart: {
+      id: 'guest-cart',
+      items: cartItems,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  queryClient.setQueryData(['cart', '1'], {
+    cart: {
+      id: 'consumer-cart',
+      items: cartItems,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <AuthProvider>{component}</AuthProvider>
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <AuthProvider>{component}</AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 };
 
@@ -46,8 +74,30 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('menuitem', { name: /login/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /register/i })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /browse products/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /cart/i })).toHaveTextContent('0');
     expect(screen.queryByRole('menuitem', { name: /logout/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the combined quantity of cart items in navigation', () => {
+    renderWithProvider(<Navigation />, ['/'], [
+      { productId: 'product-1', vendorId: 'vendor-1', quantity: 2, unitPrice: 10, addedAt: '' },
+      { productId: 'product-2', vendorId: 'vendor-2', quantity: 3, unitPrice: 15, addedAt: '' },
+    ]);
+
+    expect(screen.getByRole('menuitem', { name: /cart, 5 items/i })).toBeInTheDocument();
+  });
+
+  it('opens and closes the responsive navigation menu', () => {
+    renderWithProvider(<Navigation />);
+
+    const menuButton = screen.getByRole('button', { name: /open navigation menu/i });
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(menuButton);
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
+    fireEvent.click(menuButton);
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('shows loading skeleton while auth initializes', () => {
@@ -76,7 +126,6 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /vendor dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /vendor products/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
   });
 
   it('keeps consumer links after a consumer also becomes a vendor', () => {
@@ -107,10 +156,9 @@ describe('Navigation', () => {
     expect(screen.getByRole('menuitem', { name: /vendor dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /vendor products/i })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
   });
 
-  it('shows Admin Dashboard and Admin Users for ADMIN role', () => {
+  it('shows the Admin Dashboard for ADMIN role', () => {
     mockUseAuthStore.mockReturnValue(createMockStore({
       user: { id: '1', name: 'Admin', email: 'admin@example.com', roles: ['ADMIN'] },
       isAuthenticated: true,
@@ -121,7 +169,7 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /admin dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /admin users/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /vendor dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /vendor products/i })).not.toBeInTheDocument();
   });
@@ -139,7 +187,7 @@ describe('Navigation', () => {
     expect(screen.getByRole('menuitem', { name: /vendor dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /vendor products/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /admin dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /admin users/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
   });
 
   it('shows user name, roles, and logout button when authenticated', () => {
