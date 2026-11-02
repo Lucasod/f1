@@ -16,6 +16,7 @@ import { CheckoutPage } from './features/checkout/CheckoutPage';
 import { OrderHistoryPage } from './features/order/OrderHistoryPage';
 import { OrderDetailPage } from './features/order/OrderDetailPage';
 import { VendorOrderPage } from './features/order/VendorOrderPage';
+import { PayoutPage } from './features/vendor/PayoutPage';
 import { ConsumerProfile } from './features/consumer/ConsumerProfile';
 import { AdminDashboard } from './features/admin/AdminDashboard';
 
@@ -59,6 +60,7 @@ function App() {
               <Route path="/vendor/products/new" element={<ProductForm />} />
               <Route path="/vendor/products/:productId/edit" element={<ProductForm />} />
               <Route path="/vendor/orders" element={<VendorOrderPage />} />
+              <Route path="/vendor/payouts" element={<PayoutPage />} />
             </Route>
             
             {/* Admin only routes */}

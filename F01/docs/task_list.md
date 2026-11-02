@@ -144,7 +144,7 @@
 
 > **T-703b boundary:** The local storage adapter, validation, and local upload/retrieval work are covered by T-703a. Q-018 Glacier, Object Lock/WORM, and invoice-trigger decisions do not govern product images and do not block this task. Do not claim S3 presigning, multipart upload, or CloudFront as implemented.
 
-> **Note on T-703a (completed):** All 5 limitations from the audit report (`F01/docs/analysis/analysis_local_storage_vs_s3.md`) have been addressed:
+> **Note on T-703a (completed):** All 5 limitations from the audit report (`F01/docs/analysis/analysis_s3_naming.md`) have been addressed:
 > 1. ✅ Docker volume persistence validated across container restarts
 > 2. ✅ OpenAPI spec aligned with implementation (removed S3 presigned URL references)
 > 3. ✅ Gallery images supported (multiple images per product, thumbnail generation)
@@ -212,13 +212,14 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-1001 | Backend: Payment integration | Provider SDK, webhooks, idempotency (T-111) | T-111, T-112, T-602 | Real Stripe test payment and verified webhook lifecycle | 🔄 in_progress: Internal payment lifecycle/idempotency exists; Stripe SDK, account configuration, secrets and webhook validation remain |
+| T-1001 | Backend: Payment integration | Provider SDK, webhooks, idempotency (T-111) | T-111, T-112, T-602 | Real Stripe test payment and verified webhook lifecycle | 🔄 in_progress: Internal payment lifecycle/idempotency exists; added POST /payments/:id/fail endpoint (5 tests); Stripe SDK, account configuration, secrets and webhook validation remain |
 | T-1002 | Backend: Split payment / commission calculation | Per Order_Vendor_Group, wallet credits (CD-029, T-110) | T-110, T-112, T-1001 | Correct commission and provider-backed transfers/credits | 🔄 in_progress: Commission calculations exist; Stripe transfers and wallet settlement remain |
-| T-1003 | Backend: Vendor payout flow | Payout rules, records and provider execution | T-110, T-1002 | Payouts processed and recorded | ✅ completed: Internal payout rules and records implemented; vendor ownership enforced; CRUD + lifecycle; tsc clean; 59 tests pass.
+| T-1003 | Backend: Vendor payout flow | Payout rules, records and provider execution | T-110, T-1002 | Payouts processed and recorded | ✅ completed: Internal payout rules and records implemented; vendor ownership enforced; CRUD + lifecycle; MongoPayoutRepository implemented and verified (12 mongo tests pass); tsc clean; 59 unit tests pass.
 > Addendum (2026-11-02): T-1003 implemented with 59 passing tests; tsc clean; ownership enforcement via vendorRepo; status transitions PENDING↔APPROVED↔PROCESSING↔COMPLETED/FAILED; CANCELLED cancels PENDING/APPROVED; admin can all, vendor own only. Independent review pending. |
+> Addendum (2026-11-02): MongoPayoutRepository durability verified with 12 passing mongo contract tests; createIndex on vendorId; full CRUD + lifecycle against MongoDB; in-memory fallback retained for dev. |
 | T-1004 | Backend: Refund API | Initiate, approve, process, commission reversal (T-113) | T-113, T-1002 | Refunds and transfer reversals work end to end | 🔄 in_progress: Internal payment lifecycle, routes, and ownership isolation verified; independent review no blockers; Stripe provider refunds and transfer reversals remain external. |
 | T-1005 | Frontend: Payment UI | Provider checkout, success/failure handling | T-502, T-1001 | Real provider checkout and confirmed success/failure states | 🔄 in_progress: Checkout UX exists; it must not treat placeholder client secrets as payment completion |
-| T-1006 | Frontend: Vendor wallet & payouts | Balance, transactions, payout request | T-502, T-1003 | Vendor sees actual wallet and payout data | ⏳ pending: Depends on wallet/payout contracts and real data |
+| T-1006 | Frontend: Vendor wallet & payouts | Balance, transactions, payout request | T-502, T-1003 | Vendor sees actual wallet and payout data | 🔄 in_progress: Partial payout request/list/cancel UI implemented (PayoutPage + payoutApi: list, create, cancel; 5 tests pass); wallet balance/transactions remain blocked by missing backend contract (no wallet endpoints). |
 
 ---
 
@@ -226,14 +227,14 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list and owned images | T-117, T-903 | Review eligibility, moderation, ownership and listing enforced | 🔄 in_progress: MongoDB-backed API, delivered-order eligibility, one-review-per-item, public listing, Admin moderation and owner-only local image upload/retrieval implemented; local storage is temporary and T-903 orders remain in-memory |
+| T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list and owned images | T-117, T-903 | Review eligibility, moderation, ownership and listing enforced | 🔄 in_progress: MongoDB-backed API, delivered-order eligibility, one-review-per-item, public listing, Admin moderation and owner-only local image upload/retrieval implemented; image upload status gating fixed (PUBLISHED only, 1 test); MongoReviewRepository durability verified (10 mongo tests pass); local storage is temporary and T-903 orders remain in-memory; dead `images` input removed from CreateReviewInput |
 | T-1102 | Backend: Coupon API | CRUD, validation, and per-vendor application (T-116) | T-116, T-902 | Coupon rules enforced; mixed-cart calculation follows approved decision | ✅ completed: CRUD + eligibility per confirmed rules (CD-050); mixed-cart discount deferred to Q-016 per task spec, not implemented.>
 > Addendum (2026-11-02): T-1102 completed with CRUD + eligibility validation (inclusion/exclusion lists, stacking=no, vendor-per-vendor, no priority, consumer selects coupon per vendor). Mixed-cart discount PENDING Q-016: not implemented as it requires business decision outside this scope. 11 domain tests + 14 service tests + 9 route tests pass.>
-| T-1103 | Backend: PDF invoice generation | On-demand commercial PDF receipt, S3 Standard-IA storage and Order link (CD-035..CD-038, T-304) | T-118, T-304 | On-demand invoice generated and retrievable; retention decisions are explicit | ⏳ pending: On-demand behavior is defined; S3 credentials needed for real storage; Glacier/WORM/automation remain Q-018 |
+| T-1103 | Backend: PDF invoice generation | On-demand commercial PDF receipt, S3 Standard-IA storage and Order link (CD-035..CD-038, T-304) | T-118, T-304 | On-demand invoice generated and retrievable; retention decisions are explicit | 🔄 in_progress: invoice domain/service/repository/routes implemented with placeholder PDF (Buffer.alloc(0)); real PDF generation requires PDF library authorization; S3 storage blocked on credentials; Glacier/WORM/automation remain Q-018 |
 | T-1104 | Backend: Admin dashboard API | Admin-scoped aggregations and metrics | T-602 | Metrics follow an approved Admin dashboard scope | 🔴 blocked: Q-003 Admin metrics are not defined; T-119 covers Vendor metrics only |
 | T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Review UI uses actual review APIs and moderation status | ✅ completed: Frontend review UI uses actual review APIs; rating 1-5, comment, image upload; ReviewSection and CreateReviewForm tested; ReviewStatus lowercase aligned with backend/OpenAPI. |
 | T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon UI follows approved discount rules | ⏳ pending: Mixed-cart discount behavior remains a Q-016 decision |
-| T-1107 | Frontend: Admin dashboard | Admin workspace and operational views | T-502, T-1104 | Admin UI uses actual APIs and enforces Admin-only access | 🔄 in_progress: real recent-order view is available; broader metrics/actions and user listing require approved scope/API contracts |
+| T-1107 | Frontend: Admin dashboard | Admin workspace and operational views | T-502, T-1104 | Admin UI uses actual APIs and enforces Admin-only access | 🔄 in_progress: real recent-order view + review moderation (publish/hide/reject) with loading/empty/error states; 8 AdminDashboard tests pass; no metrics invented (Q-003 blocked); broader metrics/user listing blocked by Q-003 |
 
 ---
 

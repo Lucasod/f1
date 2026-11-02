@@ -212,6 +212,36 @@ export function createPaymentRoutes({ authService, paymentService, vendorRepo, o
     }
   }) as RequestHandler);
 
+  // POST /payments/:id/fail - Fail a payment (auth required)
+  router.post('/:id/fail', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+      const existingPayment = await paymentService.getPaymentById(paymentId);
+      if (!existingPayment) {
+        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
+      }
+      const allowed = await isOwner(req, existingPayment);
+      if (!allowed) {
+        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
+      }
+
+      const payment = await paymentService.failPayment(paymentId);
+
+      return res.json({ payment: paymentToResponse(payment) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case PaymentError.PAYMENT_NOT_FOUND:
+            return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
+          case PaymentError.PAYMENT_NOT_AUTHORIZABLE:
+            return res.status(409).json({ error: PaymentError.PAYMENT_NOT_AUTHORIZABLE, message: 'Payment is not failurable' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
   // GET /payments/:id - Get payment by ID (auth required)
   router.get('/:id', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {

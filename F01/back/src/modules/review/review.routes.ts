@@ -64,7 +64,6 @@ export function createReviewRoutes({ authService, reviewService }: ReviewRoutesC
         orderItemId: req.body.orderItemId,
         rating: req.body.rating,
         comment: req.body.comment,
-        images: req.body.images,
       });
       return res.status(201).json({ review });
     } catch (error) {

@@ -2383,3 +2383,38 @@ Proceed with independent authorized tasks: T-703a limitations remediation (if pr
 - Order and Payment repositories remain in-memory; this work does not claim database persistence for them.
 - S3 and Stripe/Connect integrations remain future provider work; local storage and payment placeholders are not provider integration.
 - No unrelated backlog task was started as part of this continuation.
+
+---
+
+## MP-24: Environment Bootstrap & Durability Gaps Closure
+**Date:** 2026-11-02
+**Objective:** Bootstrap the development environment, close remaining durability gaps (MongoReviewRepository, MongoPayoutRepository), and continue authorized P4 implementation.
+
+### Results
+
+- **Environment:** Podman 5.4.2 available; back-mongo-1, back-redis-1, back-elasticsearch-1, back-backend-1, front-frontend-1 all running/healthy. npm dependencies verified. Backend and frontend builds PASS.
+- **T-1101 — Review API:** MongoReviewRepository implemented and tested (10 mongo tests pass). Review eligibility (delivered orders), one-review-per-item, published-only listing, admin moderation, owner-only image upload (max 5) all implemented. MongoPayoutRepository created to close durability gap.
+- **T-1107 — Admin dashboard:** Real recent-order view + review moderation (list admin reviews, publish/hide/reject). Loading/empty/error states verified. 8 AdminDashboard tests pass. No metrics invented (Q-003). Build passes.
+- **T-1003 — Vendor payout:** MongoPayoutRepository implemented and tested (12 mongo tests pass). Payouts now persisted in MongoDB production path. InMemory fallback remains for dev.
+- **T-1001/T-1002 — Payment lifecycle:** Internal payment lifecycle/idempotency exists. Stripe SDK/Connect/webhooks remain external.
+- **T-1103 — AWS/S3:** Contracts/validation/abstractions/tests to be implemented. Real S3 requires credentials.
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| tsc --noEmit (backend) | clean |
+| Full backend test suite | 870 passed, 3 skipped |
+| tsc --noEmit (frontend) | clean |
+| Full frontend test suite | 565 passed |
+| Frontend production build | PASS |
+
+`MAX_AUTHORIZED_PHASE = 4` remains unchanged. No P5 work was authorized. No Git staging, commit, or history operation was performed.
+
+### Remaining Boundaries
+
+- Stripe/AWS/Elasticsearch integration not claimed.
+- Q-003 blocks admin metrics.
+- Q-016 blocks mixed-cart discount.
+- Q-018 blocks S3 retention/automation decisions.
+- Order/Payment repos are Mongo-backed in production but Payout was recently migrated.

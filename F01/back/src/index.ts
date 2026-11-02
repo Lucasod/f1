@@ -41,6 +41,7 @@ import { MongoProductRepository } from './modules/product/product.mongo.reposito
 import { MongoReviewRepository } from './modules/review/review.mongo.repository';
 import { MongoOrderRepository } from './modules/order/order.mongo.repository';
 import { MongoPaymentRepository } from './modules/order/payment.mongo.repository';
+import { MongoPayoutRepository } from './modules/payout/payout.mongo.repository';
 import { connectToMongo, initializeCollections, closeMongoConnection, getDb } from './shared/database/mongo.client';
 
 // Repository interfaces
@@ -186,7 +187,7 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
 reviewRepo = new MongoReviewRepository(db);
 orderRepo = new MongoOrderRepository(db);
 paymentRepo = new MongoPaymentRepository(db);
-payoutRepo = new InMemoryPayoutRepository();
+payoutRepo = new MongoPayoutRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();

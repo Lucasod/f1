@@ -159,6 +159,46 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     });
   });
 
+  describe('POST /payments/:id/fail (T-1001)', () => {
+    it('should fail a pending payment', async () => {
+      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const pid = cr.body.payment.id;
+      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.payment.status).toBe(PaymentStatus.FAILED);
+    });
+    it('should be idempotent for an already failed payment', async () => {
+      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const pid = cr.body.payment.id;
+      await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.payment.status).toBe(PaymentStatus.FAILED);
+    });
+    it('should return 409 when payment is captured', async () => {
+      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const pid = cr.body.payment.id;
+      await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
+      await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_AUTHORIZABLE);
+    });
+    it('should return 404 for non-owner', async () => {
+      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const pid = cr.body.payment.id;
+      const other = await request(app).post('/api/v1/auth/register').send({ name: 'Other', taxIdType: 'CPF', taxIdValue: '12345678909', email: 'other-fail@example.com', password: testPassword, role: PersonRole.CONSUMER });
+      const otherToken = other.body.tokens.accessToken;
+      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${otherToken}`);
+      expect(res.status).toBe(404);
+    });
+    it('should return 404 for non-existent payment', async () => {
+      const res = await request(app).post('/api/v1/payments/x/fail').set('Authorization', `Bearer ${consumerToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_FOUND);
+    });
+  });
+
   describe('GET /payments/:id', () => {
     it('should return a payment by ID', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });

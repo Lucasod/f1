@@ -303,6 +303,36 @@ describe('Review routes', () => {
       .expect(400);
   });
 
+  it('returns 400 when uploading an image to a non-published review', async () => {
+    const created = await request(app)
+      .post(`/api/v1/products/${product.id}/reviews`)
+      .set('Authorization', ['Bearer ', consumerToken].join(''))
+      .send({ orderItemId: deliveredOrderItemId, rating: 4 })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/v1/admin/reviews/${created.body.review.id}/moderate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'hidden' })
+      .expect(200);
+
+    const image = await sharp({
+      create: {
+        width: 800,
+        height: 800,
+        channels: 3,
+        background: { r: 12, g: 34, b: 56 },
+      },
+    }).jpeg().toBuffer();
+
+    await request(app)
+      .post(`/api/v1/reviews/${created.body.review.id}/images`)
+      .set('Authorization', ['Bearer ', consumerToken].join(''))
+      .attach('image', image, { filename: 'review.jpg', contentType: 'image/jpeg' })
+      .expect(400)
+      .expect(({ body }) => expect(body.error).toBe('INVALID_REVIEW'));
+  });
+
   it('limits each review to five locally stored images', async () => {
     const created = await request(app)
       .post(`/api/v1/products/${product.id}/reviews`)

@@ -14,7 +14,6 @@ export interface CreateReviewInput {
   orderItemId: string;
   rating: number;
   comment?: string;
-  images?: string[];
 }
 
 export class ReviewService {
@@ -30,17 +29,11 @@ export class ReviewService {
       typeof input.orderItemId !== 'string'
       || input.orderItemId.trim().length === 0
       || (input.comment !== undefined && typeof input.comment !== 'string')
-      || (input.images !== undefined && (
-        !Array.isArray(input.images) || input.images.some(image => typeof image !== 'string')
-      ))
     ) {
       throw new Error(ReviewError.INVALID_REVIEW);
     }
     if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
       throw new Error(ReviewError.INVALID_RATING);
-    }
-    if (input.images?.length) {
-      throw new Error(ReviewError.INVALID_REVIEW);
     }
     const product = await this.productRepo.findById(input.productId);
     if (!product) {
@@ -130,6 +123,9 @@ export class ReviewService {
     }
     if (review.consumerId !== consumerId) {
       throw new Error(ReviewError.REVIEW_OWNERSHIP_VIOLATION);
+    }
+    if (review.status !== ReviewStatus.PUBLISHED) {
+      throw new Error(ReviewError.INVALID_REVIEW);
     }
     if (review.images.length >= 5) {
       throw new Error(ReviewError.REVIEW_IMAGE_LIMIT_REACHED);
