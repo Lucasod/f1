@@ -43,18 +43,19 @@ export class InvoiceService {
     const now = new Date();
     const key = generateInvoiceKey(order.id, now.getFullYear(), now.getMonth() + 1);
     // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
-    // The generated key is used as both pdfUrl and pdfPath without calling the
-    // storage adapter, which only accepts image MIME types and rejects empty buffers.
-    const pdfUrl = key;
-    const pdfPath = key;
+    // A generated storage key is NOT proof that a PDF exists, so it must not be
+    // exposed as a downloadable URL. The invoice is represented as PENDING until
+    // actual PDF bytes are generated and stored (via markGenerated). The key is
+    // regenerated when real PDF generation is implemented.
+    void key;
 
     const invoice = Invoice.create({
       orderId: order.id,
       vendorId: resolvedVendorId,
       emissionAt: now,
-      pdfUrl,
-      pdfPath,
-      status: InvoiceStatus.GENERATED,
+      pdfUrl: '',
+      pdfPath: '',
+      status: InvoiceStatus.PENDING,
     });
 
     return this.invoiceRepo.save(invoice);
@@ -106,13 +107,24 @@ export class InvoiceService {
     const now = new Date();
     const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
     // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
-    // The generated key is used as both pdfUrl and pdfPath without calling the
-    // storage adapter, which only accepts image MIME types and rejects empty buffers.
-    invoice.pdfUrl = key;
-    invoice.pdfPath = key;
-    invoice.status = InvoiceStatus.GENERATED;
+    // A generated storage key is NOT proof that a PDF exists, so it must not be
+    // exposed as a downloadable URL. The invoice remains PENDING until actual PDF
+    // bytes are generated and stored (via markGenerated). The key is regenerated
+    // when real PDF generation is implemented.
+    void key;
+
+    invoice.pdfUrl = '';
+    invoice.pdfPath = '';
+    invoice.status = InvoiceStatus.PENDING;
     invoice.updatedAt = new Date();
 
+    return this.invoiceRepo.update(invoice);
+  }
+
+  async markGenerated(invoiceId: string, pdfUrl: string, pdfPath: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepo.findById(invoiceId.trim());
+    if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
+    invoice.markGenerated(pdfUrl, pdfPath);
     return this.invoiceRepo.update(invoice);
   }
 

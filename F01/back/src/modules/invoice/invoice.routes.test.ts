@@ -8,7 +8,7 @@ import { hashPassword } from '../auth/credential.domain';
 import { PersonRole } from '../person/person.domain';
 import { InvoiceService } from './invoice.service';
 import { createInvoiceRoutes } from './invoice.routes';
-import { Invoice, InMemoryInvoiceRepository } from './invoice.domain';
+import { Invoice, InvoiceStatus, InMemoryInvoiceRepository } from './invoice.domain';
 import { InMemoryVendorRepository, Vendor } from '../vendor/vendor.domain';
 import { Order, OrderStatus, InMemoryOrderRepository } from '../order/order.domain';
 import { StorageAdapter } from '../../shared/storage/storage.interface';
@@ -94,7 +94,7 @@ describe('Invoice Routes (T-1103)', () => {
     order.transitionTo(OrderStatus.PAID);
     await orderRepo.save(order);
 
-    const invoice = Invoice.create({ orderId: order.id, vendorId: 'vendor-1', pdfUrl: 'https://cdn.example.com/invoices/o.pdf', pdfPath: 'invoices/2026/10/o.pdf' });
+    const invoice = Invoice.create({ orderId: order.id, vendorId: 'vendor-1', status: InvoiceStatus.PENDING });
     await invoiceRepo.save(invoice);
     invoiceId = invoice.id;
   });
@@ -111,10 +111,18 @@ describe('Invoice Routes (T-1103)', () => {
   });
 
   describe('GET /invoices', () => {
-    it('lists invoices', async () => {
-      const res = await request(app).get('/api/v1/invoices').set('Authorization', `Bearer ${consumerToken}`);
+    it('admin lists invoices', async () => {
+      const res = await request(app).get('/api/v1/invoices').set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.invoices).toHaveLength(1);
+    });
+    it('consumer cannot list invoices (403)', async () => {
+      const res = await request(app).get('/api/v1/invoices').set('Authorization', `Bearer ${consumerToken}`);
+      expect(res.status).toBe(403);
+    });
+    it('vendor cannot list invoices (403)', async () => {
+      const res = await request(app).get('/api/v1/invoices').set('Authorization', `Bearer ${vendorToken}`);
+      expect(res.status).toBe(403);
     });
   });
 
@@ -162,7 +170,8 @@ describe('Invoice Routes (T-1103)', () => {
     it('regenerates pdf as admin', async () => {
       const res = await request(app).post(`/api/v1/invoices/${invoiceId}/generate`).set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.invoice.pdfUrl).toBeTruthy();
+      expect(res.body.invoice.status).toBe(InvoiceStatus.PENDING);
+      expect(res.body.invoice.pdfUrl).toBe('');
     });
     it('returns 404 for non-existent', async () => {
       const res = await request(app).post('/api/v1/invoices/nope/generate').set('Authorization', `Bearer ${adminToken}`);
@@ -171,10 +180,10 @@ describe('Invoice Routes (T-1103)', () => {
   });
 
   describe('GET /invoices/:invoiceId/download', () => {
-    it('returns pdfUrl', async () => {
+    it('returns 404 when pdf not yet generated', async () => {
       const res = await request(app).get(`/api/v1/invoices/${invoiceId}/download`).set('Authorization', `Bearer ${adminToken}`);
-      expect(res.status).toBe(200);
-      expect(res.body.pdfUrl).toBeTruthy();
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe('PDF not yet generated');
     });
     it('returns 404 for non-existent', async () => {
       const res = await request(app).get('/api/v1/invoices/nope/download').set('Authorization', `Bearer ${consumerToken}`);

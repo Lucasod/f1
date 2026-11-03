@@ -71,7 +71,7 @@ describeIfMongo('MongoInvoiceRepository Contract Tests', () => {
       expect(found!.id).toBe(invoice.id);
       expect(found!.orderId).toBe(invoice.orderId);
       expect(found!.vendorId).toBe(invoice.vendorId);
-      expect(found!.status).toBe(InvoiceStatus.GENERATED);
+      expect(found!.status).toBe(InvoiceStatus.PENDING);
     });
 
     it('should find invoice by order ID', async () => {

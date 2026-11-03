@@ -1,4 +1,5 @@
 export enum InvoiceStatus {
+  PENDING = 'pending',
   GENERATED = 'generated',
   SENT = 'sent',
 }
@@ -80,7 +81,7 @@ export class Invoice {
       emissionAt,
       pdfUrl: typeof data.pdfUrl === 'string' ? data.pdfUrl : '',
       pdfPath: typeof data.pdfPath === 'string' ? data.pdfPath : '',
-      status: data.status ?? InvoiceStatus.GENERATED,
+      status: data.status ?? InvoiceStatus.PENDING,
       createdAt: now,
       updatedAt: now,
     });
@@ -92,6 +93,22 @@ export class Invoice {
 
   markSent(): void {
     this.status = InvoiceStatus.SENT;
+    this.updatedAt = new Date();
+  }
+
+  markGenerated(pdfUrl: string, pdfPath: string): void {
+    if (typeof pdfUrl !== 'string' || pdfUrl.trim().length === 0) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
+    if (typeof pdfPath !== 'string' || pdfPath.trim().length === 0) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
+    if (this.status !== InvoiceStatus.PENDING) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
+    this.pdfUrl = pdfUrl;
+    this.pdfPath = pdfPath;
+    this.status = InvoiceStatus.GENERATED;
     this.updatedAt = new Date();
   }
 

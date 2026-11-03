@@ -5,7 +5,7 @@ describe('Invoice Domain (T-1103)', () => {
   describe('Invoice.create', () => {
     it('creates an invoice with valid data', () => {
       const invoice = Invoice.create({ orderId: 'order-1', vendorId: 'vendor-1' });
-      expect(invoice.status).toBe(InvoiceStatus.GENERATED);
+      expect(invoice.status).toBe(InvoiceStatus.PENDING);
       expect(invoice.orderId).toBe('order-1');
       expect(invoice.vendorId).toBe('vendor-1');
       expect(invoice.id).toBeTruthy();
@@ -35,6 +35,21 @@ describe('Invoice Domain (T-1103)', () => {
 
     it('throws INVALID_INVOICE for invalid status', () => {
       expect(() => Invoice.create({ orderId: 'o', vendorId: 'v', status: 'bad' as any })).toThrow(InvoiceError.INVALID_INVOICE);
+    });
+
+    it('allows PENDING status', () => {
+      const invoice = Invoice.create({ orderId: 'o', vendorId: 'v', status: InvoiceStatus.PENDING });
+      expect(invoice.status).toBe(InvoiceStatus.PENDING);
+      expect(invoice.pdfUrl).toBe('');
+      expect(invoice.pdfPath).toBe('');
+    });
+
+    it('markGenerated transitions to GENERATED with urls', () => {
+      const invoice = Invoice.create({ orderId: 'o', vendorId: 'v', status: InvoiceStatus.PENDING });
+      invoice.markGenerated('https://cdn.example.com/invoices/x.pdf', 'invoices/2026/10/x.pdf');
+      expect(invoice.status).toBe(InvoiceStatus.GENERATED);
+      expect(invoice.pdfUrl).toBe('https://cdn.example.com/invoices/x.pdf');
+      expect(invoice.pdfPath).toBe('invoices/2026/10/x.pdf');
     });
   });
 

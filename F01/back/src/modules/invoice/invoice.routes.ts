@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { InvoiceService } from './invoice.service';
-import { Invoice, InvoiceError } from './invoice.domain';
+import { Invoice, InvoiceError, InvoiceStatus } from './invoice.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
 import { OrderRepository } from '../order/order.domain';
@@ -61,8 +61,8 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
     return false;
   }
 
-  // GET /invoices - list invoices
-  router.get('/', authMw as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
+  // GET /invoices - list invoices (admin only)
+  router.get('/', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { page, limit } = parsePagination(req);
       const result = await invoiceService.listInvoices(page, limit);
@@ -149,6 +149,9 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       const allowed = await isInvoiceOwner(req, invoice);
       if (!allowed) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
+      if (invoice.status === InvoiceStatus.PENDING || !invoice.pdfUrl) {
+        return res.status(404).json({ error: InvoiceError.INVALID_INVOICE, message: 'PDF not yet generated' });
       }
       return res.json({ pdfUrl: invoice.pdfUrl, url: invoice.pdfUrl });
     } catch (error) {

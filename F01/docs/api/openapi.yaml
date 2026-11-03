@@ -1530,7 +1530,7 @@ components:
         status:
           type: string
           description: Invoice status
-          enum: [generated, sent]
+          enum: [pending, generated, sent]
           example: "generated"
 
     Wallet:
