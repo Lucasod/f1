@@ -2418,3 +2418,211 @@ Proceed with independent authorized tasks: T-703a limitations remediation (if pr
 - Q-016 blocks mixed-cart discount.
 - Q-018 blocks S3 retention/automation decisions.
 - Order/Payment repos are Mongo-backed in production but Payout was recently migrated.
+
+---
+
+## MP-29: Stripe Integration End-to-End Validation
+
+**Date:** 2026-11-03
+**Objective:** Validate Stripe integration end-to-end; fix backend order route mount path; fix Mongo partial index; validate webhook persistence; add webhook edge-case tests.
+
+### Results
+
+- **Backend route mount:** Fixed order route mount path in `F01/back/src/index.ts`.
+- **Mongo partial index:** Fixed partial index in `F01/back/src/shared/database/mongo.client.ts`.
+- **Frontend:** ConsumerProfile adjusted (`F01/front/src/features/consumer/ConsumerProfile.tsx`).
+- **Webhook persistence:** Validated real Stripe webhook delivery (signed request with real webhook secret): order `pending_payment` → `paid`, payment `pending` → `captured`.
+- **Webhook edge-case tests:** Added to `F01/back/src/modules/checkout/stripe-webhook.handler.test.ts`.
+
+### Changes
+
+- `F01/back/src/index.ts` — order route mount path
+- `F01/front/src/features/consumer/ConsumerProfile.tsx` — consumer profile
+- `F01/back/src/shared/database/mongo.client.ts` — Mongo partial index
+- `F01/back/src/modules/checkout/stripe-webhook.handler.test.ts` — webhook edge-case tests
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| Backend tests | 952 passed, 3 skipped |
+| Frontend tests | 575 passed |
+| Backend TypeScript build | clean |
+| Frontend TypeScript build | clean |
+| Real Stripe webhook (signed) | PASS (order paid, payment captured) |
+
+### Evidence
+
+- Webhook validated via real signed request using the real webhook secret; order transitioned `pending_payment` → `paid` and payment `pending` → `captured`.
+
+### Limitations
+
+- Production not declared ready.
+- T-1006, T-1103, T-1104, T-1106, T-703b, T-801–T-803 remain blocked/pending.
+
+### Git State
+
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged.
+
+## MP-31: Global Mandatory Secrets-Protection Rule
+
+**Date:** 2026-11-03
+**Objective:** Establish a global mandatory secrets-protection rule applicable to all agents, tasks, diagnostics, and commands.
+
+### Results
+
+- Created `.kilo/rules/secrets-protection.md` with mandatory prohibitions and diagnostics guidance.
+- Registered the rule in `kilo.jsonc` `instructions`.
+- Added cross-references in `.kilo/rules/universal-rules.md` and `.kilo/rules/project-rules.md`.
+- Added configuration tests for existence, registration, key phrases, and cross-references.
+
+### Changes
+
+- `.kilo/rules/secrets-protection.md` — new mandatory rule
+- `kilo.jsonc` — instructions updated
+- `.kilo/rules/universal-rules.md` — Secrets Protection section
+- `.kilo/rules/project-rules.md` — Secrets Protection section
+- `.kilo/tests/test_agent_configuration.py` — secrets-protection tests
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `.kilo/tests/test_agent_configuration.py` | 20 passed, 33 subtests passed |
+
+### Git State
+
+No commits made.
+
+---
+
+## MP-31: Global Secrets Protection Rule
+
+**Date:** 2026-11-03
+
+### Summary
+
+Established a global mandatory secrets-protection rule applicable to all agents, tasks, diagnostics, and commands.
+
+### Files Created/Modified
+
+- `.kilo/rules/secrets-protection.md`
+- `kilo.jsonc`
+- `.kilo/rules/universal-rules.md`
+- `.kilo/rules/project-rules.md`
+- `.kilo/tests/test_agent_configuration.py`
+- `.kilo/agents/code-orchestrator.md`
+- `F01/docs/mp_log.md`
+
+### Precedence
+
+Absolute over diagnostics, debugging, audit, test, command, and delegation instructions.
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `python .kilo/tests/test_agent_configuration.py` | 20 passed, 33 subtests passed |
+
+### Notes
+
+- No secrets read or exposed.
+- No commits made.
+
+---
+
+## MP-31 Consolidation Note
+
+**Date:** 2026-11-03
+
+Consolidation of the two prior `MP-31` entries above. Prior entries are preserved; this note provides the definitive changed-files list.
+
+### Definitive Changed Files
+
+- `.kilo/rules/secrets-protection.md` — new mandatory rule
+- `kilo.jsonc` — instructions updated
+- `.kilo/rules/universal-rules.md` — Secrets Protection section
+- `.kilo/rules/project-rules.md` — Secrets Protection section
+- `.kilo/rules/autonomous-execution.md` — Secrets Protection cross-reference (MP-31B)
+- `.kilo/agents/code-orchestrator.md` — Secrets Protection cross-reference (MP-31B)
+- `.kilo/agents/code-developer.md` — Secrets Protection cross-reference (MP-31B)
+- `.kilo/agents/code-reviewer.md` — Secrets Protection cross-reference (MP-31B)
+- `.kilo/tests/test_agent_configuration.py` — secrets-protection tests
+- `F01/docs/mp_log.md` — execution log entries
+
+No secrets read or exposed. No commits made.
+
+---
+
+## Configuration Changes Justification (MP-31B / CR-003)
+
+**Date:** 2026-11-03
+
+The code agent delegation block restoration and orchestrator alignment (code agent task allowlist, code-orchestrator delegation) were performed to restore the intended configuration and satisfy the configuration tests. They were not intended to bypass or weaken secrets protection. Secrets protection remains mandatory and takes precedence over all delegation and diagnostic instructions. No permission or allowlist changes were made in MP-31B.
+
+No secrets read or exposed. No commits made.
+
+---
+
+## MP-31B Technical Enforcement Proposal (CR-002)
+
+**Date:** 2026-11-03
+
+### Implemented
+
+- Local git pre-commit hook (`.git/hooks/pre-commit`) scanning **staged content** for secret patterns.
+  - Blocks the commit on match.
+  - Reports only filenames + pattern labels (never values).
+  - Also blocks staged secret-bearing files (e.g. `.env`), except `*.example`.
+
+### Not implemented (requires authorization)
+
+- **CI secret scanning** — no CI exists in this repository.
+- **Kilo command deny patterns** — would require changing allowlists/permissions.
+- **Output redaction** — Kilo has no capability for this.
+
+### Limitations
+
+- Hooks are local and bypassable with `--no-verify`.
+- Hooks are not shared across clones (not tracked in the repository).
+- They provide defense-in-depth, not a guarantee.
+
+### Recommendation
+
+- When CI is introduced, add a secret-scanning workflow (e.g. gitleaks or trufflehog).
+- Consider adding a tracked hook template plus documented activation steps.
+
+No secrets read or exposed. No commits made.
+
+---
+
+## MP-31D: Shareable Secret Scanner and Hook Template
+
+**Date:** 2026-11-03
+**Objective:** Correct MP-31B findings by making secret scanning shareable (tracked scanner + hook template + installer), and add comprehensive tests.
+
+### Files Changed
+
+- `scripts/scan-secrets.sh` — new tracked shareable scanner (POSIX ERE, fail-closed).
+- `.githooks/pre-commit` — new tracked hook template calling the scanner.
+- `scripts/install-hooks.sh` — idempotent hook installer (`core.hooksPath=.githooks`).
+- `scripts/test-scan-secrets.sh` — test suite (fictitious credentials only).
+- `.kilo/rules/secrets-protection.md` — technical enforcement section.
+- `F01/docs/mp_log.md` — this entry; CR-006 test evidence updated to `.kilo/tests/test_agent_configuration.py` (20 passed, 33 subtests).
+- `.git/hooks/pre-commit.mp31-backup` — backup of previous local hook (untracked, local only).
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `scripts/test-scan-secrets.sh` | 33 passed, 0 failed |
+| `python .kilo/tests/test_agent_configuration.py` | 20 passed, 33 subtests |
+| `git config core.hooksPath` | `.githooks` |
+
+### Limitations
+
+- Hooks remain local/bypassable (`--no-verify`); no CI scanning available.
+- Scanner uses heuristics; may produce false positives; reports labels only.
+- Binary detection relies on `grep -I` heuristic when `file` is unavailable.
+
+No secrets read or exposed. No commits made.

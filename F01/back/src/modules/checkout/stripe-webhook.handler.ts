@@ -25,6 +25,9 @@ export function createStripeWebhookHandler(
     }
 
     const session = event.data.object as Stripe.Checkout.Session;
+    if (!event.type.startsWith('checkout.session.')) {
+      return res.status(200).json({ received: true });
+    }
     if (session.currency?.toLowerCase() !== 'brl') {
       return res.status(400).json({ error: 'STRIPE_CURRENCY_MISMATCH' });
     }

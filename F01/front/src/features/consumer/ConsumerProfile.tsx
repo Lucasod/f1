@@ -382,7 +382,7 @@ export function ConsumerProfile() {
           <p className="text-gray-500 mt-1 text-xl font-medium">Manage your personal information</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link to="/consumer/dashboard">
+          <Link to="/dashboard">
             <Button variant="outline" leftIcon={<span aria-hidden="true">←</span>}>
               Back to Dashboard
             </Button>

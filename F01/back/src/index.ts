@@ -248,7 +248,7 @@ invoiceRepo = new MongoInvoiceRepository(db);
       ));
 
       // Order routes
-      app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
+      app.use('/api/v1', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
       // Payment routes (T-1004)
       app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));
@@ -329,7 +329,7 @@ invoiceRepo = new InMemoryInvoiceRepository();
         }
 
         // Order routes
-        app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
+        app.use('/api/v1', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
 
         // Payment routes (T-1004)
         app.use('/api/v1/payments', createPaymentRoutes({ authService, paymentService, vendorRepo, orderRepo }));

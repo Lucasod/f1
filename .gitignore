@@ -19,3 +19,8 @@ F01/front/test-results
 F01/front/test-results/.last-run.json
 node_modules/
 test-storage/uploads/products/
+
+# Secrets / environment
+.env
+.env.*
+!.env.example

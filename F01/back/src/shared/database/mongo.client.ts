@@ -99,7 +99,7 @@ export async function initializeCollections(): Promise<void> {
     paymentsCollection.createIndex({ orderId: 1, createdAt: -1 }),
     paymentsCollection.createIndex({ personId: 1, createdAt: -1 }),
     paymentsCollection.createIndex({ status: 1 }),
-    paymentsCollection.createIndex({ providerTransactionId: 1 }, { unique: true, partialFilterExpression: { providerTransactionId: { $exists: true, $ne: null } } }),
+    paymentsCollection.createIndex({ providerTransactionId: 1 }, { unique: true, partialFilterExpression: { providerTransactionId: { $exists: true, $type: 'string' } } }),
     paymentsCollection.createIndex({ createdAt: -1 }),
 
     // Payouts indexes

@@ -109,3 +109,6 @@ If the Dev cannot invoke the Code Reviewer automatically:
 - Indicate how the handoff should be performed in the project's real environment.
 
 Do not alter permissions, tools, or global configuration without confirmed necessity and proper authorization.
+## Secrets Protection
+
+Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.

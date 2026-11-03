@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+# Shareable secret scanner (MP-31D).
+# Scans staged files (--staged, default) or files passed as arguments.
+# Prints only file paths + pattern labels + categories. Never prints matched values.
+# Exits 0 if clean, non-zero if findings or operational failure.
+
+set -u
+
+# Prerequisite tools: fail closed if unavailable.
+for tool in grep; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    printf 'ERROR: required tool not available: %s. Scan cannot run; commit blocked.\n' "$tool" >&2
+    exit 2
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Pattern table: "CATEGORY<TAB>LABEL<TAB>ERE-regex"
+# Uses POSIX ERE (grep -E). No PCRE.
+# Split literals (avoid self-flagging when scanning this file)
+PK_RE='-----BEGIN'' (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----'
+CERT_RE='-----BEGIN'' CERTIFICATE-----'
+
+# ---------------------------------------------------------------------------
+PATTERNS=(
+  $'Stripe keys\tStripe secret key\tsk_(test|live|rk)_[A-Za-z0-9]{16,}'
+  $'Stripe keys\tStripe restricted key\trk_(test|live)_[A-Za-z0-9]{16,}'
+  $'Stripe keys\tStripe webhook secret\twhsec_[A-Za-z0-9]{16,}'
+  $'AWS access keys\tAWS access key id\t(AKIA|ASIA)[0-9A-Z]{16}'
+  $'GitHub tokens\tGitHub token\tgh[pousr]_[A-Za-z0-9]{36,}'
+  $'GitHub tokens\tGitHub fine-grained PAT\tgithub_pat_[A-Za-z0-9_]{80,}'
+  $'Slack tokens\tSlack token\txox[baprs]-[A-Za-z0-9-]{10,}'
+  "Private keys"$'\t'"Private key block"$'\t'"$PK_RE"
+  "Certificates"$'\t'"Certificate block"$'\t'"$CERT_RE"
+  $'Connection strings\tConnection string with credentials\t[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]/:@]+:[^[:space:]/@]+@'
+  $'Passwords\tPassword assignment\t(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{4,}'
+  $'API keys/secrets/tokens\tAPI key assignment\t(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{8,}'
+  $'API keys/secrets/tokens\tGeneric secret assignment\t(secret|token)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{8,}'
+  $'Authorization headers\tAuthorization header\t(Authorization|authorization)[[:space:]]*[:=][[:space:]]*(Basic|Bearer|Token)[[:space:]]+[A-Za-z0-9._+/=-]{8,}'
+  $'Session cookies\tSession cookie\t(Set-Cookie|Cookie)[[:space:]]*[:=][[:space:]]*[^[:space:]]{16,}'
+  $'Session cookies\tSession id assignment\t(sessionid|session_id|session)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{16,}'
+  $'Base64-encoded secrets\tBase64 secret assignment\t(secret|token|key|password|passwd)[[:space:]]*[:=][[:space:]]*["'\'']?[A-Za-z0-9+/]{32,}={0,2}["'\'']?'
+)
+
+# Sensitive filename check. Returns 0 if sensitive (blocked).
+is_sensitive_name() {
+  base="$1"
+  # allowlist *.example
+  case "$base" in
+    *.example) return 1 ;;
+  esac
+  case "$base" in
+    .env|.env.*) return 0 ;;
+    *.pem|*.key|*.p12|*.pfx) return 0 ;;
+    id_rsa|id_dsa|id_ecdsa|id_ed25519) return 0 ;;
+    credentials.*|secrets.*) return 0 ;;
+    *.crt|*.cer) return 0 ;;
+  esac
+  return 1
+}
+
+# Binary detection on stdin. Returns 0 if binary.
+stdin_is_binary() {
+  # empty => not binary
+  if [ -z "$(cat)" ]; then
+    # consume already done; can't re-read. Handle separately.
+    return 1
+  fi
+  return 1
+}
+
+# We avoid consuming stdin twice by detecting via file/pipe differently.
+# For staged files we use git show piped; for regular files we check the file.
+
+is_binary_file() {
+  f="$1"
+  [ -f "$f" ] || return 1
+  [ -s "$f" ] || return 1  # empty file not binary
+  if LC_ALL=C grep -qI '' "$f" 2>/dev/null; then
+    return 1  # text
+  else
+    return 0  # binary
+  fi
+}
+
+is_binary_staged() {
+  # file path arg (staged name). Read index content via git show.
+  [ -s /dev/stdin ] 2>/dev/null || true
+  # Use git show; detect via grep -I on pipe.
+  if git show ":$1" 2>/dev/null | LC_ALL=C grep -qI '' 2>/dev/null; then
+    # Need distinguish empty: git show output empty -> grep exit 1. Check size.
+    content_size=$(git show ":$1" 2>/dev/null | wc -c)
+    if [ "$content_size" -eq 0 ]; then
+      return 1  # empty, treat as text
+    fi
+    return 1  # text
+  else
+    content_size=$(git show ":$1" 2>/dev/null | wc -c)
+    if [ "$content_size" -eq 0 ]; then
+      return 1
+    fi
+    return 0  # binary
+  fi
+}
+
+# Safe-line filter: returns 0 if line should be ignored (not a real secret).
+is_safe_line() {
+  line="$1"
+  case "$line" in
+    *process.env*|*os.environ*|*getenv*|*env\[*|*config.*|*System.getenv*|*os.Getenv*) return 0 ;;
+  esac
+  return 1
+}
+
+# Content scan for a single file. Sets FOUND_LABELS (newline list) via global.
+FOUND_LABELS=""
+
+scan_text_content() {
+  # $1 = content command type: "staged" or "file"
+  # $2 = file path
+  # content is read from stdin? We'll pass via function using git show/cat.
+  f="$2"
+  FOUND_LABELS=""
+  # get content lines
+  if [ "$1" = "staged" ]; then
+    content=$(git show ":$f" 2>/dev/null) || content=""
+  else
+    content=$(cat "$f" 2>/dev/null) || content=""
+  fi
+
+  for entry in "${PATTERNS[@]}"; do
+    category="${entry%%$'\t'*}"
+    rest="${entry#*$'\t'}"
+    label="${rest%%$'\t'*}"
+    regex="${rest#*$'\t'}"
+    # find matching lines
+    matched_lines=$(printf '%s\n' "$content" | grep -iEn -- "$regex" 2>/dev/null || true)
+    if [ -z "$matched_lines" ]; then
+      continue
+    fi
+    # filter safe lines
+    real=""
+    while IFS= read -r ln; do
+      [ -z "$ln" ] && continue
+      # strip line number prefix for safety check
+      line_text="${ln#*:}"
+      if is_safe_line "$line_text"; then
+        continue
+      fi
+      real="$real$ln"$'\n'
+    done <<< "$matched_lines"
+    if [ -n "$real" ]; then
+      if [ -z "$FOUND_LABELS" ]; then
+        FOUND_LABELS="[$category] $label"
+      else
+        FOUND_LABELS="$FOUND_LABELS"$'\n'"[$category] $label"
+      fi
+    fi
+  done
+}
+
+found=0
+
+# Determine mode
+mode="staged"
+file_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --staged) mode="staged" ;;
+    --help|-h)
+      cat <<'EOF'
+Usage: scan-secrets.sh [--staged] [file ...]
+  --staged   Scan git staged files (default when no files given).
+  file ...   Scan the given files.
+Exits 0 if clean, non-zero if findings.
+EOF
+      exit 0
+      ;;
+    *) file_args+=("$arg"); mode="files" ;;
+  esac
+done
+
+if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
+  if ! command -v git >/dev/null 2>&1; then
+    printf 'ERROR: git not available; staged scan cannot run.\n' >&2
+    exit 2
+  fi
+  # staged file list
+  staged_files=()
+  while IFS= read -r -d '' f; do
+    staged_files+=("$f")
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null)
+  if [ ${#staged_files[@]} -eq 0 ]; then
+    # nothing staged; clean
+    exit 0
+  fi
+  for f in "${staged_files[@]}"; do
+    base="${f##*/}"
+    if is_sensitive_name "$base"; then
+      printf 'BLOCKED: [Sensitive file] sensitive file name: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    if is_binary_staged "$f"; then
+      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    scan_text_content "staged" "$f"
+    if [ -n "$FOUND_LABELS" ]; then
+      while IFS= read -r lbl; do
+        [ -z "$lbl" ] && continue
+        printf 'BLOCKED: %s: %s\n' "$lbl" "$f" >&2
+      done <<< "$FOUND_LABELS"
+      found=1
+    fi
+  done
+else
+  for f in "${file_args[@]}"; do
+    if [ ! -e "$f" ]; then
+      printf 'ERROR: file not found: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    base="${f##*/}"
+    if is_sensitive_name "$base"; then
+      printf 'BLOCKED: [Sensitive file] sensitive file name: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    if is_binary_file "$f"; then
+      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    scan_text_content "file" "$f"
+    if [ -n "$FOUND_LABELS" ]; then
+      while IFS= read -r lbl; do
+        [ -z "$lbl" ] && continue
+        printf 'BLOCKED: %s: %s\n' "$lbl" "$f" >&2
+      done <<< "$FOUND_LABELS"
+      found=1
+    fi
+  done
+fi
+
+if [ "$found" -ne 0 ]; then
+  printf '\nCommit aborted by local secrets scan. Remove the secret, rotate if exposed, and retry.\n' >&2
+  exit 1
+fi
+exit 0

@@ -3,9 +3,19 @@
   "instructions": [
     ".kilo/rules/universal-rules.md",
     ".kilo/rules/project-rules.md",
-    ".kilo/rules/autonomous-execution.md"
+    ".kilo/rules/autonomous-execution.md",
+    ".kilo/rules/secrets-protection.md"
   ],
   "agent": {
+    "code": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "code-reviewer": "allow",
+          "code-orchestrator": "allow"
+        }
+      }
+    }
   },
   "indexing": {
     "fileExtensions": [

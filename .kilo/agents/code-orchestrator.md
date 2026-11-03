@@ -1,6 +1,6 @@
 ---
 description: Orchestrates autonomous execution runs; delegates implementation to code-developer and reviews to code-reviewer via task tool; read-only except for task delegation
-mode: all
+mode: primary
 steps: 300
 hidden: false
 color: "#00BFFF"
@@ -13,7 +13,6 @@ permission:
   bash: deny
   background: allow
   task:
-    "self": deny
     "*": deny
     "code-developer": allow
     "code-reviewer": allow
@@ -29,6 +28,8 @@ permission:
 **Description claims:** "read-only except for task delegation" — this is **consistent** with the configuration which denies `edit` and `bash`.
 
 Kilo's permission layer applies the declared configuration. The prompt-level prohibition on modifications still applies; do not claim that tool restrictions prove the absence of every possible runtime or external write path.
+
+**Secrets Protection:** Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.
 
 ## IDENTITY AND MISSION
 

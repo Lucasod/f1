@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Tracked pre-commit hook template (MP-31D).
+# Activated via: git config core.hooksPath .githooks  (run scripts/install-hooks.sh)
+# Or copy to .git/hooks/pre-commit (backup old hook first).
+# Scans staged content using scripts/scan-secrets.sh. Blocks commit on findings.
+# Reports only filenames + pattern labels + categories. Never prints matched values.
+
+set -u
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "ERROR: not a git repository." >&2
+  exit 1
+}
+
+SCANNER="$REPO_ROOT/scripts/scan-secrets.sh"
+if [ ! -x "$SCANNER" ]; then
+  # fall back to bash invocation
+  if [ ! -f "$SCANNER" ]; then
+    echo "ERROR: scanner not found: $SCANNER" >&2
+    exit 1
+  fi
+  bash "$SCANNER" --staged
+  exit $?
+fi
+
+"$SCANNER" --staged
+exit $?

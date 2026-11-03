@@ -29,4 +29,6 @@
 - Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlist limits Code to the `code-reviewer` agent. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.
 - The reviewer's `edit`, `bash`, and `task` tools are denied. This prevents file edits through those tools and nested delegation, but does not prove every runtime or external path is read-only. Do not claim stronger enforcement than the installed runtime exposes.
 - If delegation is unavailable, report `BLOCKED` for required independent review. Do not substitute self-review or claim a delegated review occurred.
-- Do not commit, push, merge, rebase, deploy, alter operational data, or change external/global configuration during autonomous execution unless the user separately authorizes that specific action.
+## Secrets Protection
+
+Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.

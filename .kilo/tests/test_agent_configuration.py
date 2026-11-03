@@ -182,5 +182,77 @@ class AgentConfigurationTests(unittest.TestCase):
                 self.assertIn(required_term.lower(), rules.lower())
 
 
+    def test_secrets_protection_rule_exists(self):
+        """secrets-protection.md must exist as a mandatory rule file."""
+        self.assertTrue((ROOT / ".kilo/rules/secrets-protection.md").is_file())
+
+    def test_secrets_protection_in_kilo_instructions(self):
+        """secrets-protection.md must be listed in kilo.jsonc instructions."""
+        instructions = self.kilo_config.get("instructions", [])
+        self.assertIn(".kilo/rules/secrets-protection.md", instructions)
+
+    def test_secrets_protection_contains_key_phrases(self):
+        """secrets-protection.md must contain mandatory key phrases."""
+        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        for phrase in ("Never display", "cat .env", "printenv", "precedence", "rotation"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, content)
+
+    def test_rules_reference_secrets_protection(self):
+        """universal-rules.md and project-rules.md must reference secrets-protection."""
+        for rule_file in ("universal-rules.md", "project-rules.md"):
+            content = (ROOT / ".kilo/rules" / rule_file).read_text()
+            self.assertIn("secrets-protection.md", content)
+
+
+    def test_secrets_protection_section_headings(self):
+        """secrets-protection.md must contain the required section headings."""
+        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        for heading in (
+            "Core Prohibitions",
+            "Diagnostics",
+            "Repository and File Protection",
+            "Suspected Exposure",
+            "Secret Taxonomy",
+            "Scope and Enforcement",
+        ):
+            with self.subTest(heading=heading):
+                self.assertIn(f"## {heading}", content)
+
+    def test_secrets_protection_taxonomy_categories(self):
+        """Secret Taxonomy must list the required categories."""
+        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        for category in (
+            "API keys",
+            "Tokens",
+            "Passwords",
+            "Database credentials",
+            "Private keys",
+            "Webhook secrets",
+            "Certificates",
+            "Connection strings",
+            "Session cookies",
+            "Authorization headers",
+            "Base64-encoded secrets",
+        ):
+            with self.subTest(category=category):
+                self.assertIn(category, content)
+        self.assertIn("When in doubt, treat as secret", content)
+
+    def test_autonomous_execution_references_secrets_protection(self):
+        """autonomous-execution.md must cross-reference secrets-protection.md."""
+        content = (ROOT / ".kilo/rules/autonomous-execution.md").read_text()
+        self.assertIn("secrets-protection.md", content)
+        self.assertIn("## Secrets Protection", content)
+
+    def test_agents_reference_secrets_protection(self):
+        """Each core agent must cross-reference secrets-protection.md."""
+        for agent in ("code-orchestrator", "code-developer", "code-reviewer"):
+            content = (ROOT / ".kilo/agents" / f"{agent}.md").read_text()
+            with self.subTest(agent=agent):
+                self.assertIn("secrets-protection.md", content)
+                self.assertIn("Secrets Protection", content)
+
+
 if __name__ == "__main__":
     unittest.main()
