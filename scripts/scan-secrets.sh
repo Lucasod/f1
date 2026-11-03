@@ -7,7 +7,7 @@
 set -u
 
 # Prerequisite tools: fail closed if unavailable.
-for tool in grep; do
+for tool in grep sed; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     printf 'ERROR: required tool not available: %s. Scan cannot run; commit blocked.\n' "$tool" >&2
     exit 2
@@ -33,12 +33,12 @@ PATTERNS=(
   "Private keys"$'\t'"Private key block"$'\t'"$PK_RE"
   "Certificates"$'\t'"Certificate block"$'\t'"$CERT_RE"
   $'Connection strings\tConnection string with credentials\t[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]/:@]+:[^[:space:]/@]+@'
-  $'Passwords\tPassword assignment\t(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{4,}'
-  $'API keys/secrets/tokens\tAPI key assignment\t(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{8,}'
-  $'API keys/secrets/tokens\tGeneric secret assignment\t(secret|token)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{8,}'
+  $'Passwords\tPassword assignment\t(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
+  $'API keys/secrets/tokens\tAPI key assignment\t(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
+  $'API keys/secrets/tokens\tGeneric secret assignment\t(secret|token)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
   $'Authorization headers\tAuthorization header\t(Authorization|authorization)[[:space:]]*[:=][[:space:]]*(Basic|Bearer|Token)[[:space:]]+[A-Za-z0-9._+/=-]{8,}'
   $'Session cookies\tSession cookie\t(Set-Cookie|Cookie)[[:space:]]*[:=][[:space:]]*[^[:space:]]{16,}'
-  $'Session cookies\tSession id assignment\t(sessionid|session_id|session)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{16,}'
+  $'Session cookies\tSession id assignment\t(sessionid|session_id|session)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{16,}'
   $'Base64-encoded secrets\tBase64 secret assignment\t(secret|token|key|password|passwd)[[:space:]]*[:=][[:space:]]*["'\'']?[A-Za-z0-9+/]{32,}={0,2}["'\'']?'
 )
 
@@ -59,13 +59,15 @@ is_sensitive_name() {
   return 1
 }
 
-# Binary detection on stdin. Returns 0 if binary.
-stdin_is_binary() {
-  # empty => not binary
-  if [ -z "$(cat)" ]; then
-    # consume already done; can't re-read. Handle separately.
-    return 1
-  fi
+# Determine whether a file is markdown (by extension). Backtick stripping
+# applies only to markdown files to avoid under-detecting secrets in
+# template literals in non-markdown files (CR-002).
+is_markdown_file() {
+  f="$1"
+  base="${f##*/}"
+  case "$base" in
+    *.[Mm][Dd]|*.[Mm][Dd][Xx]|*.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]) return 0 ;;
+  esac
   return 1
 }
 
@@ -85,7 +87,6 @@ is_binary_file() {
 
 is_binary_staged() {
   # file path arg (staged name). Read index content via git show.
-  [ -s /dev/stdin ] 2>/dev/null || true
   # Use git show; detect via grep -I on pipe.
   if git show ":$1" 2>/dev/null | LC_ALL=C grep -qI '' 2>/dev/null; then
     # Need distinguish empty: git show output empty -> grep exit 1. Check size.
@@ -107,7 +108,7 @@ is_binary_staged() {
 is_safe_line() {
   line="$1"
   case "$line" in
-    *process.env*|*os.environ*|*getenv*|*env\[*|*config.*|*System.getenv*|*os.Getenv*) return 0 ;;
+    *process.env*|*os.environ*|*getenv*|*env\[*|*System.getenv*|*os.Getenv*) return 0 ;;
   esac
   return 1
 }
@@ -128,13 +129,23 @@ scan_text_content() {
     content=$(cat "$f" 2>/dev/null) || content=""
   fi
 
+  # Strip inline code spans (backtick-quoted content) to avoid
+  # false positives from documentation examples. This is a general
+  # heuristic applied ONLY to markdown files; non-markdown files are
+  # scanned in full to avoid under-detection in template literals.
+  if is_markdown_file "$f"; then
+    content_stripped=$(printf '%s\n' "$content" | sed 's/`[^`]*`//g')
+  else
+    content_stripped="$content"
+  fi
+
   for entry in "${PATTERNS[@]}"; do
     category="${entry%%$'\t'*}"
     rest="${entry#*$'\t'}"
     label="${rest%%$'\t'*}"
     regex="${rest#*$'\t'}"
     # find matching lines
-    matched_lines=$(printf '%s\n' "$content" | grep -iEn -- "$regex" 2>/dev/null || true)
+    matched_lines=$(printf '%s\n' "$content_stripped" | grep -iEn -- "$regex" 2>/dev/null || true)
     if [ -z "$matched_lines" ]; then
       continue
     fi
@@ -186,10 +197,22 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
     exit 2
   fi
   # staged file list
+  staged_tmp=$(mktemp 2>/dev/null) || {
+    printf 'ERROR: cannot create temp file for staged scan.\n' >&2
+    exit 2
+  }
+  git diff --cached --name-only -z --diff-filter=ACMR >"$staged_tmp" 2>/dev/null
+  git_rc=$?
+  if [ "$git_rc" -ne 0 ]; then
+    rm -f "$staged_tmp"
+    printf 'ERROR: git diff --cached failed (exit %d); staged scan cannot run.\n' "$git_rc" >&2
+    exit 2
+  fi
   staged_files=()
   while IFS= read -r -d '' f; do
     staged_files+=("$f")
-  done < <(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null)
+  done < "$staged_tmp"
+  rm -f "$staged_tmp"
   if [ ${#staged_files[@]} -eq 0 ]; then
     # nothing staged; clean
     exit 0
@@ -219,6 +242,11 @@ else
   for f in "${file_args[@]}"; do
     if [ ! -e "$f" ]; then
       printf 'ERROR: file not found: %s\n' "$f" >&2
+      found=1
+      continue
+    fi
+    if [ ! -f "$f" ]; then
+      printf 'ERROR: not a regular file: %s\n' "$f" >&2
       found=1
       continue
     fi

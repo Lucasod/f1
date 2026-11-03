@@ -2626,3 +2626,226 @@ No secrets read or exposed. No commits made.
 - Binary detection relies on `grep -I` heuristic when `file` is unavailable.
 
 No secrets read or exposed. No commits made.
+
+---
+
+## MP-31G: Secrets Scanner False Positives Fix — Documentation and Final Verification
+
+**Date:** 2026-11-03
+**Objective:** Fix false positives in the secrets scanner (Password and Session patterns), update regression tests, and complete documentation (I-Implement, R-Review, D-Documentation) for the MP-31 cycle.
+
+### I — Implement (Phase I)
+
+**Root cause (hypothesis):** The `Passwords` and `Session cookies` (session id assignment) patterns in `scripts/scan-secrets.sh` made the opening quote character optional (`["']?`), so unquoted identifiers and declarations such as `const session = event.data.object as Stripe.Checkout.Session;` and `const handleChangePassword = useCallback(...)` matched the password/session patterns and produced false positives. The `*config.*` safe-line exception also masked quoted config secrets.
+
+**Changes applied (`scripts/scan-secrets.sh`):**
+- Made the opening quote mandatory for `Passwords`, `API key assignment`, `Generic secret assignment`, and `Session id assignment` patterns (`["']` instead of `["']?`), so only quoted credential-like literals are flagged.
+- Removed the `*config.*` exception from `is_safe_line`, so quoted secrets under `config.*` remain detected (true positive preserved).
+- Removed the dead `stdin_is_binary` helper.
+- Fixed staged-file enumeration to read from a temp file instead of process substitution, and added a regular-file guard in file mode.
+
+**Changes applied (`scripts/test-scan-secrets.sh`):**
+- Added `check_no_detect` helper for false-positive regression cases.
+- Added 9 false-positive cases (Stripe Session object, `handleChangePassword`, React password state variables, `type="password"`, `value={currentPassword}`, unquoted function calls) that must NOT be flagged.
+- Added 5 true-positive cases confirming quoted credential-like literals are still detected, including `config.password` and `config.token`.
+- Added directory-input rejection, staged-mode fail-closed on git error, and updated staged secret fixture to use quotes.
+- Updated existing Password/Session cookie fixtures to use quoted values.
+
+### R — Review (Phase R)
+
+Independent code review (MP-31G cycle) findings and corrections:
+
+| Finding | Severity | Description | Correction |
+|---------|----------|-------------|------------|
+| CR-FP-01 | HIGH | Optional quote in Password/Session patterns caused false positives on unquoted identifiers (`session`, `handleChangePassword`, React state variables). | Made opening quote mandatory in affected patterns. |
+| CR-FP-02 | MEDIUM | `*config.*` safe-line exception suppressed detection of quoted secrets assigned via `config.password`/`config.token`. | Removed `*config.*` from `is_safe_line`; added true-positive regression tests. |
+| CR-FP-03 | LOW | Staged enumeration used process substitution, fragile under some shells. | Switched to temp-file based enumeration with explicit git error handling. |
+| CR-FP-04 | LOW | Directory input not explicitly rejected in file mode. | Added regular-file guard returning non-zero. |
+
+**Review verdict:** PASS after corrections. No scope expansion. No secrets read or exposed.
+
+### D — Documentation (Phase D)
+
+- This MP-31G entry appended to `F01/docs/mp_log.md`.
+- `.kilo/rules/secrets-protection.md` "Technical Enforcement" section updated to reflect the scanner patterns, categories, fail-closed behavior, limitations, and installation instructions (MP-31D/MP-31G).
+- Hook divergence documented below.
+
+### Files Modified in This Cycle
+
+- `scripts/scan-secrets.sh` — pattern hardening, safe-line filter correction, staged enumeration fix, file guard.
+- `scripts/test-scan-secrets.sh` — regression test expansion (false positives + true positives + fail-closed cases).
+- `.kilo/rules/secrets-protection.md` — Technical Enforcement section update.
+- `F01/docs/mp_log.md` — this entry.
+
+### Test Results
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Scanner | `bash scripts/test-scan-secrets.sh` | 49 passed, 0 failed |
+| Agent config | `python3 -m pytest .kilo/tests/test_agent_configuration.py` | 20 passed |
+
+- Scans of the two previously affected files (`F01/back/src/modules/checkout/stripe-webhook.handler.ts` and related) now return no findings.
+- No secret values printed in any test output.
+
+### Limitations and Residual Risks
+
+- Reduced detection of unquoted secrets: credential-like values assigned without quotes (e.g. `password = abc123`) are no longer flagged by the Password/Session patterns. Operators must quote secrets or rely on other patterns (AWS, Stripe, GitHub, etc.).
+- Other scanner patterns (Connection strings, Base64, Authorization headers) retain their original behavior and may still produce false positives or miss obfuscated values.
+- Heuristic scanner only; not a substitute for dedicated tools (gitleaks/trufflehog) or CI scanning.
+- Binary detection relies on `grep -I` heuristic when `file` is unavailable.
+- Hooks are local and bypassable via `--no-verify`.
+
+### Hook Divergence Documentation
+
+- **Active hook (tracked template):** `.githooks/pre-commit` invoked via `core.hooksPath=.githooks` (set by `scripts/install-hooks.sh`). This is the authoritative, shared hook and calls `scripts/scan-secrets.sh --staged`.
+- **Legacy local hook (divergent):** `.git/hooks/pre-commit` remains from the earlier MP-31B local-only implementation. It is NOT active because `core.hooksPath` points to `.githooks`. It has been backed up to `.git/hooks/pre-commit.mp31-backup`.
+- **Divergence:** The legacy hook contains a narrower, inline pattern set and a different message format; it does not delegate to the shared scanner. Do not rely on it. Installation should use `scripts/install-hooks.sh` (idempotent) or manually set `git config core.hooksPath .githooks`.
+- **Recommendation:** Remove or ignore the legacy `.git/hooks/pre-commit` after confirming the tracked template works; never commit `.git/hooks/` contents.
+
+### Git State
+
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged. No `.env` or secret values read.
+
+---
+
+No secrets read or exposed. No commits made.
+
+
+---
+
+## MP-32: Secrets Protection False Positive Audit — Backtick Inline Code Stripping
+
+**Date:** 2026-11-03
+**Objective:** Eliminate documentation false positives caused by scanner inability to distinguish documentation examples from real secrets, while preserving detection of real secrets.
+
+### Cause
+
+The scanner could not distinguish documentation examples from real secrets when both contained the same literal strings (e.g. PEM certificate headers, connection strings with credentials, quoted password/session assignments inside markdown inline code).
+
+### Solution
+
+Strip inline code spans (backtick-quoted content) before running regex patterns in `scan_text_content()`. This is a general heuristic for markdown inline code, not a file-specific exclusion. Fenced code blocks (triple backticks on separate lines) are NOT stripped; only inline code spans.
+
+### Changes
+
+- `scripts/scan-secrets.sh`: `scan_text_content()` now computes `content_stripped` via `sed 's/`[^`]*`//g'` (markdown files only) and greps the stripped content. Backtick stripping occurs before line matching; `is_safe_line()` operates on the already-stripped matched lines (it does not perform its own backtick stripping).
+- `scripts/test-scan-secrets.sh`: added negative (backtick-quoted cert/conn/password/session), positive (real secrets without backticks), and mixed-content tests.
+- `.kilo/rules/secrets-protection.md`: documented backtick-stripping in Technical Enforcement section.
+
+### Test Results
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Scanner | `bash scripts/test-scan-secrets.sh` | 74 passed, 0 failed |
+| Agent config | `python3 -m pytest .kilo/tests/test_agent_configuration.py` | 20 passed |
+
+### Limitations
+
+- Fenced code blocks (triple backticks on separate lines) are not stripped; only inline code spans.
+- Heuristic scanner only; not a substitute for dedicated tools or CI scanning.
+
+### Git State
+
+No commits made. No `.env` or secret values read.
+
+---
+
+## MP-32FIRD: Finalize MP-32 — Documentation and Validation
+
+**Date:** 2026-11-03
+**Objective:** Finalize MP-32 (backtick inline-code stripping) documentation, record independent-review findings and fixes, and run final verification.
+**Scope:** Documentation finalization + validation only. No commit. No `.env` read.
+
+### Cause
+
+Documentation examples in `.kilo/rules/secrets-protection.md` (and other markdown) triggered scanner patterns: the literal PEM header `-----BEGIN CERTIFICATE-----` matched the Certificate block pattern, and the illustrative URI `scheme://user:pass@host` matched the connection-string-with-credentials pattern. Both were false positives — illustrative documentation of what the scanner detects, not real secrets. The same risk applied to quoted password/session assignments shown in markdown inline code.
+
+### Solution
+
+Backtick-stripping for markdown files only: `scan_text_content()` strips inline code spans (backtick-quoted content) via `sed 's/`[^`]*`//g'` before running regex patterns, but only for markdown files (`.md`, `.mdx`, `.markdown`). Fenced code blocks (triple backticks on separate lines) are NOT stripped and remain scanned. Non-markdown files are scanned in full to avoid under-detection in template literals. `sed` was added to the required-tools list (fail-closed if missing).
+
+### Review Findings (CR-001..CR-005) and Fixes
+
+Review of the MP-32 change (self-review; independent code-reviewer delegation was unavailable in this environment) produced the following findings. All were resolved within scope before finalization.
+
+| ID | Severity | File / Location | Finding | Fix / Disposition |
+|----|----------|-----------------|---------|-------------------|
+| CR-001 | MEDIUM | `scripts/scan-secrets.sh` — `is_markdown_file()` | Extension check was case-sensitive (`.MD`/`.MDX` not recognized), so uppercase-extension markdown could bypass backtick stripping and produce false positives. | Made extension matching case-insensitive (`.md`/`.mdx`/`.markdown` in any case). |
+| CR-002 | LOW | `F01/docs/mp_log.md` — MP-32 entry | Documentation inaccuracy: claimed `is_safe_line()` performs backtick stripping; in reality stripping occurs upstream in `scan_text_content()` and `is_safe_line()` operates on already-stripped lines. Test count was also stale (58 vs. 74). | Corrected the MP-32 entry wording and updated the test count to 74. |
+| CR-003 | MEDIUM | `.kilo/rules/secrets-protection.md` — Limitations | The inline-code bypass risk (a real secret wrapped in backticks evades detection) was not explicitly called out in the Limitations section. | Added an explicit limitation bullet describing the inline-code bypass and the recommendation to use obviously fake values or fenced blocks. |
+| CR-004 | LOW | `scripts/scan-secrets.sh` — `is_markdown_file()` / `is_safe_line()` | Helper functions assign global variables (`f`, `base`, `line`) that could be clobbered by callers; minor maintainability/robustness concern. | Accepted as low-risk; documented. No behavior change (helpers are internal). |
+| CR-005 | LOW | `.kilo/rules/secrets-protection.md` — Scanner Patterns section | Examples rely on inline backticks for safe rendering; if reformatted without backticks the rule file itself would be blocked by the scanner. | Accepted as documentation constraint; examples retained in inline backticks (verified by final scan exit 0). |
+
+**Review verdict:** PASS after corrections. No scope expansion. No secrets read or exposed.
+
+### Test Results
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Scanner | `bash scripts/test-scan-secrets.sh` | 74 passed, 0 failed |
+| Agent config | `python3 -m pytest .kilo/tests/test_agent_configuration.py` | 20 passed |
+| Rule file self-scan | `bash scripts/scan-secrets.sh .kilo/rules/secrets-protection.md` | exit 0 (clean) |
+
+### Limitations and Residual Risks
+
+- Backtick inline-code stripping is a heuristic that can mask a real secret if written inside inline backticks in a markdown file; use obviously fake values in documentation examples or fenced code blocks (which are scanned).
+- Fenced code blocks (triple backticks on separate lines) are not stripped; only inline code spans.
+- Backtick stripping is applied line-by-line, so multi-line inline spans are not stripped.
+- Inline code spans appearing inside fenced code blocks may also be stripped (line-based, no fence tracking).
+- Reduced detection of unquoted secrets (MP-31G): credential-like values assigned without quotes are not flagged by Password/Session patterns.
+- Heuristic scanner only; not a substitute for dedicated tools (gitleaks/trufflehog) or CI scanning.
+- Hooks are local and bypassable via `--no-verify`; no CI workflow exists in this repository.
+
+### Git State
+
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged. No `.env` or secret values read.
+
+---
+
+No secrets read or exposed. No commits made.
+
+---
+
+## MP-32G: Finalize Scanner Self-Scan — Test Fixture Refactoring
+
+**Date:** 2026-11-03
+**Objective:** Eliminate self-referential false positives in `scripts/test-scan-secrets.sh` so the scanner's own test file passes its own scan with exit 0.
+**Scope:** Test fixture refactoring + documentation finalization. No commit. No `.env` read.
+
+### Cause
+
+The test file `scripts/test-scan-secrets.sh` contained secret-like literals as fixtures (e.g. `-----BEGIN CERTIFICATE-----`, `mongodb://user:pass@host/db`, `password = "mySecret123"`, quoted session/password assignments). These literals triggered the scanner's own patterns, producing self-referential false positives when running `bash scripts/scan-secrets.sh scripts/test-scan-secrets.sh`.
+
+### Solution
+
+Refactored fixtures to construct patterns dynamically via variable concatenation (e.g. `CERT_BEGIN="-----BEGIN"` + `CERT_END="CERTIFICATE-----"`; `CONN_SCHEME`/`CONN_SEP`/`CONN_AUTH`; `PW_PART1`/`PW_PART2`; `SID_PART1`/`SID_PART2`), and assembled backtick-wrapped fixtures via `printf`/variable expansion. This removes literal secret-like strings from the test source while preserving the exact bytes fed to the scanner at runtime, so detection behavior is unchanged.
+
+### Review Findings
+
+Independent review verdict: **APPROVED**, 0 findings. No scope expansion. No secrets read or exposed.
+
+### Test Results
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Scanner | `bash scripts/test-scan-secrets.sh` | 74 passed, 0 failed |
+| Scanner self-scan | `bash scripts/scan-secrets.sh scripts/test-scan-secrets.sh` | exit 0 (no false positives) |
+| Agent config | `python3 -m pytest .kilo/tests/test_agent_configuration.py` | (verified in prior MP-32FIRD: 20 passed) |
+
+### Limitations
+
+- Execution evidence recorded from documentation; not freshly observed in this review pass beyond the commands listed above.
+- Heuristic scanner only; not a substitute for dedicated tools (gitleaks/trufflehog) or CI scanning.
+- Hooks are local and bypassable via `--no-verify`; no CI workflow exists in this repository.
+
+### Files Modified
+
+- `scripts/test-scan-secrets.sh` only.
+
+### Git State
+
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged. No `.env` or secret values read.
+
+---
+
+No secrets read or exposed. No commits made.
