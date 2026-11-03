@@ -25,6 +25,9 @@ describe('Config Validation', () => {
     delete process.env.JWT_SECRET;
     delete process.env.JWT_EXPIRES_IN;
     delete process.env.PORT;
+    process.env.STRIPE_SECRET_KEY = '';
+    process.env.STRIPE_WEBHOOK_SECRET = '';
+    process.env.FRONTEND_URL = '';
   });
 
   afterEach(() => {
@@ -46,6 +49,9 @@ describe('Config Validation', () => {
       expect(config.corsOrigins).toEqual([]);
       expect(config.isProduction).toBe(false);
       expect(config.commissionPct).toBe(10);
+      expect(Object.keys(config)).not.toContain('stripeSecretKey');
+      expect(Object.keys(config)).not.toContain('stripeWebhookSecret');
+      expect(config.frontendUrl).toBe('http://localhost:5173');
     });
 
     it('should allow empty CORS_ORIGIN in development', async () => {

@@ -344,6 +344,7 @@ const mockOrder: Order = {
 
 const resetMocks = () => {
   vi.clearAllMocks();
+  vi.stubGlobal('open', vi.fn());
   mockPersonApi.getMe.mockReset();
   mockCheckoutApi.preview.mockReset();
   mockCheckoutApi.checkout.mockReset();
@@ -595,8 +596,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(screen.getByText(/^forma de pagamento$/i)).toBeInTheDocument();
 
     // Check payment options
-    expect(screen.getByLabelText(/cartão de crédito \(stripe - mock\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/pix \(mock\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/pagamento seguro via stripe/i)).toBeInTheDocument();
+    expect(within(screen.getByRole('radiogroup', { name: /forma de pagamento/i })).getAllByRole('radio')).toHaveLength(1);
   });
 
   it('validates payment method is required (button disabled when not selected)', async () => {
@@ -616,7 +617,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
   });
 
   it('submits checkout and handles success (shows confirmation)', async () => {
-    mockCheckoutApi.checkout.mockResolvedValueOnce({ order: mockOrder, clientSecret: 'cs_test_123' });
+    mockCheckoutApi.checkout.mockResolvedValueOnce({ order: mockOrder, checkoutUrl: 'https://checkout.stripe.test/session' });
     mockUseCheckoutState.reset.mockClear();
 
     const { rerender } = renderWithNav(<CheckoutPage />);
@@ -630,10 +631,10 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     await waitFor(() => expect(mockUseCheckoutState.setSelectedAddressId).toHaveBeenCalledWith('addr-1'));
 
     // Select payment
-    fireEvent.click(screen.getByLabelText(/cartão de crédito \(stripe - mock\)/i));
+    fireEvent.click(screen.getByLabelText(/pagamento seguro via stripe/i));
 
     // Wait for payment selection
-    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('credit_card'));
+    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('stripe_checkout'));
 
     // Force re-render to pick up updated mock state
     rerender(<CheckoutPage />);
@@ -648,6 +649,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
         shippingAddressId: 'addr-1',
         couponCodes: undefined,
       });
+      expect(window.open).toHaveBeenCalledWith('https://checkout.stripe.test/session', '_self');
     });
 
     // Simulate successful submission by updating mock state using mock functions
@@ -675,10 +677,10 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     await waitFor(() => expect(mockUseCheckoutState.setSelectedAddressId).toHaveBeenCalledWith('addr-1'));
 
     // Select payment
-    fireEvent.click(screen.getByLabelText(/cartão de crédito \(stripe - mock\)/i));
+    fireEvent.click(screen.getByLabelText(/pagamento seguro via stripe/i));
 
     // Wait for payment selection
-    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('credit_card'));
+    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('stripe_checkout'));
 
     // Force re-render to pick up updated mock state
     rerender(<CheckoutPage />);
@@ -704,8 +706,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
   });
 
   it('prevents double submission (button disabled while submitting)', async () => {
-    let resolveCheckout: (value: { order: Order; clientSecret: string }) => void;
-    const checkoutPromise = new Promise<{ order: Order; clientSecret: string }>((resolve) => {
+    let resolveCheckout: (value: { order: Order; checkoutUrl: string }) => void;
+    const checkoutPromise = new Promise<{ order: Order; checkoutUrl: string }>((resolve) => {
       resolveCheckout = resolve;
     });
     mockCheckoutApi.checkout.mockReturnValueOnce(checkoutPromise);
@@ -721,10 +723,10 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     await waitFor(() => expect(mockUseCheckoutState.setSelectedAddressId).toHaveBeenCalledWith('addr-1'));
 
     // Select payment
-    fireEvent.click(screen.getByLabelText(/cartão de crédito \(stripe - mock\)/i));
+    fireEvent.click(screen.getByLabelText(/pagamento seguro via stripe/i));
 
     // Wait for payment selection
-    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('credit_card'));
+    await waitFor(() => expect(mockUseCheckoutState.setPaymentMethod).toHaveBeenCalledWith('stripe_checkout'));
 
     // Force re-render to pick up updated mock state
     rerender(<CheckoutPage />);
@@ -739,7 +741,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     // Resolve the promise
     await act(async () => {
-      resolveCheckout!({ order: mockOrder, clientSecret: 'cs_test_123' });
+      resolveCheckout!({ order: mockOrder, checkoutUrl: 'https://checkout.stripe.test/session' });
     });
 
     // Should only have been called once due to double-click prevention

@@ -31,7 +31,7 @@ export interface CheckoutInput {
 
 export interface CheckoutResponse {
   order: Order;
-  clientSecret: string;
+  checkoutUrl: string;
 }
 
 /**

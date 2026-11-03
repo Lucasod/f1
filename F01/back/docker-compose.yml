@@ -1,6 +1,8 @@
 
 services:
   backend:
+    env_file:
+      - ./.env
     command: npm run dev
     build:
       context: .
@@ -15,6 +17,7 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - JWT_SECRET=dev-secret-change-in-production
       - JWT_EXPIRES_IN=24h
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - STORAGE_ROOT=/app/storage/uploads
     depends_on:
       - mongo

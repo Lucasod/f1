@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PaymentService, PaymentError } from './payment.service';
 import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, InMemoryOrderRepository } from './order.domain';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
+import { Product, InMemoryProductRepository } from '../product/product.domain';
 import { config } from '../../config';
 
 describe('Payment Service', () => {
@@ -75,6 +76,27 @@ describe('Payment Service', () => {
     const payment = await createAuthorizedPayment();
     return paymentService.capturePayment(payment.id);
   }
+
+  describe('completeCheckoutPayment', () => {
+    it('captures a paid Checkout payment and handles duplicate webhook delivery', async () => {
+      const payment = await createTestPayment();
+
+      const first = await paymentService.completeCheckoutPayment(payment.id, 'pi_test_123', 10000);
+      const duplicate = await paymentService.completeCheckoutPayment(payment.id, 'pi_test_123', 10000);
+
+      expect(first.status).toBe(PaymentStatus.CAPTURED);
+      expect(duplicate.status).toBe(PaymentStatus.CAPTURED);
+      expect(testOrder.status).toBe(OrderStatus.PAID);
+    });
+
+    it('rejects a completed Checkout Session whose paid amount differs from the order', async () => {
+      const payment = await createTestPayment();
+
+      await expect(paymentService.completeCheckoutPayment(payment.id, 'pi_test_123', 999))
+        .rejects.toThrow(PaymentError.PAYMENT_AMOUNT_MISMATCH);
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+    });
+  });
 
   describe('createPayment', () => {
     it('should create payment with valid inputs', async () => {
@@ -628,6 +650,48 @@ describe('Payment Service', () => {
 
       const payments = await paymentService.getPaymentsByPersonId(testPerson.id);
       expect(payments[0].createdAt.getTime()).toBeGreaterThanOrEqual(payments[1].createdAt.getTime());
+    });
+  });
+  describe('failPayment stock restoration', () => {
+    it('restores reserved stock on failed payment', async () => {
+      const productRepo = new InMemoryProductRepository();
+      const product = Product.create({
+        vendorId: 'vendor-1',
+        categoryId: 'cat-1',
+        name: 'Test Product',
+        description: 'desc',
+        price: 50,
+        quantity: 8
+      });
+      product.id = 'product-1';
+      await productRepo.save(product);
+
+      const svc = new PaymentService(paymentRepo, orderRepo, productRepo);
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.failPayment(payment.id);
+
+      const updated = await productRepo.findById('product-1');
+      expect(updated!.quantity).toBe(10);
+    });
+
+    it('throws STOCK_ROLLBACK_FAILED when incrementStock throws', async () => {
+      const productRepo = new InMemoryProductRepository();
+      const product = Product.create({
+        vendorId: 'vendor-1',
+        categoryId: 'cat-1',
+        name: 'Test Product',
+        description: 'desc',
+        price: 50,
+        quantity: 8
+      });
+      product.id = 'product-1';
+      await productRepo.save(product);
+
+      const svc = new PaymentService(paymentRepo, orderRepo, productRepo);
+      vi.spyOn(productRepo, 'incrementStock').mockRejectedValueOnce(new Error('boom'));
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await expect(svc.failPayment(payment.id)).rejects.toThrow(OrderError.STOCK_ROLLBACK_FAILED);
     });
   });
 });

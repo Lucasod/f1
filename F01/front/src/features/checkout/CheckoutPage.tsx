@@ -4,7 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { useCart } from '@/features/cart/useCart';
 import { useCheckoutPreview, useCheckoutState } from './useCheckout';
 import { checkoutApi, CheckoutPreviewVendorGroup, CheckoutPreviewItem } from '@/shared/api/checkout';
-import { Order, Address } from '@/shared/api/order';
+import { Address } from '@/shared/api/order';
 import { personApi } from '@/shared/api/person';
 import {
   Card,
@@ -161,7 +161,6 @@ export function CheckoutPage() {
     removeCouponCode,
     setSelectedAddressId,
     setPaymentMethod,
-    reset: resetCheckoutState,
   } = useCheckoutState();
 
   // Checkout preview (totals with coupons)
@@ -187,8 +186,6 @@ export function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLock = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
 
   // Fetch addresses when authenticated
   const loadAddresses = useCallback(async () => {
@@ -282,8 +279,7 @@ export function CheckoutPage() {
 
   // Payment options
   const paymentOptions = useMemo(() => [
-    { value: 'credit_card', label: 'Cartão de Crédito (Stripe - Mock)', description: 'Pagamento seguro com cartão de crédito' },
-    { value: 'pix', label: 'Pix (Mock)', description: 'Pagamento instantâneo via Pix' },
+    { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'Você será redirecionado para concluir o pagamento' },
   ], []);
 
   const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview;
@@ -307,10 +303,7 @@ export function CheckoutPage() {
         shippingAddressId: selectedAddressId!,
         couponCodes: couponCodes.length > 0 ? couponCodes : undefined,
       });
-      setSubmittedOrder(response.order);
-      setIsSubmitted(true);
-      resetCheckoutState();
-      await refetchCart();
+      window.open(response.checkoutUrl, '_self');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro ao finalizar pedido';
       setSubmitError(message);
@@ -318,7 +311,7 @@ export function CheckoutPage() {
       setIsSubmitting(false);
       submitLock.current = false;
     }
-  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes, resetCheckoutState, refetchCart]);
+  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes]);
 
   // Loading state
   const isInitialLoading = authLoading || cartLoading || addressesLoading;
@@ -331,9 +324,6 @@ export function CheckoutPage() {
 
   // Empty cart state
   const isEmptyCart = isCartEmpty;
-
-  // Success state
-  const isSuccessState = isSubmitted && submittedOrder;
 
   // Render functions for different states
   const renderLoading = () => (
@@ -394,65 +384,6 @@ export function CheckoutPage() {
           }}
           centered
         />
-      </div>
-    </div>
-  );
-
-  const renderSuccess = () => (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4" aria-hidden="true">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900">Pedido criado com sucesso</h1>
-            <p className="mt-2 text-gray-600">Seu pedido foi registrado, mas o pagamento ainda está pendente.</p>
-            <p className="mt-1 text-sm text-gray-500">O pagamento será confirmado pelo provedor. A conclusão do pagamento depende da confirmação do provedor.</p>
-          </div>
-          
-          <Card variant="elevated" padding="lg">
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-medium text-gray-900">Número do pedido</h3>
-                <p className="text-2xl font-bold text-blue-600 mt-1">{submittedOrder!.id}</p>
-              </div>
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="font-medium text-gray-900">Total</h3>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(submittedOrder!.totalAmount)}</p>
-              </div>
-              <div>
-                <h3 className="font-medium text-gray-900">Endereço de entrega</h3>
-                <p className="text-gray-600 mt-1">
-                  {submittedOrder!.shippingAddress.street}, {submittedOrder!.shippingAddress.number}
-                  {submittedOrder!.shippingAddress.neighborhood && ` - ${submittedOrder!.shippingAddress.neighborhood}`}
-                  <br />
-                  {submittedOrder!.shippingAddress.city} - {submittedOrder!.shippingAddress.state}
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <Button
-                fullWidth
-                variant="primary"
-                size="lg"
-                onClick={() => navigate(`/orders/${submittedOrder!.id}`)}
-              >
-                Ver detalhes do pedido
-              </Button>
-              <Button
-                fullWidth
-                variant="ghost"
-                size="lg"
-                onClick={() => navigate('/products')}
-              >
-                Continuar comprando
-              </Button>
-            </div>
-          </Card>
-        </div>
       </div>
     </div>
   );
@@ -796,6 +727,5 @@ export function CheckoutPage() {
   if (isNotAuthenticated) return renderNotAuthenticated();
   if (hasCartError) return renderCartError();
   if (isEmptyCart) return renderEmptyCart();
-  if (isSuccessState) return renderSuccess();
   return renderCheckoutForm();
 }

@@ -2,3 +2,7 @@
 scripts/*.js
 scripts/*.d.ts
 scripts/*.map
+# Local secrets
+.env
+.env.*
+!.env.example

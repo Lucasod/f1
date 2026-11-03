@@ -81,6 +81,8 @@ export const config = {
   isProduction: isProduction(),
   enableStartupCleanup: getEnableStartupCleanup(),
   commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
+  frontendUrl: process.env.FRONTEND_URL?.trim() || 'http://localhost:5173',
+  stripePaymentMethodConfiguration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || '',
   get storageRoot() { return getStorageRoot(); },
   get storagePublicUrlBase() { return getPublicUrlBase(); },
 };

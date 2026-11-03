@@ -27,6 +27,8 @@ import {
   FinancialStatus
 } from './order.domain';
 
+import type { ProductRepository } from '../product/product.domain';
+
 export enum PaymentError {
   PAYMENT_NOT_FOUND = 'PAYMENT_NOT_FOUND',
   PAYMENT_ALREADY_EXISTS = 'PAYMENT_ALREADY_EXISTS',
@@ -51,7 +53,8 @@ function isValidProvider(provider: string): provider is ValidProvider {
 export class PaymentService {
   constructor(
     private readonly paymentRepo: PaymentRepository,
-    private readonly orderRepo: OrderRepository
+    private readonly orderRepo: OrderRepository,
+    private readonly productRepo?: ProductRepository
   ) {}
 
   async createPayment(
@@ -156,6 +159,23 @@ export class PaymentService {
     return payment;
   }
 
+  async completeCheckoutPayment(paymentId: string, providerTransactionId: string, amountTotal: number): Promise<Payment> {
+    const existing = await this.paymentRepo.findById(paymentId);
+    if (!existing) {
+      throw new Error(PaymentError.PAYMENT_NOT_FOUND);
+    }
+    if (!Number.isInteger(amountTotal) || Math.round(existing.amount * 100) !== amountTotal) {
+      throw new Error(PaymentError.PAYMENT_AMOUNT_MISMATCH);
+    }
+    if (existing.status === PaymentStatus.CAPTURED) {
+      return existing;
+    }
+    if (existing.status === PaymentStatus.PENDING) {
+      await this.authorizePayment(paymentId, providerTransactionId);
+    }
+    return this.capturePayment(paymentId);
+  }
+
   async capturePayment(paymentId: string): Promise<Payment> {
     if (!paymentId || paymentId.trim().length === 0) {
       throw new Error(PaymentError.PAYMENT_NOT_FOUND);
@@ -221,6 +241,29 @@ export class PaymentService {
         order.markPaymentFailed();
       }
       await this.orderRepo.update(order);
+
+      if (this.productRepo) {
+        const quantities = new Map<string, number>();
+        for (const vg of order.vendorGroups) {
+          for (const item of vg.items) {
+            quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity);
+          }
+        }
+
+        const failures: unknown[] = [];
+        for (const [productId, amount] of quantities) {
+          try {
+            await this.productRepo.incrementStock(productId, amount);
+          } catch (err) {
+            failures.push(err);
+            console.error('Failed to restore stock for product', productId, err);
+          }
+        }
+
+        if (failures.length > 0) {
+          throw new Error(OrderError.STOCK_ROLLBACK_FAILED);
+        }
+      }
     }
 
     return payment;

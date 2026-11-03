@@ -84,7 +84,8 @@ describe('Checkout Service', () => {
       vendorRepo,
       personRepo,
       cartService,
-      config
+      config,
+      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) }
     );
   });
 
@@ -109,7 +110,7 @@ describe('Checkout Service', () => {
       expect(result.order.financialStatus).toBe(FinancialStatus.PENDING);
       expect(result.order.vendorGroups).toHaveLength(1);
       expect(result.order.totalAmount).toBe(200); // 2 * 100
-      expect(result.clientSecret).toBe('mock_client_secret_for_testing');
+      expect(result.checkoutUrl).toBe('https://checkout.stripe.test/session');
 
       // Verify vendor group
       const vendorGroup = result.order.vendorGroups[0];
@@ -135,7 +136,7 @@ describe('Checkout Service', () => {
       expect(payments[0].amount).toBe(200);
       expect(payments[0].status).toBe(PaymentStatus.PENDING);
       expect(payments[0].provider).toBe('stripe');
-      expect(payments[0].providerTransactionId).toBe('mock_intent_123');
+      expect(payments[0].providerTransactionId).toBe('cs_test_session');
 
       // Verify cart is cleared
       const cart = await cartRepo.findById(consumerId);

@@ -57,9 +57,9 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
 
       const consumerId = req.user.sub;
 
-      const { order, clientSecret } = await checkoutService.checkout(consumerId, shippingAddressId, couponCodes);
+      const { order, checkoutUrl } = await checkoutService.checkout(consumerId, shippingAddressId, couponCodes);
 
-      return res.status(201).json({ order: orderToResponse(order), clientSecret });
+      return res.status(201).json({ order: orderToResponse(order), checkoutUrl });
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {

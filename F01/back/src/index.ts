@@ -18,6 +18,8 @@ import { RedisCartRepository } from './modules/cart/cart.redis.repository';
 import { CartRepository, InMemoryCartRepository } from './modules/cart/cart.domain';
 import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
 import { CheckoutService } from './modules/checkout/checkout.service';
+import { createStripeClientFromEnvironment, StripeCheckoutProvider } from './modules/checkout/stripe-checkout.provider';
+import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
 import { createOrderRoutes } from './modules/order/order.routes';
 import { OrderService } from './modules/order/order.service';
 import { PaymentService } from './modules/order/payment.service';
@@ -90,15 +92,30 @@ const storageAdapter = new LocalStorageAdapter();
 cartRepo = new RedisCartRepository();
 
 function initializeServices(): void {
+  const stripeClient = createStripeClientFromEnvironment();
   authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
   vendorService = new VendorService(vendorRepo, personRepo, config);
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
-  checkoutService = new CheckoutService(orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config);
+  checkoutService = new CheckoutService(
+    orderRepo,
+    paymentRepo,
+    cartRepo,
+    productRepo,
+    vendorRepo,
+    personRepo,
+    cartService,
+    config,
+    new StripeCheckoutProvider(
+      stripeClient,
+      config.frontendUrl,
+      config.stripePaymentMethodConfiguration
+    )
+  );
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
-paymentService = new PaymentService(paymentRepo, orderRepo);
+paymentService = new PaymentService(paymentRepo, orderRepo, productRepo);
 payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo);
 invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
 }
@@ -164,6 +181,7 @@ app.use(cors({
   origin: config.corsOrigins.length > 0 ? config.corsOrigins : true,
   credentials: true
 }));
+app.use('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 app.get('/health', (_req: Request, res: Response) => {
@@ -222,6 +240,12 @@ invoiceRepo = new MongoInvoiceRepository(db);
 
       // Checkout routes
       app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+
+      // Stripe sends signed events using the unparsed request body.
+      app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
+        createStripeClientFromEnvironment(),
+        paymentService
+      ));
 
       // Order routes
       app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));
@@ -293,6 +317,16 @@ invoiceRepo = new InMemoryInvoiceRepository();
 
         // Checkout routes
         app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+
+        // Stripe webhook route (fallback dev) - best effort
+        try {
+          app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
+            createStripeClientFromEnvironment(),
+            paymentService
+          ));
+        } catch {
+          // Stripe not configured in dev fallback; skip
+        }
 
         // Order routes
         app.use('/api/v1/orders', createOrderRoutes({ authService, orderService, personRepo, vendorRepo }));

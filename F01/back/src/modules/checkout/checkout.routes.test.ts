@@ -69,7 +69,8 @@ describe('Checkout Routes', () => {
       vendorRepo,
       personRepo,
       cartService,
-      config
+      config,
+      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) }
     );
 
     // Create Express app
@@ -443,7 +444,7 @@ describe('Checkout Routes', () => {
 
   describe('POST /api/v1/checkout', () => {
     describe('Success cases', () => {
-      it('should create order from cart and return order + clientSecret, clear cart', async () => {
+      it('should create order from cart and return Checkout URL, clear cart', async () => {
         await addToCart(consumerId, productId, 2);
 
         const response = await request(app)
@@ -455,7 +456,7 @@ describe('Checkout Routes', () => {
 
         expect(response.status).toBe(201);
         expect(response.body.order).toBeDefined();
-        expect(response.body.clientSecret).toBe('mock_client_secret_for_testing');
+        expect(response.body.checkoutUrl).toBe('https://checkout.stripe.test/session');
 
         const order = response.body.order;
         expect(order.personId).toBe(consumerId);

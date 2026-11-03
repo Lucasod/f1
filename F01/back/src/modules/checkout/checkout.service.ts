@@ -17,6 +17,7 @@ import { VendorRepository } from '../vendor/vendor.domain';
 import { PersonRepository } from '../person/person.domain';
 import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
+import { CheckoutPaymentProvider } from './stripe-checkout.provider';
 
 export interface CheckoutPreviewResponse {
   vendorGroups: CheckoutPreviewVendorGroup[];
@@ -50,6 +51,7 @@ export class CheckoutService {
   private readonly personRepo: PersonRepository;
   private readonly cartService: CartService;
   private readonly config: typeof import('../../config').config;
+  private readonly paymentProvider: CheckoutPaymentProvider;
 
   constructor(
     orderRepo: OrderRepository,
@@ -59,7 +61,8 @@ export class CheckoutService {
     vendorRepo: VendorRepository,
     personRepo: PersonRepository,
     cartService: CartService,
-    config: typeof import('../../config').config
+    config: typeof import('../../config').config,
+    paymentProvider: CheckoutPaymentProvider
   ) {
     this.orderRepo = orderRepo;
     this.paymentRepo = paymentRepo;
@@ -69,9 +72,10 @@ export class CheckoutService {
     this.personRepo = personRepo;
     this.cartService = cartService;
     this.config = config;
+    this.paymentProvider = paymentProvider;
   }
 
-  async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; clientSecret: string }> {
+  async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);
     if (!cart || cart.isEmpty) {
@@ -99,6 +103,7 @@ export class CheckoutService {
     let paymentSaved = false;
     let savedOrder: Order | null = null;
     let savedPayment: Payment | null = null;
+    let checkoutSessionId: string | null = null;
     let stockRestored = false;
 
     const compensateStock = async () => {
@@ -163,9 +168,6 @@ export class CheckoutService {
         provider: 'stripe'
       });
 
-      // Set mock provider payment intent ID
-      payment.providerTransactionId = 'mock_intent_123';
-
       // Save order and payment
       await this.orderRepo.save(order);
       orderSaved = true;
@@ -175,14 +177,26 @@ export class CheckoutService {
       paymentSaved = true;
       savedPayment = payment;
 
+      const session = await this.paymentProvider.createSession(order, payment);
+      checkoutSessionId = session.id;
+      payment.providerTransactionId = session.id;
+      await this.paymentRepo.update(payment);
+
       // Clear cart
       await this.cartService.clearCart(consumerId);
 
       return {
         order,
-        clientSecret: 'mock_client_secret_for_testing'
+        checkoutUrl: session.url
       };
     } catch (error) {
+      if (checkoutSessionId && this.paymentProvider.expireSession) {
+        try {
+          await this.paymentProvider.expireSession(checkoutSessionId);
+        } catch (expireError) {
+          console.error('Stripe Checkout session cleanup failed', expireError);
+        }
+      }
       await compensateRecords();
       try {
         await compensateStock();
