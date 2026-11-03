@@ -2806,7 +2806,27 @@ No secrets read or exposed. No commits made.
 
 ---
 
-## MP-32G: Finalize Scanner Self-Scan — Test Fixture Refactoring
+## MP-32G: Fase A — Audit — Scanner Self-Scan (audit phase only, no implementation)
+
+**Date:** 2026-11-03
+**Objective:** Audit/identify self-referential false positives in `scripts/test-scan-secrets.sh` (audit phase only; no implementation).
+**Scope:** Audit only — no code, test, or configuration changes. No commit. No `.env` read.
+
+### Audit Finding
+
+The test file `scripts/test-scan-secrets.sh` contained secret-like literals as fixtures (e.g. `-----BEGIN CERTIFICATE-----`, `mongodb://user:pass@host/db`, `password = "mySecret123"`, quoted session/password assignments). These literals triggered the scanner's own patterns, producing self-referential false positives when running `bash scripts/scan-secrets.sh scripts/test-scan-secrets.sh`.
+
+### Disposition
+
+Implementation of the fixture refactoring is recorded under **MP-32H** (FIRD implementation cycle). MP-32G is audit phase only and performs no implementation.
+
+### Git State
+
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged. No `.env` or secret values read.
+
+---
+
+## MP-32H: FIRD Implementation Cycle — Scanner Self-Scan Test Fixture Refactoring
 
 **Date:** 2026-11-03
 **Objective:** Eliminate self-referential false positives in `scripts/test-scan-secrets.sh` so the scanner's own test file passes its own scan with exit 0.
@@ -2820,11 +2840,13 @@ The test file `scripts/test-scan-secrets.sh` contained secret-like literals as f
 
 Refactored fixtures to construct patterns dynamically via variable concatenation (e.g. `CERT_BEGIN="-----BEGIN"` + `CERT_END="CERTIFICATE-----"`; `CONN_SCHEME`/`CONN_SEP`/`CONN_AUTH`; `PW_PART1`/`PW_PART2`; `SID_PART1`/`SID_PART2`), and assembled backtick-wrapped fixtures via `printf`/variable expansion. This removes literal secret-like strings from the test source while preserving the exact bytes fed to the scanner at runtime, so detection behavior is unchanged.
 
-### Review Findings
+### Review
 
-Independent review verdict: **APPROVED**, 0 findings. No scope expansion. No secrets read or exposed.
+Code Reviewer approved (APPROVED, 0 findings). No scope expansion. No secrets read or exposed.
 
-### Test Results
+### Tests
+
+74 passed (reported, not independently re-executed by reviewer due to read-only environment).
 
 | Suite | Command | Result |
 |-------|---------|--------|
@@ -2834,6 +2856,7 @@ Independent review verdict: **APPROVED**, 0 findings. No scope expansion. No sec
 
 ### Limitations
 
+- Reviewer could not independently reproduce test execution; evidence inherited from project documentation.
 - Execution evidence recorded from documentation; not freshly observed in this review pass beyond the commands listed above.
 - Heuristic scanner only; not a substitute for dedicated tools (gitleaks/trufflehog) or CI scanning.
 - Hooks are local and bypassable via `--no-verify`; no CI workflow exists in this repository.
