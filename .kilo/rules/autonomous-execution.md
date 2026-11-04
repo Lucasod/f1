@@ -26,7 +26,7 @@
 
 ## Runtime limits and safety
 
-- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlist limits Code to the `code-reviewer` agent. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.
+- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlists differ by agent: the general `code` agent (kilo.jsonc) allows `code-reviewer` and `code-orchestrator`, while the `code-orchestrator` agent (`.kilo/agents/code-orchestrator.md`) allows `code-developer` and `code-reviewer`. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.
 - The reviewer's `edit`, `bash`, and `task` tools are denied. This prevents file edits through those tools and nested delegation, but does not prove every runtime or external path is read-only. Do not claim stronger enforcement than the installed runtime exposes.
 - If delegation is unavailable, report `BLOCKED` for required independent review. Do not substitute self-review or claim a delegated review occurred.
 ## Secrets Protection
