@@ -105,7 +105,6 @@ export class CartService {
     let cart = await this.cartRepo.findById(consumerId);
     if (!cart) {
       cart = Cart.create(consumerId);
-      await this.cartRepo.save(cart);
     }
     return cart;
   }

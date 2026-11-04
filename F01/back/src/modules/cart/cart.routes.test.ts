@@ -151,8 +151,8 @@ describe('Cart routes', () => {
       .expect(401);
   });
 
-  it('should return 404 when adding item to non-existent cart (POST /cart/items with CART_NOT_FOUND)', async () => {
-    // Remove the cart to make it non-existent
+  it('creates a cart automatically when adding first item to a previously-deleted cart', async () => {
+    // Remove the cart to make it non-existent; addItem auto-creates
     await cartRepository.delete(consumerId);
     await request(app)
       .post('/api/v1/cart/items')

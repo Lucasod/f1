@@ -347,12 +347,12 @@ describe('Cart Service', () => {
       expect(cart.totalItems).toBe(0);
     });
 
-    it('should persist the newly created empty cart', async () => {
-      await cartService.getCart(consumerId);
-
-      const savedCart = await cartRepo.findById(consumerId);
-      expect(savedCart).not.toBeNull();
-      expect(savedCart!.isEmpty).toBe(true);
+    it('should NOT persist a cart when none exists', async () => {
+      const cart = await cartService.getCart(consumerId);
+      const found = await cartRepo.findById(consumerId);
+      expect(found).toBeNull();
+      expect(cart.id).toBe(consumerId);
+      expect(cart.isEmpty).toBe(true);
     });
   });
 

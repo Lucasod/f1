@@ -86,6 +86,11 @@ export class RedisCartRepository implements CartRepository {
           })
         end
 
+        -- Guard: if items table is empty, force it as JSON array []
+        if #items == 0 then
+          items = setmetatable({}, {__jsontype='array'})
+        end
+
         local new_version = version + 1
         redis.call('HSET', KEYS[1], 'items', cjson.encode(items), 'updated_at', ARGV[5], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[6])
@@ -119,10 +124,18 @@ export class RedisCartRepository implements CartRepository {
         end
         if not found then return 'CART_ITEM_NOT_FOUND' end
         local new_version = version + 1
-        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[3], 'version', new_version)
+        -- Force empty new_items to be serialized as JSON array []
+        if #new_items == 0 then
+          new_items = setmetatable({}, {__jsontype='array'})
+        end
+        -- Use '[]' for storage when empty, otherwise cjson.encode
+        local items_to_store = #new_items == 0 and '[]' or cjson.encode(new_items)
+        redis.call('HSET', KEYS[1], 'items', items_to_store, 'updated_at', ARGV[3], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[4])
+        -- Use '[]' for return when empty, otherwise cjson.encode
+        local return_items = #new_items == 0 and '[]' or cjson.encode(new_items)
         return cjson.encode({
-          items = new_items,
+          items = return_items,
           updated_at = ARGV[3],
           version = new_version
         })
@@ -144,10 +157,18 @@ export class RedisCartRepository implements CartRepository {
         end
         if not found then return 'CART_ITEM_NOT_FOUND' end
         local new_version = version + 1
-        redis.call('HSET', KEYS[1], 'items', cjson.encode(new_items), 'updated_at', ARGV[2], 'version', new_version)
+        -- Force empty new_items to be serialized as JSON array []
+        if #new_items == 0 then
+          new_items = setmetatable({}, {__jsontype='array'})
+        end
+        -- Use '[]' for storage when empty, otherwise cjson.encode
+        local items_to_store = #new_items == 0 and '[]' or cjson.encode(new_items)
+        redis.call('HSET', KEYS[1], 'items', items_to_store, 'updated_at', ARGV[2], 'version', new_version)
         redis.call('EXPIRE', KEYS[1], ARGV[3])
+        -- Use '[]' for return when empty, otherwise cjson.encode
+        local return_items = #new_items == 0 and '[]' or cjson.encode(new_items)
         return cjson.encode({
-          items = new_items,
+          items = return_items,
           updated_at = ARGV[2],
           version = new_version
         })
@@ -158,8 +179,12 @@ export class RedisCartRepository implements CartRepository {
         if not items_data then return nil end
         local updated_at = redis.call('HGET', KEYS[1], 'updated_at')
         local version = tonumber(redis.call('HGET', KEYS[1], 'version')) or 1
+        local items = cjson.decode(items_data)
+        if #items == 0 then
+          items = setmetatable({}, {__jsontype='array'})
+        end
         return cjson.encode({
-          items = cjson.decode(items_data),
+          items = items,
           updated_at = updated_at,
           version = version
         })
@@ -224,17 +249,36 @@ export class RedisCartRepository implements CartRepository {
   private parseCartData(data: unknown, id?: string): Cart {
     if (!isRecord(data) || typeof data.updated_at !== 'string'
       || typeof data.version !== 'number' || !Number.isInteger(data.version)
-      || typeof data.items !== 'string' && !Array.isArray(data.items)) {
+      || typeof data.items !== 'string' && !Array.isArray(data.items) && !isRecord(data.items)) {
       throw new Error('INVALID_CART_DATA');
     }
 
-    const storedItems: unknown = typeof data.items === 'string' ? JSON.parse(data.items) : data.items;
-    if (!Array.isArray(storedItems) || !storedItems.every(isStoredCartItem)
-      || !Number.isFinite(Date.parse(data.updated_at))) {
+    let storedItems: unknown;
+    if (typeof data.items === 'string') {
+      try {
+        storedItems = JSON.parse(data.items);
+      } catch {
+        throw new Error('INVALID_CART_DATA');
+      }
+    } else {
+      storedItems = data.items;
+    }
+
+    if (Array.isArray(storedItems)) {
+      if (!storedItems.every(isStoredCartItem)) {
+        throw new Error('INVALID_CART_DATA');
+      }
+    } else if (isRecord(storedItems) && Object.keys(storedItems).length === 0) {
+      storedItems = [];
+    } else {
       throw new Error('INVALID_CART_DATA');
     }
 
-    const items: CartItem[] = storedItems.map((item) => ({
+    if (!Number.isFinite(Date.parse(data.updated_at))) {
+      throw new Error('INVALID_CART_DATA');
+    }
+
+    const items: CartItem[] = (storedItems as CartItem[]).map((item) => ({
       productId: item.product_id,
       vendorId: item.vendor_id,
       quantity: item.quantity,

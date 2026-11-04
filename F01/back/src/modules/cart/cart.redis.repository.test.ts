@@ -138,7 +138,7 @@ private handleAddItem(key: string, argv: string[]): string {
     const version = cartData.version + 1;
     this.setCartData(key, newItems, updatedAt, version, ttl);
 
-    return JSON.stringify({ items: JSON.stringify(newItems), updated_at: updatedAt, version });
+   return JSON.stringify({ items: newItems.length === 0 ? {} : JSON.stringify(newItems), updated_at: updatedAt, version });
   }
 
   private handleRemoveItem(key: string, argv: string[]): string | null {
@@ -153,15 +153,16 @@ private handleAddItem(key: string, argv: string[]): string {
     const version = cartData.version + 1;
     this.setCartData(key, items, updatedAt, version, ttl);
 
-    return JSON.stringify({ items: JSON.stringify(items), updated_at: updatedAt, version });
+    return JSON.stringify({ items: items.length === 0 ? {} : JSON.stringify(items), updated_at: updatedAt, version });
   }
 
   private handleGetCart(key: string): string | null {
     const cartData = this.getCartData(key);
     if (!cartData) return null;
 
+    const items = cartData.items.length === 0 ? {} : JSON.stringify(cartData.items);
     return JSON.stringify({
-      items: JSON.stringify(cartData.items), // Double-encode items to match Lua script behavior
+      items,
       updated_at: cartData.updated_at,
       version: cartData.version,
     });
