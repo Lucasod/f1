@@ -56,7 +56,7 @@ function App() {
             </Route>
             <Route element={<ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']} />}>
               <Route path="/vendor/dashboard" element={<VendorDashboard />} />
-              <Route path="/vendor/products" element={<div className="p-4">Vendor Products</div>} />
+              <Route path="/vendor/products" element={<ProductForm />} />
               <Route path="/vendor/products/new" element={<ProductForm />} />
               <Route path="/vendor/products/:productId/edit" element={<ProductForm />} />
               <Route path="/vendor/orders" element={<VendorOrderPage />} />

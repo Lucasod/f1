@@ -163,6 +163,11 @@ export function Navigation() {
                         Vendor Products
                       </Link>
                     </li>
+                    <li role="none">
+                      <Link to="/vendor/orders" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor/orders'))} role="menuitem" onClick={closeMenu}>
+                        Vendor Orders
+                      </Link>
+                    </li>
                   </>
                 )}
 
