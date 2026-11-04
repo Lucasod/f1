@@ -2872,3 +2872,24 @@ No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged. No `.env` or secr
 ---
 
 No secrets read or exposed. No commits made.
+
+## MP-AFIRDD-CYCLE-CLOSE-01: D Phase — Documentation Updates
+
+**Date:** 2026-11-04
+**Objective:** Register AWS validation, PDFKit approval, dependency corrections, and new requirements in official documentation.
+**Scope:** Documentation-only updates across decisions.md, project_context.md, task_list.md, open_questions.md.
+
+### Results
+- CD-075 added: AWS account validated in us-east-2 (Ohio); distinguished from S3 integration (still pending, T-703b).
+- CD-076 added: PDFKit approved (run record F-007); distinguished from implementation (not installed). False human-authorization dependency removed from T-1103.
+- project_context.md updated with AWS validation note.
+- T-1103 status corrected: PDFKit approved, not blocked by human authorization.
+- T-1108, T-1109, T-1110 registered for new requirements (Consumer Order Comment, Product Review Submission via Orders).
+- Q-030 added to open_questions.md for order comment rules decision.
+- Reconciliation report (analysis_bug_reconciliation.md) corrected: CR-001 (broken citation), CR-002 (stale Buffer.alloc(0) evidence), CR-003 (interface name), CR-005 (prior-state note).
+
+### Limitations
+- No code changes, no tests executed, no runtime verification.
+- S3 integration (T-703b) remains blocked on actual wiring work.
+- PDF generation implementation remains pending (PDFKit not installed).
+- New requirements (T-1108/T-1109/T-1110) registered but implementation deferred to future cycle.

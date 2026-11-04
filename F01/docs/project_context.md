@@ -20,6 +20,8 @@
 
 **Temporary local-development boundary:** Product and review images currently use a local storage adapter, and checkout returns a payment placeholder. These allow local development without provider accounts. They do not replace the target S3/Stripe Connect integrations and do not count as their completion. Implement and validate the real provider integrations when required by the authorized task and configured environment.
 
+**AWS account:** Validated by the user in region us-east-2 (Ohio). Recorded as a human-confirmed fact (CD-075). This does not imply S3 integration is operational — S3StorageAdapter exists with tests but is not wired into production (T-703b). Local storage adapter remains the dev fallback.
+
 ## Official Deliverables
 
 1. **Functional demonstration** — deployed or recorded

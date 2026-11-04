@@ -399,3 +399,28 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Login contact identification: implicit via email lookup vs explicit flag  
 **Resolution:** Pendências catalogadas: cardinalidade de Credential (1:1 ou 1:N), unicidade do e-mail de login, identificação inequívoca da Person via e-mail, e regras de gestão de credencial. Nenhuma tem resolução de negócio confirmada.  
 **State:** **PARTIALLY_RESOLVED** — Credential concept confirmed (CD-057). **Credential cardinality resolved (CD-060): 1:1 (single credential per Person). Email uniqueness for login resolved (CD-060): globally unique. Login contact identification remains implicit via email lookup (CD-057 step 2), no `Is_Login` flag added. Credential status values, MFA support, recovery/reset flow remain TECHNICAL_FUTURE. Policy for changing/removing login email while protecting auth integrity not defined.
+
+---
+
+## Q-030: Order Comment Rules — editing, moderation, quantity per order
+**What:** Rules for order comment editing (can the consumer edit after submission?), moderation (is there admin review?), and quantity (one comment per order or multiple?) are not defined.
+**Why:** T-1108 (Backend Order Comment API) depends on this decision.
+**Dependencies:** T-1108
+**Alternatives:**
+- Editable vs immutable after submission
+- Post-moderation vs pre-moderation vs none
+- One comment per order vs multiple
+**Resolution:** Decision needed before T-1108 implementation
+**State:** **PENDING** — Rules for editing/moderation/quantity not yet defined. T-1108 depends on this decision.
+
+## Q-031: T-1110 Eligible-Order-Flow Design Decision
+**What:** Design decision for eligible order flow for product review submission; removing direct review submission from product page and restricting review submission to orders that have reached `delivered` status
+**Why:** T-1110 (Frontend: Product Review Submission via Orders) requires a design decision on which orders are eligible for product review submission; this affects the checkout/order completion flow and review eligibility logic
+**Dependencies:** T-1101, CD-072 (verified purchase qualifying state = DELIVERED)
+**Alternatives:**
+- Reviews only eligible after order status `DELIVERED` (current)
+- Reviews eligible after order status `PAID` or `CONFIRMED`
+- Reviews eligible for any completed order regardless of status
+- Maintain direct product-page submission with no order-flow restriction
+**Resolution:** Design decision on eligible order flow for review submission recorded per MP-AFIRDD-CYCLE-CLOSE-01 (Requisito 2)
+**State:** **PENDING** — Design decision on eligible-order-flow pending; T-1110 implementation deferred until decision is recorded

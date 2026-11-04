@@ -865,18 +865,18 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-016 | Redis cache keys/TTL for cart/session | Technical / Future | CD-018: Cart in Redis; schema deferred |
 | D-017 | Payment provider integration details | **Resolved (CD-064)** | CD-064: Stripe Connect (Separate Charges and Transfers) confirmed; exact fees, onboarding, test mode validation in MP-07 |
 | D-018 | Commission calculation implementation | Technical / Future | CD-045: Global % confirmed; per-vendor calculation at Order_Vendor_Group; refund adjustment |
-| D-019 | Order/Payment/Vendor_Group state machine values/transitions | Technical / Future | CD-044: Three independent state machines confirmed; exact values/transitions open; terminology reconciliation needed |
+| D-019 | Order/Payment/Vendor_Group state machine values/transitions | Technical / Future | CD-044: Three independent state machines confirmed; exact values/transitions open; terminology reconciliation needed; CD-063 resolves minimal states |
 | D-020 | Vendor suspension/abuse mechanism | Technical / Future | CD-041: Auto-publish confirmed; suspension mechanism needed |
 | D-021 | Soft delete vs hard delete implementation | Technical / Future | CD-052: Inactivation for referenced entities; hard-delete when safe; order snapshots defined |
 | D-022 | Multi-tenancy scope | Out of scope | Q-020: Single marketplace confirmed; multi-tenancy belongs to another project |
 | D-023 | API design style | **Resolved (CD-066)** | CD-066: REST with OpenAPI 3.0 confirmed; URL path versioning (/api/v1/...); JSON; RFC 7807 errors |
-| D-024 | Frontend state management | Technical / Future | Stage 2+; not decided |
+| D-024 | Frontend state management | **Resolved (CD-074)** | CD-074: TanStack Query + Zustand + React Router confirmed. |
 | D-025 | Checkout address snapshots | **Resolved (CD-061)** | CD-061: Snapshot semantics confirmed; uses CD-040 fields; immutable copy at Order creation |
 | D-026 | Product inactivation state | Technical / Future | CD-042: Inactive state confirmed; hard-delete referential check needed |
 | D-027 | Category cycle prevention | Technical / Future | CD-043: Hierarchy rules confirmed; cycle detection implementation required |
 | D-028 | Coupon mixed-cart discount calculation | Technical / Future | CD-050: Inclusion/exclusion rules confirmed; mixed-cart discount open; stacking/priority open |
 | D-029 | Vendor dashboard metrics implementation | Technical / Future | CD-051: Metrics scope confirmed; gross sales pre-commission labeling; cross-vendor access prohibited |
-| D-030 | Transaction currency | Technical / Future | CD-054: English UI confirmed; currency unresolved; FX service prohibited without decision |
+| D-030 | Transaction currency | **Resolved (CD-054/Q-026)** | CD-054: BRL confirmed; FX service prohibited without decision. |
 | D-031 | Notification infrastructure | Technical / Future | CD-055: Manual refresh MVP; WebSocket/event bus deferred |
 | D-032 | Testing configuration, CI, coverage targets | Technical / Future | CD-056: Vitest/Supertest/Playwright confirmed; TDD mandatory; payment test scenarios specified; coverage targets deferred |
 | D-033 | Password hash algorithm and rotation | Technical / Future | CD-057: Credential stores hash; algorithm/rotation deferred |
@@ -884,25 +884,18 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-035 | Credential recovery/reset flow | Technical / Future | CD-057: Recovery/reset flow deferred |
 | D-036 | API versioning and deprecation policy | **Resolved (CD-073)** | CD-073: URL path versioning, 90-day sunset, Sunset/Deprecation/Link headers, version lifecycle, RFC 8594 |
 
-### CD-073: API Versioning and Deprecation Policy
-**Status:** Confirmed (MP-XX)
-**Subject:** API lifecycle management
-**Decision:** 
-- API versioning uses URL path prefix: `/api/v1/`, `/api/v2/`, etc. (per Q-022/CD-022, CD-066)
-- Deprecation policy:
-  1. **Advance notice**: Minimum 90 days before removing a version
-  2. **Sunset header**: Responses for deprecated versions include `Sunset: <HTTP-date>` header per RFC 8594
-  3. **Deprecation header**: Responses include `Deprecation: true` header for deprecated endpoints
-  4. **Link header**: Include `Link: <new-version-url>; rel="successor-version"` for migration path
-  5. **Communication**: Deprecations announced via changelog, developer portal, and email to registered API consumers
-  6. **Version lifecycle**: 
-     - **Current**: Active development, new features added
-     - **Maintenance**: Security/bug fixes only, no new features
-     - **Deprecated**: Sunset header set, migration period active (90+ days)
-     - **Retired**: Removed from production, returns 410 Gone
-  7. **Breaking changes**: Only introduced in new major version (vN+1); never in patch/minor of existing version
-  8. **Documentation**: All versions maintained in OpenAPI spec with `x-deprecated` extension on deprecated operations/schemas
+### CD-075: AWS Account Validation — us-east-2 (Ohio)
+**Status:** Confirmed (MP-AFIRDD-CYCLE-CLOSE-01, D phase)
+**Subject:** External dependency — AWS S3
+**Decision:** The user (Lucas) has validated an AWS account in region us-east-2 (Ohio). This validation is recorded as a human-confirmed fact, distinct from the operational S3 integration which remains pending. The S3StorageAdapter exists (s3.adapter.ts) with tests, but is not wired into production (index.ts uses LocalStorageAdapter). T-703b remains blocked on actual S3 integration work (wiring adapter, presigned URLs, CloudFront CDN), not on account availability.
+**Justification:** The user explicitly stated AWS validation in us-east-2 during the MP-AFIRDD-CYCLE-CLOSE-01 process. This corrects the prior documentation gap where no AWS validation was recorded (BUG-003 reconciliation finding).
+**Source:** MP-AFIRDD-CYCLE-CLOSE-01, D phase (user statement)
+**Consequences:** T-703b status should reflect "AWS account validated (us-east-2); S3 integration (wiring + CDN) still pending." The local storage adapter remains the dev fallback. No AWS operations (deploy, S3 writes) are performed without specific authorization.
 
-**Justification:** Provides predictable API evolution, consumer migration time, and clear communication. Aligns with industry standards (RFC 8594, OpenAPI 3.0 extensions).
-**Source:** MP-XX closure for AUD-008
-**Consequences:** API governance documented; OpenAPI spec should include deprecation metadata; CI/CD should validate no breaking changes in maintenance versions.
+### CD-076: PDFKit Library Approval — Distinguished from Implementation
+**Status:** Confirmed (MP-AFIRDD-CYCLE-CLOSE-01, D phase)
+**Subject:** External dependency — PDF generation library
+**Decision:** PDFKit is approved as the PDF generation library for invoice generation (commercial receipts, CD-035). Approval is distinguished from implementation: the library is approved but not yet installed or implemented. Run record fird-marketplace-2026-11-04.md (F-007) states "PDFKit approved, but real generation and S3 storage pending credentials/decisions." This approval does NOT require additional human authorization — the prior classification of "PDF library authorization" as a human gate was incorrect and is removed. The false dependency on human authorization for the PDFKit library is removed from T-1103.
+**Justification:** The approval was already documented in the run record (F-007). The reclassification from "requires human authorization" to "approved, implementation pending" corrects a documentation error identified in the reconciliation (BUG-006).
+**Source:** MP-AFIRDD-CYCLE-CLOSE-01, D phase; run record fird-marketplace-2026-11-04.md F-007
+**Consequences:** T-1103 status updated to reflect PDFKit approved (not blocked by human authorization). Actual installation and implementation of PDF generation remains a development task for a future cycle. No PDFKit dependency is currently in package.json.
