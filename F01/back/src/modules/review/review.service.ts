@@ -111,6 +111,10 @@ export class ReviewService {
     return this.reviewRepo.update(review);
   }
 
+  async findReviewById(id: string): Promise<Review | null> {
+    return this.reviewRepo.findById(id);
+  }
+
   async addReviewImage(
     consumerId: string,
     reviewId: string,

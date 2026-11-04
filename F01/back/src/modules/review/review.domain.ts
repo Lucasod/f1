@@ -81,6 +81,9 @@ export class Review {
     if (data.comment !== undefined && typeof data.comment !== 'string') {
       throw new Error(ReviewError.INVALID_REVIEW);
     }
+    if (data.comment !== undefined && data.comment.trim().length === 0) {
+      throw new Error(ReviewError.INVALID_REVIEW);
+    }
 
     const now = new Date();
     return new Review({
@@ -98,7 +101,11 @@ export class Review {
   }
 
   static reconstruct(data: ReviewData): Review {
-    return new Review(data);
+    return new Review({
+      ...data,
+      createdAt: data.createdAt ?? new Date(),
+      updatedAt: data.updatedAt ?? new Date(),
+    });
   }
 
   moderate(status: ReviewStatus): void {

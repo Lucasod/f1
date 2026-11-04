@@ -71,7 +71,24 @@ export function createReviewRoutes({ authService, reviewService }: ReviewRoutesC
     }
   }) as RequestHandler);
 
-  router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsumer as RequestHandler, parseReviewImage, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // CD-017: verified purchase ownership middleware for review creation
+  // Ensures only authenticated consumers may create reviews; full eligibility
+  // (delivered order item) is validated in createReview service method.
+
+  // Ownership middleware for image upload: ensures the consumer uploading
+// an image is the same consumer who created the review (CD-017).
+const checkReviewImageOwnership = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const review = await reviewService.findReviewById(readPathParameter(req.params.reviewId));
+  if (!review) {
+    return next(new Error(ReviewError.REVIEW_NOT_FOUND));
+  }
+  if (review.consumerId !== req.user.sub) {
+    return res.status(403).json({ error: ReviewError.REVIEW_OWNERSHIP_VIOLATION, message: 'Only the review owner may upload images' });
+  }
+  next();
+};
+
+router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsumer as RequestHandler, checkReviewImageOwnership, parseReviewImage, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
         throw new Error(ReviewError.REVIEW_IMAGE_REQUIRED);
