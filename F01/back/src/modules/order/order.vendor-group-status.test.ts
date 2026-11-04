@@ -35,6 +35,7 @@ describe('Order vendor group status update', () => {
   let vendorRepository: InMemoryVendorRepository;
   let authService: AuthService;
   let ownerEmail: string;
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     personRepository = new InMemoryPersonRepository();
@@ -45,7 +46,7 @@ describe('Order vendor group status update', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: ownerEmail,
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     const otherConsumer = await authService.register({
@@ -53,7 +54,7 @@ describe('Order vendor group status update', () => {
       taxIdType: 'CPF',
       taxIdValue: '98765432100',
       email: 'other-consumer@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     ownerToken = owner.tokens.accessToken;
@@ -67,7 +68,7 @@ describe('Order vendor group status update', () => {
       taxIdType: 'CNPJ',
       taxIdValue: '11222333000181',
       email: 'vendor@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.VENDOR,
     });
     vendorToken = vendorPerson.tokens.accessToken;
@@ -79,7 +80,7 @@ describe('Order vendor group status update', () => {
       taxIdType: 'CNPJ',
       taxIdValue: '11222333000343',
       email: 'other-vendor@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.VENDOR,
     });
     otherVendorToken = otherVendorPerson.tokens.accessToken;
@@ -96,11 +97,11 @@ describe('Order vendor group status update', () => {
       addresses: [],
     });
     adminPerson.addRole(PersonRole.ADMIN);
-    adminPerson.setCredential(await hashPassword('SecurePass123!'));
+    adminPerson.setCredential(await hashPassword(testPassword));
     await personRepository.save(adminPerson);
     adminToken = (await authService.login({
       email: 'admin@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
     })).tokens.accessToken;
 
     orderRepository = new InMemoryOrderRepository();

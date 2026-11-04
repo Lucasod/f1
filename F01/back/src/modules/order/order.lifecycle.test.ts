@@ -15,6 +15,8 @@ import {
 } from './order.domain';
 import { OrderService } from './order.service';
 import { createOrderRoutes } from './order.routes';
+  import 'dotenv/config';
+
 
 describe('Order lifecycle transitions and ownership', () => {
   let app: express.Express;
@@ -35,6 +37,8 @@ describe('Order lifecycle transitions and ownership', () => {
   let orderRepository: InMemoryOrderRepository;
   let vendorRepository: InMemoryVendorRepository;
   let authService: AuthService;
+  const validPassword = process.env.TEST_USER_PASSWORD!;
+  
 
   beforeEach(async () => {
     personRepository = new InMemoryPersonRepository();
@@ -45,7 +49,7 @@ describe('Order lifecycle transitions and ownership', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: 'order-owner@example.com',
-      password: 'SecurePass123!',
+      password: validPassword,
       role: PersonRole.CONSUMER,
     });
     const otherConsumer = await authService.register({
@@ -53,7 +57,7 @@ describe('Order lifecycle transitions and ownership', () => {
       taxIdType: 'CPF',
       taxIdValue: '98765432100',
       email: 'other-consumer@example.com',
-      password: 'SecurePass123!',
+      password: validPassword,
       role: PersonRole.CONSUMER,
     });
     ownerToken = owner.tokens.accessToken;
@@ -65,7 +69,7 @@ describe('Order lifecycle transitions and ownership', () => {
       taxIdType: 'CNPJ',
       taxIdValue: '11222333000181',
       email: 'vendor@example.com',
-      password: 'SecurePass123!',
+      password: validPassword,
       role: PersonRole.VENDOR,
     });
     vendorToken = vendorPerson.tokens.accessToken;
@@ -76,7 +80,7 @@ describe('Order lifecycle transitions and ownership', () => {
       taxIdType: 'CNPJ',
       taxIdValue: '11222333000343',
       email: 'other-vendor@example.com',
-      password: 'SecurePass123!',
+      password: validPassword,
       role: PersonRole.VENDOR,
     });
     otherVendorToken = otherVendorPerson.tokens.accessToken;
@@ -93,11 +97,11 @@ describe('Order lifecycle transitions and ownership', () => {
       addresses: [],
     });
     adminPerson.addRole(PersonRole.ADMIN);
-    adminPerson.setCredential(await hashPassword('SecurePass123!'));
+    adminPerson.setCredential(await hashPassword( validPassword!));
     await personRepository.save(adminPerson);
     adminToken = (await authService.login({
       email: 'admin@example.com',
-      password: 'SecurePass123!',
+      password: validPassword!,
     })).tokens.accessToken;
 
     orderRepository = new InMemoryOrderRepository();

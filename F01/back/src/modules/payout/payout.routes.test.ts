@@ -13,7 +13,7 @@ import { Vendor, InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { PayoutStatus, PayoutError, InMemoryPayoutRepository } from './payout.domain';
 
 const VALID_CPF_1 = '52998224725';
-const testPassword = 'SecurePass123!';
+const testPassword = process.env.TEST_USER_PASSWORD!;
 
 describe('Payout Routes (T-1003)', () => {
   let app: express.Express;

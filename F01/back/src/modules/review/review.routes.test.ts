@@ -15,6 +15,7 @@ import { createUploadRoutes } from '../product/product.routes';
 import { InMemoryReviewRepository } from './review.domain';
 import { ReviewService } from './review.service';
 import { LocalStorageAdapter } from '../../shared/storage/local.adapter';
+import { config } from '../../config';
 
 describe('Review routes', () => {
   let app: express.Express;
@@ -28,6 +29,7 @@ describe('Review routes', () => {
   let orderRepository: InMemoryOrderRepository;
   let storageRoot: string;
   const originalStorageRoot = process.env.STORAGE_ROOT;
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     storageRoot = await mkdtemp(path.join(os.tmpdir(), 'review-api-'));
@@ -39,7 +41,7 @@ describe('Review routes', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: 'review-consumer@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     const otherConsumer = await authService.register({
@@ -47,7 +49,7 @@ describe('Review routes', () => {
       taxIdType: 'CPF',
       taxIdValue: '98765432100',
       email: 'other-review-consumer@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     consumerToken = consumer.tokens.accessToken;
@@ -64,11 +66,11 @@ describe('Review routes', () => {
       addresses: [],
     });
     admin.addRole(PersonRole.ADMIN);
-    admin.setCredential(await hashPassword('SecurePass123!'));
+    admin.setCredential(await hashPassword(testPassword));
     await personRepository.save(admin);
     adminToken = (await authService.login({
       email: 'review-admin@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
     })).tokens.accessToken;
 
     productRepository = new InMemoryProductRepository();

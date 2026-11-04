@@ -8,7 +8,7 @@ import { test as base, type Page, expect } from '@playwright/test';
 export const TEST_CONSTANTS = {
   VALID_CPF: '52998224725',
   VALID_CNPJ: '11222333000181',
-  DEFAULT_PASSWORD: 'SecurePass123!',
+  DEFAULT_PASSWORD: 'process.env.TEST_USER_PASSWORD!',
 } as const;
 
 /**

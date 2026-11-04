@@ -5,6 +5,7 @@ import { AuthService } from '../auth/auth.service';
 import { InMemoryPersonRepository, PersonRole } from './person.domain';
 import { PersonService } from './person.service';
 import { createPersonRoutes } from './person.routes';
+import { config } from '../../config';
 
 describe('Person profile routes', () => {
   let app: express.Express;
@@ -12,6 +13,7 @@ describe('Person profile routes', () => {
   let accessToken: string;
   let otherAccessToken: string;
   let personRepo: InMemoryPersonRepository;
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     personRepo = new InMemoryPersonRepository();
@@ -21,7 +23,7 @@ describe('Person profile routes', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: 'consumer@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     accessToken = tokens.accessToken;
@@ -30,7 +32,7 @@ describe('Person profile routes', () => {
       taxIdType: 'CPF',
       taxIdValue: '11144477735',
       email: 'other@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     otherAccessToken = otherConsumer.tokens.accessToken;

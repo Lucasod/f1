@@ -15,7 +15,7 @@ import { Product, ProductStatus, InMemoryProductRepository } from '../product/pr
 import { PaymentError } from './payment.service';
 
 const VALID_CPF_1 = '52998224725';
-const testPassword = 'SecurePass123!';
+const testPassword = process.env.TEST_USER_PASSWORD!;
 
 describe('Payment Routes (T-1004 Refund API)', () => {
   let app: express.Express;

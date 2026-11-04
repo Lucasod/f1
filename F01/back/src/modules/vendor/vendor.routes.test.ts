@@ -23,7 +23,7 @@ describe('Vendor Routes', () => {
   let vendorRepo: InMemoryVendorRepository;
   let authService: AuthService;
   let vendorService: VendorService;
-  const testPassword = 'SecurePass123!';
+  const testPassword =  process.env.TEST_USER_PASSWORD!;
 
   // Global admin token for tests that need admin access
   let adminToken: string;

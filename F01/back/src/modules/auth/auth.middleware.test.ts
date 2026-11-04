@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { createAuthRoutes } from './auth.routes';
 import { authMiddleware, requireRole, requireAnyRole, AuthenticatedRequest, optionalAuthMiddleware, OptionalAuthenticatedRequest } from './auth.middleware';
 import { PersonRole } from '../person/person.domain';
+import { config } from '../../config';
 
 describe('Auth Middleware', () => {
   let app: express.Express;
@@ -14,7 +15,7 @@ describe('Auth Middleware', () => {
   let consumerToken: string;
   let vendorToken: string;
   let adminToken: string;
-  const testPassword = 'SecurePass123!';
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     repo = new InMemoryPersonRepository();

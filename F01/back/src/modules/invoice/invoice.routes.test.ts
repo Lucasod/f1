@@ -12,9 +12,10 @@ import { Invoice, InvoiceStatus, InMemoryInvoiceRepository } from './invoice.dom
 import { InMemoryVendorRepository, Vendor } from '../vendor/vendor.domain';
 import { Order, OrderStatus, InMemoryOrderRepository } from '../order/order.domain';
 import { StorageAdapter } from '../../shared/storage/storage.interface';
+import 'dotenv/config';
 
 const VALID_CPF_1 = '52998224725';
-const testPassword = 'SecurePass123!';
+const testPassword =  process.env.TEST_USER_PASSWORD!;
 
 describe('Invoice Routes (T-1103)', () => {
   let app: express.Express;

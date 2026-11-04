@@ -34,7 +34,7 @@ describe('Product Routes', () => {
   let vendorService: VendorService;
   let productService: ProductService;
   let storageAdapter: LocalStorageAdapter;
-  const testPassword = 'SecurePass123!';
+  const testPassword =  process.env.TEST_USER_PASSWORD!;
   
   let vendorToken: string;
   let vendor2Token: string;

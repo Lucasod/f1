@@ -164,7 +164,7 @@ const ACCOUNTS: AccountSeedData[] = [
     taxIdType: 'CPF',
     taxIdValue: '11144477735',
     role: PersonRole.CONSUMER,
-    password: 'SecurePass123!',
+    password: process.env.TEST_USER_PASSWORD!,
   },
   {
     id: generateDeterministicSlugId('person', 'demo-admin'),
@@ -173,7 +173,7 @@ const ACCOUNTS: AccountSeedData[] = [
     taxIdType: 'CNPJ',
     taxIdValue: '11222333000262',
     role: PersonRole.ADMIN,
-    password: 'SecurePass123!',
+    password: process.env.TEST_USER_PASSWORD!,
   },
 ];
 
@@ -507,7 +507,7 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
 
     // Hash password and set credential
     const passwordVariable = getVendorSeedPasswordVariable(vendorData.slug);
-    const vendorPassword = process.env[passwordVariable] ?? 'SecurePass123!';
+    const vendorPassword = process.env[passwordVariable] ??  process.env.TEST_USER_PASSWORD!;
     if (config.isProduction && !process.env[passwordVariable]?.trim()) {
       throw new Error(`${passwordVariable} is required when seeding vendor accounts in production`);
     }

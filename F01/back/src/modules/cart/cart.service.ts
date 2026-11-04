@@ -52,6 +52,13 @@ export class CartService {
       throw new Error(CartError.VENDOR_NOT_FOUND);
     }
 
+    // Ensure cart exists - auto-create if missing (consistent with repository and getCart)
+    let cart = await this.cartRepo.findById(consumerId);
+    if (!cart) {
+      cart = Cart.create(consumerId);
+      await this.cartRepo.save(cart);
+    }
+
     return this.cartRepo.addItem(
       consumerId,
       productId,

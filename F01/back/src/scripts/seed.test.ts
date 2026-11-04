@@ -6,6 +6,7 @@ import { InMemoryProductRepository, InMemoryCategoryRepository } from '../module
 import { SeedRepositories } from '../shared/seed.types.js';
 import { AuthService } from '../modules/auth/auth.service.js';
 import { ACCOUNTS } from './seed.js';
+import { config } from '../../config';
 
 describe('Seed Integration', () => {
   let personRepo: InMemoryPersonRepository;
@@ -32,25 +33,31 @@ describe('Seed Integration', () => {
     };
   });
 
+  const vendorTechStorePassword = process.env.SEED_VENDOR_TECH_STORE_PASSWORD || 'vendor-secret';
+  const vendorFashionHubPassword = process.env.SEED_VENDOR_FASHION_HUB_PASSWORD || 'vendor-secret';
+  const vendorBookWorldPassword = process.env.SEED_VENDOR_BOOK_WORLD_PASSWORD || 'vendor-secret';
+  const consumerPassword = process.env.SEED_CONSUMER_PASSWORD || 'consumer-secret';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin-secret';
+
   describe('runSeed', () => {
     it('requires deployment-managed passwords for every production seed account before seeding', () => {
       expect(() => validateSeedEnvironment({
         NODE_ENV: 'production',
         SEED_FORCE: 'true',
-        SEED_VENDOR_TECH_STORE_PASSWORD: 'vendor-secret',
-        SEED_VENDOR_FASHION_HUB_PASSWORD: 'vendor-secret',
-        SEED_VENDOR_BOOK_WORLD_PASSWORD: 'vendor-secret',
-        SEED_CONSUMER_PASSWORD: 'consumer-secret',
+        SEED_VENDOR_TECH_STORE_PASSWORD: vendorTechStorePassword,
+        SEED_VENDOR_FASHION_HUB_PASSWORD: vendorFashionHubPassword,
+        SEED_VENDOR_BOOK_WORLD_PASSWORD: vendorBookWorldPassword,
+        SEED_CONSUMER_PASSWORD: consumerPassword,
       })).toThrow('SEED_ADMIN_PASSWORD');
 
       expect(() => validateSeedEnvironment({
         NODE_ENV: 'production',
         SEED_FORCE: 'true',
-        SEED_VENDOR_TECH_STORE_PASSWORD: 'vendor-secret',
-        SEED_VENDOR_FASHION_HUB_PASSWORD: 'vendor-secret',
-        SEED_VENDOR_BOOK_WORLD_PASSWORD: 'vendor-secret',
-        SEED_CONSUMER_PASSWORD: 'consumer-secret',
-        SEED_ADMIN_PASSWORD: 'admin-secret',
+        SEED_VENDOR_TECH_STORE_PASSWORD: vendorTechStorePassword,
+        SEED_VENDOR_FASHION_HUB_PASSWORD: vendorFashionHubPassword,
+        SEED_VENDOR_BOOK_WORLD_PASSWORD: vendorBookWorldPassword,
+        SEED_CONSUMER_PASSWORD: consumerPassword,
+        SEED_ADMIN_PASSWORD: adminPassword,
       })).not.toThrow();
     });
 
@@ -181,7 +188,7 @@ describe('Seed Integration', () => {
       expect(reconciledConsumer?.addresses).toHaveLength(2);
       await expect(new AuthService(personRepo, 'seed-test-secret', '24h').login({
         email: 'consumer@example.com',
-        password: 'SecurePass123!',
+        password: process.env.TEST_USER_PASSWORD!,
       })).resolves.toMatchObject({ person: { name: 'Updated Consumer Name' } });
     });
 

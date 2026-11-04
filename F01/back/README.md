@@ -67,7 +67,7 @@ npm run seed         # Seed MongoDB with development demo data
 
 `npm run seed` connects to MongoDB using `MONGO_URI` and `MONGO_DB_NAME`; it does not use in-memory repositories. In development, startup seeds categories, vendors, and products only when the catalog is empty, while ensuring the demo accounts exist even when products are already present. The Consumer account is created with a development delivery address. Existing profile data and passwords are preserved when the accounts are reconciled.
 
-Demo account credentials for newly created development accounts are `consumer@example.com` / `SecurePass123!` and `admin@example.com` / `SecurePass123!`. Passwords are stored as bcrypt hashes. The admin is created only through the trusted seed path; public registration must not grant the ADMIN role.
+Demo account credentials for newly created development accounts are `consumer@example.com` / ` process.env.TEST_USER_PASSWORD!` and `admin@example.com` / ` process.env.TEST_USER_PASSWORD!. Passwords are stored as bcrypt hashes. The admin is created only through the trusted seed path; public registration must not grant the ADMIN role.
 
 When seeding in production with `SEED_FORCE=true`, set deployment-managed passwords for every seeded account:
 `SEED_VENDOR_TECH_STORE_PASSWORD`, `SEED_VENDOR_FASHION_HUB_PASSWORD`,

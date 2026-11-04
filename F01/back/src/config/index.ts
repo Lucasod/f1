@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
-dotenv.config();
+console.error('CONFIG MODULE LOADING, cwd=', process.cwd());
+const _r = dotenv.config();
+console.error('CONFIG dotenv result:', JSON.stringify(_r));
+console.error('CONFIG after dotenv, TEST_USER_PASSWORD=', process.env.TEST_USER_PASSWORD);
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';

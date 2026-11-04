@@ -115,6 +115,12 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(400).json({ error: 'INVALID_UNIT_PRICE', message: 'Invalid unit price' });
           case CartError.GUEST_CART_ID_INVALID:
             return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+          case CartError.CART_NOT_FOUND:
+            return res.status(404).json({ error: CartError.CART_NOT_FOUND, message: 'Cart not found' });
+          case CartError.CART_ITEM_NOT_FOUND:
+            return res.status(404).json({ error: CartError.CART_ITEM_NOT_FOUND, message: 'Cart item not found' });
+          default:
+            return res.status(400).json({ error: 'UNHANDLED_ERROR', message: 'An error occurred processing the cart operation' });
         }
       }
       next(error);
@@ -163,6 +169,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(404).json({ error: CartError.CART_ITEM_NOT_FOUND, message: 'Cart item not found' });
           case CartError.GUEST_CART_ID_INVALID:
             return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+          default:
+            return res.status(400).json({ error: 'UNHANDLED_ERROR', message: 'An error occurred processing the cart operation' });
         }
       }
       next(error);
@@ -200,6 +208,14 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(404).json({ error: CartError.PRODUCT_NOT_FOUND, message: 'Product not found' });
           case CartError.GUEST_CART_ID_INVALID:
             return res.status(400).json({ error: CartError.GUEST_CART_ID_INVALID, message: 'Invalid guest cart ID format' });
+          case 'INVALID_QUANTITY':
+            return res.status(400).json({ error: 'INVALID_QUANTITY', message: 'Quantity must be a non-negative integer' });
+          case CartError.STOCK_INSUFFICIENT:
+            return res.status(409).json({ error: CartError.STOCK_INSUFFICIENT, message: 'Insufficient stock' });
+          case CartError.PRODUCT_NOT_AVAILABLE:
+            return res.status(409).json({ error: CartError.PRODUCT_NOT_AVAILABLE, message: 'Product is not available' });
+          default:
+            return res.status(400).json({ error: 'UNHANDLED_ERROR', message: 'An error occurred processing the cart operation' });
         }
       }
       next(error);
@@ -238,6 +254,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
             return res.status(409).json({ error: CartError.PRODUCT_NOT_AVAILABLE, message: 'Product is not available' });
           case CartError.STOCK_INSUFFICIENT:
             return res.status(409).json({ error: CartError.STOCK_INSUFFICIENT, message: 'Insufficient stock' });
+          default:
+            return res.status(400).json({ error: 'UNHANDLED_ERROR', message: 'An error occurred processing the cart operation' });
         }
       }
       next(error);

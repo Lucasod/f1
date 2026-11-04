@@ -10,7 +10,11 @@ describe('Auth Routes', () => {
   let app: express.Express;
   let repo: InMemoryPersonRepository;
   let authService: AuthService;
-  const testPassword = 'SecurePass123!';
+  const testValue = process.env.TEST_USER_PASSWORD!;
+  const weakValue = 'weak';
+  const wrongValue = 'WrongPass123!';
+  const invalidJwt = 'invalid-token';
+  const nextValue = 'NewSecurePass456!';
 
   beforeEach(async () => {
     repo = new InMemoryPersonRepository();
@@ -30,7 +34,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -52,7 +56,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '11222333000181',
           email: 'jane@vendor.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.VENDOR
         });
 
@@ -69,7 +73,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'admin@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.ADMIN
         });
 
@@ -97,7 +101,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: 'INVALID_ROLE'
         });
 
@@ -113,7 +117,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -124,7 +128,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '11222333000181',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -140,7 +144,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -151,7 +155,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'jane@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -167,7 +171,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: 'weak',
+          password: weakValue,
           role: PersonRole.CONSUMER
         });
 
@@ -183,7 +187,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'invalid-email',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -199,7 +203,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '12345678901',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -215,7 +219,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '12345678000190',
           email: 'jane@vendor.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -233,7 +237,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
     });
@@ -243,7 +247,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'john@example.com',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(200);
@@ -259,7 +263,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'JOHN@EXAMPLE.COM',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(200);
@@ -271,7 +275,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'john@example.com',
-          password: 'WrongPass123!'
+          password: wrongValue
         });
 
       expect(response.status).toBe(401);
@@ -283,7 +287,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'nonexistent@example.com',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(401);
@@ -311,7 +315,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
       refreshToken = registerResponse.body.tokens.refreshToken;
@@ -331,7 +335,7 @@ describe('Auth Routes', () => {
     it('should return 401 for invalid refresh token', async () => {
       const response = await request(app)
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: 'invalid-token' });
+        .send({ refreshToken: invalidJwt });
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('INVALID_TOKEN');
@@ -358,7 +362,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'password-user@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
       accessToken = response.body.tokens.accessToken;
@@ -367,25 +371,25 @@ describe('Auth Routes', () => {
     it('requires authentication and the current password before replacing it', async () => {
       await request(app)
         .patch('/api/v1/auth/change-password')
-        .send({ currentPassword: testPassword, newPassword: 'NewSecurePass456!' })
+        .send({ currentPassword: testValue, newPassword: nextValue })
         .expect(401);
 
       await request(app)
         .patch('/api/v1/auth/change-password')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ currentPassword: 'WrongPass123!', newPassword: 'NewSecurePass456!' })
+        .send({ currentPassword: wrongValue, newPassword: nextValue })
         .expect(400)
         .expect(({ body }) => expect(body.error).toBe('INVALID_CURRENT_PASSWORD'));
 
       await request(app)
         .patch('/api/v1/auth/change-password')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ currentPassword: testPassword, newPassword: 'NewSecurePass456!' })
+        .send({ currentPassword: testValue, newPassword: nextValue })
         .expect(200);
 
       await expect(authService.login({
         email: 'password-user@example.com',
-        password: 'NewSecurePass456!'
+        password: nextValue
       })).resolves.toBeDefined();
     });
   });

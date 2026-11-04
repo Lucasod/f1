@@ -17,6 +17,10 @@ describe('Cart routes', () => {
   let productId: string;
   let accessToken: string;
   let consumerId: string;
+  let vendorRepository: InMemoryVendorRepository;
+  let vendor: Vendor;
+  let productRepository: InMemoryProductRepository;
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     const personRepository = new InMemoryPersonRepository();
@@ -26,14 +30,14 @@ describe('Cart routes', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: 'cart-consumer@example.com',
-      password: 'SecurePass123!',
+      password: testPassword,
       role: PersonRole.CONSUMER,
     });
     consumerId = person.id;
     accessToken = tokens.accessToken;
 
-    const vendorRepository = new InMemoryVendorRepository();
-    const vendor = Vendor.create({
+    vendorRepository = new InMemoryVendorRepository();
+    vendor = Vendor.create({
       personId: 'vendor-owner',
       storeName: 'Cart Store',
       slug: 'cart-store',
@@ -41,7 +45,7 @@ describe('Cart routes', () => {
     });
     await vendorRepository.save(vendor);
 
-    const productRepository = new InMemoryProductRepository();
+    productRepository = new InMemoryProductRepository();
     const product = Product.create({
       vendorId: vendor.id,
       categoryId: 'cart-category',
@@ -145,5 +149,108 @@ describe('Cart routes', () => {
       .post('/api/v1/cart/merge-guest')
       .send({ guestCartId: 'guest:12345678-1234-4123-8123-123456789abc' })
       .expect(401);
+  });
+
+  it('should return 404 when adding item to non-existent cart (POST /cart/items with CART_NOT_FOUND)', async () => {
+    // Remove the cart to make it non-existent
+    await cartRepository.delete(consumerId);
+    await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 2 })
+      .expect(201);
+  });
+
+  it('should return 404 when removing item not in cart (DELETE /cart/items/:productId with CART_ITEM_NOT_FOUND)', async () => {
+    await request(app).get('/api/v1/cart').expect(200);
+    // First, add an item to the cart
+    await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 1 })
+      .expect(201);
+    // Then try to remove a different productId that is not in the cart
+    const differentProductId = 'different-product-id';
+    await request(app)
+      .delete('/api/v1/cart/items/' + differentProductId)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404)
+      .expect(({ body }) => expect(body.error).toBe('CART_ITEM_NOT_FOUND'));
+  });
+
+  it('should return 400 for INVALID_QUANTITY in update (PATCH /cart/items/:productId)', async () => {
+    await request(app).get('/api/v1/cart').expect(200);
+    // First, add an item to the cart
+    await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 1 })
+      .expect(201);
+    // Then try to update quantity to a negative number
+    await request(app)
+      .patch('/api/v1/cart/items/' + productId)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ quantity: -1 })
+      .expect(400)
+      .expect(({ body }) => expect(body.error).toBe('INVALID_QUANTITY'));
+  });
+
+  it('should return 409 for STOCK_INSUFFICIENT in update (PATCH /cart/items/:productId)', async () => {
+    await request(app).get('/api/v1/cart').expect(200);
+    // Create a vendor for the low-stock product
+    const testVendor = Vendor.create({
+      personId: 'vendor-test',
+      storeName: 'Test Vendor',
+      slug: 'test-vendor',
+      commissionPct: 10,
+    });
+    await vendorRepository.save(testVendor);
+
+    // Create a product with low stock (quantity: 1)
+    const lowStockProduct = Product.create({
+      vendorId: testVendor.id,
+      categoryId: 'cart-category',
+      name: 'Low Stock Product',
+      description: 'Product with low stock for testing',
+      price: 50,
+      quantity: 1, // Low stock: only 1 available
+    });
+    lowStockProduct.id = productId;
+    await productRepository.save(lowStockProduct);
+
+    // Add the low-stock item to the cart
+    await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 1 })
+      .expect(201);
+    // Then try to update quantity above available stock (1 -> 5)
+    await request(app)
+      .patch('/api/v1/cart/items/' + productId)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ quantity: 5 })
+      .expect(409)
+      .expect(({ body }) => expect(body.error).toBe('STOCK_INSUFFICIENT'));
+  });
+
+  it('should return 409 for PRODUCT_NOT_AVAILABLE in update (PATCH /cart/items/:productId)', async () => {
+    await request(app).get('/api/v1/cart').expect(200);
+    // First, add the available product to the cart
+    await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 1 })
+      .expect(201);
+    // Now make the product unavailable by changing its status to inactive
+    const unavailableProduct = await productRepository.findById(productId);
+    unavailableProduct.status = 'inactive';
+    await productRepository.save(unavailableProduct);
+    // Then try to update quantity on the now-unavailable product
+    await request(app)
+      .patch('/api/v1/cart/items/' + productId)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ quantity: 2 })
+      .expect(409)
+      .expect(({ body }) => expect(body.error).toBe('PRODUCT_NOT_AVAILABLE'));
   });
 });

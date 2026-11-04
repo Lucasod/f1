@@ -26,6 +26,7 @@ describe('Order routes ownership', () => {
   let orderRepository: InMemoryOrderRepository;
   let authService: AuthService;
   let ownerEmail: string;
+  const password = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     personRepository = new InMemoryPersonRepository();
@@ -36,7 +37,7 @@ describe('Order routes ownership', () => {
       taxIdType: 'CPF',
       taxIdValue: '52998224725',
       email: ownerEmail,
-      password: 'SecurePass123!',
+      password: password,
       role: PersonRole.CONSUMER,
     });
     const otherConsumer = await authService.register({
@@ -44,7 +45,7 @@ describe('Order routes ownership', () => {
       taxIdType: 'CPF',
       taxIdValue: '98765432100',
       email: 'other-consumer@example.com',
-      password: 'SecurePass123!',
+      password: password,
       role: PersonRole.CONSUMER,
     });
     ownerToken = owner.tokens.accessToken;
@@ -63,11 +64,11 @@ describe('Order routes ownership', () => {
       addresses: [],
     });
     adminPerson.addRole(PersonRole.ADMIN);
-    adminPerson.setCredential(await hashPassword('SecurePass123!'));
+    adminPerson.setCredential(await hashPassword(password));
     await personRepository.save(adminPerson);
     adminToken = (await authService.login({
       email: 'admin@example.com',
-      password: 'SecurePass123!',
+      password: password,
     })).tokens.accessToken;
 
     orderRepository = new InMemoryOrderRepository();
@@ -189,7 +190,7 @@ describe('Order routes ownership', () => {
       .expect(404);
   });
 
-  it('returns a consumer dashboard summary using only that consumer’s orders', async () => {
+  it("returns a consumer dashboard summary using only that consumer's orders", async () => {
     const paidOrder = Order.create({
       personId: ownerPersonId,
       vendorGroups: [{
@@ -266,7 +267,7 @@ describe('Order routes ownership', () => {
     await personRepository.update(owner!);
     ownerToken = (await authService.login({
       email: ownerEmail,
-      password: 'SecurePass123!',
+      password: password,
     })).tokens.accessToken;
 
     const list = await request(app)

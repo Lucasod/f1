@@ -35,7 +35,7 @@ describe('Checkout Routes', () => {
   let authService: AuthService;
   let cartService: CartService;
   let checkoutService: CheckoutService;
-  const testPassword = 'SecurePass123!';
+  const testPassword =  process.env.TEST_USER_PASSWORD!;
 
   // Test data IDs
   let consumerId: string;
