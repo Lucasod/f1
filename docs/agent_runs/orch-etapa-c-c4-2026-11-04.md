@@ -46,7 +46,7 @@ C4 complete. C5 (Avaliação integrada) may now proceed. C5 depends on C1-C4, al
 - This cycle modifies Group C (shared) files authorized by user approval; no `code-orchestrator.md` or `code-developer.md` changes.
 - No executable artifacts or tests; verification is documentation/consistency + secret scan.
 - Runtime enforcement of permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`.
-- Only C-REV-003, C-REV-014, C-REV-014A are referenced in the evolved agent file and guidelines. C-REV-015 is documented in contratos-delegacao.md §14 but not referenced in this cycle. C-REV-001 and C-REV-011 are not documented anywhere (only appear in C2 run record).
+- Only C-REV-003, C-REV-014, C-REV-014A are referenced in the evolved agent file and guidelines. C-REV-015 is documented in contratos-delegacao.md §14 but not referenced in this cycle. C-REV-001 and C-REV-011 não possuem registro formal como definição C-REV em documento do repositório; são referenciados como limitação em avaliacao-integrada.md e nos run records C4/C5/CLOSE-02, mas a definição formal existe apenas no run record C2.
 
 ## Conclusion
 

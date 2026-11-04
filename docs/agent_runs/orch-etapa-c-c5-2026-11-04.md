@@ -47,7 +47,7 @@ Etapa C complete. All 5 cycles (C1-C5) finished with independent review PASS. Ne
 
 - This cycle is documentation-only (Group A). No executable artifacts, tests, or configuration are changed; no test execution applies beyond secret scan and consistency checks.
 - Runtime enforcement of permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`: declared configuration, frontmatter deny, allowlists, mocks, static tests, run records, and absence of an action do not alone prove effective runtime behavior.
-- C-REV findings (C-REV-003, C-REV-014, C-REV-014A, C-REV-015) originate from the planning session MP-ETAPA-C-07; C-REV-001 and C-REV-011 appear only in the C2 run record and are not formally documented (registered as limitation in C4).
+- C-REV findings (C-REV-003, C-REV-014, C-REV-014A, C-REV-015) originate from the planning session MP-ETAPA-C-07; C-REV-001 and C-REV-011 não possuem registro formal como definição C-REV em documento do repositório; são referenciados como limitação em avaliacao-integrada.md e nos run records C4/C5/CLOSE-02, mas a definição formal existe apenas no run record C2.
 
 ## Conclusion
 
