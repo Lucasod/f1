@@ -46,6 +46,19 @@ export class CartService {
     // Get vendorId from product
     const vendorId = product.vendorId;
 
+    // Check if current user is a vendor trying to add their own product to the cart
+    // (CD-059: Vendor self-addition prevention)
+    // A vendor cannot add products from their own store to the cart
+    // If the current user has an associated vendor record and the product
+    // belongs to their own store, block the operation
+    // If the user has no vendor record (consumer or admin), allow the operation
+    const personVendor = await this.vendorRepo.findByPersonId(consumerId);
+    if (personVendor && product.vendorId === personVendor.id) {
+      throw new Error(CartError.VENDOR_SELF_ADDITION);
+    }
+
+    // Validate vendor exists
+
     // Validate vendor exists
     const vendor = await this.vendorRepo.findById(vendorId);
     if (!vendor) {

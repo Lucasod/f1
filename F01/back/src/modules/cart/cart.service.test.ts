@@ -24,6 +24,7 @@ describe('Cart Service', () => {
     };
     mockVendorRepo = {
       findById: vi.fn(),
+      findByPersonId: vi.fn(),
     };
 
     cartService = new CartService(
