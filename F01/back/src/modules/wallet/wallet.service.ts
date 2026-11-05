@@ -23,8 +23,9 @@ export class WalletService {
   }
 
   async getBalance(ownerId: string): Promise<number> {
-    const wallet = await this.getOrCreateWallet(ownerId);
-    return wallet.balance;
+    // MP-28: platform does not hold seller money; balance is always 0 (informational only)
+    await this.getOrCreateWallet(ownerId);
+    return 0;
   }
 
   async listTransactions(ownerId: string): Promise<WalletTransaction[]> {
@@ -56,8 +57,7 @@ export class WalletService {
       reason,
       orderId,
     });
-    wallet.credit(amount);
-    await this.walletRepo.update(wallet);
+    // MP-28: do NOT change wallet balance; only create transaction for audit/history
     await this.txRepo.save(tx);
     return tx;
   }
@@ -84,22 +84,16 @@ export class WalletService {
       reason,
       orderId,
     });
-    wallet.debit(amount);
-    await this.walletRepo.update(wallet);
+    // MP-28: do NOT change wallet balance; only create transaction for audit/history.
+    // The INSUFFICIENT_BALANCE check is removed since the platform does not hold seller funds.
     await this.txRepo.save(tx);
     return tx;
   }
 
   async reconcile(ownerId: string): Promise<{ materialized: number; computed: number; ok: boolean }> {
-    const wallet = await this.walletRepo.findByOwnerId(ownerId);
-    if (!wallet) {
-      return { materialized: 0, computed: 0, ok: true };
-    }
-    const txs = await this.txRepo.findByWalletId(wallet.id);
-    const computed = txs.reduce((sum, tx) => {
-      return tx.type === WalletTransactionType.CREDIT ? sum + tx.amount : sum - tx.amount;
-    }, 0);
-    return { materialized: wallet.balance, computed: round2(computed), ok: Math.abs(wallet.balance - computed) < 0.0001 };
+    // MP-28: with no stored-value balance, materialized is always 0.
+    // Since the platform does not hold seller money, reconcile always passes with materialized: 0.
+    return { materialized: 0, computed: 0, ok: true };
   }
 }
 

@@ -29,13 +29,6 @@ export class PayoutService {
       throw new Error(PayoutError.VENDOR_NOT_FOUND);
     }
 
-    if (this.walletService) {
-      const balance = await this.walletService.getBalance(vendorId.trim());
-      if (balance < amount) {
-        throw new Error(PayoutError.INSUFFICIENT_BALANCE);
-      }
-    }
-
     const payout = Payout.create({
       vendorId: vendorId.trim(),
       personId: personId.trim(),

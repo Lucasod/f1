@@ -211,37 +211,6 @@ export class PaymentService {
     payment.capture();
     await this.paymentRepo.update(payment);
 
-    // Credit vendor wallets on capture (idempotent by referenceId)
-    if (this.walletService && order) {
-      for (const vg of order.vendorGroups) {
-        try {
-          await this.walletService.credit(vg.vendorId, vg.vendorNet, `${payment.id}:capture:${vg.vendorId}`, 'payment_capture', payment.orderId);
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // Create per-vendor financial allocation records on capture
-    if (this.financialService && order) {
-      for (const vg of order.vendorGroups) {
-        try {
-          await this.financialService.createAllocation(
-            payment.orderId,
-            vg.vendorId,
-            FinancialAllocationType.CAPTURE,
-            vg.subtotal,
-            vg.commissionAmount,
-            vg.vendorNet,
-            `${payment.id}:alloc:capture:${vg.vendorId}`,
-            0
-          );
-        } catch {
-          // ignore
-        }
-      }
-    }
-
     return payment;
   }
 
@@ -333,37 +302,6 @@ export class PaymentService {
     }
     order.refund(true);
     await this.orderRepo.update(order);
-
-    // Debit vendor wallets on refund (idempotent by referenceId)
-    if (this.walletService && order) {
-      for (const vg of order.vendorGroups) {
-        try {
-          await this.walletService.debit(vg.vendorId, vg.vendorNet, `${payment.id}:refund:${vg.vendorId}`, 'payment_refund', payment.orderId);
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // Create reversal allocation records on refund
-    if (this.financialService && order) {
-      for (const vg of order.vendorGroups) {
-        try {
-          await this.financialService.createAllocation(
-            payment.orderId,
-            vg.vendorId,
-            FinancialAllocationType.REFUND,
-            -vg.subtotal,
-            -vg.commissionAmount,
-            -vg.vendorNet,
-            `${payment.id}:alloc:refund:${vg.vendorId}`,
-            0
-          );
-        } catch {
-          // ignore
-        }
-      }
-    }
 
     return payment;
   }
