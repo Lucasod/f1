@@ -80,8 +80,17 @@ export function useOrderMutations() {
       },
     });
 
+  const useAddOrderComment = () =>
+    useMutation<Order, Error, { orderId: string; comment: string }>({
+      mutationFn: ({ orderId, comment }) => orderApi.addOrderComment(orderId, comment),
+      onSuccess: (_data, variables) => {
+        invalidateOrderDetail(variables.orderId);
+      },
+    });
+
   return {
     useUpdateVendorGroupStatus,
     useUpdateOrderStatus,
+    useAddOrderComment,
   };
 }

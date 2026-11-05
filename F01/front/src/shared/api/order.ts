@@ -63,6 +63,9 @@ export interface Order {
   financialStatus: string;
   createdAt: string;
   updatedAt: string;
+  comment?: string;
+  commentedAt?: string;
+  commentedBy?: string;
 }
 
 export interface OrderListResponse {
@@ -204,5 +207,14 @@ export const orderApi = {
     const query = buildQueryString(params || {});
     const response = await apiClient.get(`/api/v1/vendor/orders?${query}`);
     return handleResponse<VendorOrderGroupsResponse>(response);
+  },
+
+  /**
+   * Add a comment to a delivered order (consumer owner only)
+   */
+  async addOrderComment(orderId: string, comment: string): Promise<Order> {
+    const response = await apiClient.post(`/api/v1/orders/${orderId}/comment`, { comment });
+    const data = await handleResponse<{ order: Order }>(response);
+    return data.order;
   },
 };

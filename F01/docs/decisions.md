@@ -899,3 +899,19 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 **Justification:** The approval was already documented in the run record (F-007). The reclassification from "requires human authorization" to "approved, implementation pending" corrects a documentation error identified in the reconciliation (BUG-006).
 **Source:** MP-AFIRDD-CYCLE-CLOSE-01, D phase; run record fird-marketplace-2026-11-04.md F-007
 **Consequences:** T-1103 status updated to reflect PDFKit approved (not blocked by human authorization). Actual installation and implementation of PDF generation remains a development task for a future cycle. No PDFKit dependency is currently in package.json.
+
+### CD-077: Order Comment Rules — Quantity and Immutability
+**Status:** Confirmed (MP-AFIRDD-A-02-DECISION-01)
+**Subject:** Order Comment rules — quantity and immutability
+**Decision:** One comment per order, immutable after submission. Moderation deferred.
+**Justification:** Consumer may submit exactly one comment per order when the order status is DELIVERED; after submission the comment cannot be edited, replaced, or duplicated for the same order. Moderation rules are deferred to a future decision.
+**Source:** MP-AFIRDD-A-02-DECISION-01 (user approval)
+**Consequences:** Order Comment API enforces one comment per order and immutability; moderation remains deferred (Q-030 PARTIALLY_RESOLVED).
+
+### CD-078: Product Review Eligibility — Delivered-Order Only
+**Status:** Confirmed (MP-AFIRDD-A-02-DECISION-02)
+**Subject:** Product Review eligibility — delivered-order only
+**Decision:** Product Reviews only eligible after order status DELIVERED (per CD-072). Reviews submitted via Orders flow.
+**Justification:** A Product Review may only be created when the associated order has reached DELIVERED state; the review must be associated with a product included in that delivered order; backend validates order ownership and delivery status; reviews remain linked to verified purchases and are submitted through the Orders flow, not a direct submission form on the Product Detail page.
+**Source:** MP-AFIRDD-A-02-DECISION-02 (user approval)
+**Consequences:** Review eligibility gated on DELIVERED order ownership; direct product-page submission removed (T-1110); CD-072 governs qualifying state.

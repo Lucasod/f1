@@ -11,7 +11,8 @@ import {
 export interface CreateReviewInput {
   productId: string;
   consumerId: string;
-  orderItemId: string;
+  orderItemId?: string;
+  orderId?: string;
   rating: number;
   comment?: string;
 }
@@ -26,8 +27,10 @@ export class ReviewService {
 
   async createReview(input: CreateReviewInput): Promise<Review> {
     if (
-      typeof input.orderItemId !== 'string'
-      || input.orderItemId.trim().length === 0
+      typeof input.productId !== 'string' || input.productId.trim().length === 0
+      || typeof input.consumerId !== 'string' || input.consumerId.trim().length === 0
+      || (input.orderItemId !== undefined && (typeof input.orderItemId !== 'string' || input.orderItemId.trim().length === 0))
+      || (input.orderId !== undefined && (typeof input.orderId !== 'string' || input.orderId.trim().length === 0))
       || (input.comment !== undefined && typeof input.comment !== 'string')
     ) {
       throw new Error(ReviewError.INVALID_REVIEW);
@@ -35,28 +38,70 @@ export class ReviewService {
     if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
       throw new Error(ReviewError.INVALID_RATING);
     }
+    if (!input.orderItemId && !input.orderId) {
+      throw new Error(ReviewError.INVALID_REVIEW);
+    }
     const product = await this.productRepo.findById(input.productId);
     if (!product) {
       throw new Error(ReviewError.PRODUCT_NOT_FOUND);
     }
 
-    const orders = await this.orderRepo.findByPersonId(input.consumerId);
-    const eligibleItem = orders.some(order =>
-      order.status === OrderStatus.DELIVERED
-      && order.vendorGroups.some(group =>
-        group.items.some(item =>
-          item.id === input.orderItemId && item.productId === input.productId
+    let resolvedOrderId: string | undefined = input.orderId?.trim();
+    let resolvedOrderItemId: string | undefined = input.orderItemId?.trim();
+
+    if (resolvedOrderId) {
+      const order = await this.orderRepo.findById(resolvedOrderId);
+      if (!order || order.personId !== input.consumerId) {
+        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+      }
+      if (order.status !== OrderStatus.DELIVERED) {
+        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+      }
+      const matchingItem = order.vendorGroups
+        .flatMap(group => group.items)
+        .find(item => item.productId === input.productId);
+      if (!matchingItem) {
+        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+      }
+      if (resolvedOrderItemId && resolvedOrderItemId !== matchingItem.id) {
+        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+      }
+      if (!resolvedOrderItemId) {
+        resolvedOrderItemId = matchingItem.id;
+      }
+      const duplicate = (await this.reviewRepo.findAll()).some(existing =>
+        existing.orderId === resolvedOrderId && existing.productId === input.productId
+      );
+      if (duplicate) {
+        throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
+      }
+    } else if (resolvedOrderItemId) {
+      const orders = await this.orderRepo.findByPersonId(input.consumerId);
+      const eligibleOrder = orders.find(order =>
+        order.status === OrderStatus.DELIVERED
+        && order.vendorGroups.some(group =>
+          group.items.some(item =>
+            item.id === resolvedOrderItemId && item.productId === input.productId
+          )
         )
-      )
-    );
-    if (!eligibleItem) {
-      throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
-    }
-    if (await this.reviewRepo.findByOrderItemId(input.orderItemId)) {
-      throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
+      );
+      if (!eligibleOrder) {
+        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+      }
+      resolvedOrderId = eligibleOrder.id;
+      if (await this.reviewRepo.findByOrderItemId(resolvedOrderItemId)) {
+        throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
+      }
     }
 
-    return this.reviewRepo.save(Review.create(input));
+    return this.reviewRepo.save(Review.create({
+      productId: input.productId,
+      consumerId: input.consumerId,
+      orderId: resolvedOrderId,
+      orderItemId: resolvedOrderItemId,
+      rating: input.rating,
+      comment: input.comment,
+    }));
   }
 
   async listProductReviews(productId: string, page = 1, limit = 20) {

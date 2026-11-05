@@ -19,6 +19,9 @@ interface OrderDoc {
   financialStatus: FinancialStatus;
   createdAt: Date;
   updatedAt: Date;
+  comment?: string;
+  commentedAt?: Date;
+  commentedBy?: string;
 }
 
 interface OrderVendorGroupDoc {
@@ -105,7 +108,10 @@ export class MongoOrderRepository implements OrderRepository {
       totalAmount: order.totalAmount,
       financialStatus: order.financialStatus,
       createdAt: order.createdAt,
-      updatedAt: now
+      updatedAt: now,
+      comment: order.comment,
+      commentedAt: order.commentedAt,
+      commentedBy: order.commentedBy
     };
 
     await this.ordersCollection.updateOne(
@@ -118,7 +124,10 @@ export class MongoOrderRepository implements OrderRepository {
           shippingAddress: orderDoc.shippingAddress,
           totalAmount: orderDoc.totalAmount,
           financialStatus: orderDoc.financialStatus,
-          updatedAt: now
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy
         },
         $setOnInsert: {
           createdAt: order.createdAt
@@ -164,6 +173,15 @@ export class MongoOrderRepository implements OrderRepository {
   async findAll(): Promise<Order[]> {
     const orders = await this.ordersCollection
       .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return orders.map(doc => this.mapToOrder(doc));
+  }
+
+  async findByCommentedBy(personId: string): Promise<Order[]> {
+    const orders = await this.ordersCollection
+      .find({ commentedBy: personId })
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -218,7 +236,10 @@ export class MongoOrderRepository implements OrderRepository {
       totalAmount: doc.totalAmount,
       financialStatus: doc.financialStatus,
       createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt
+      updatedAt: doc.updatedAt,
+      comment: doc.comment,
+      commentedAt: doc.commentedAt,
+      commentedBy: doc.commentedBy
     };
 
     return Order.reconstruct(orderData);

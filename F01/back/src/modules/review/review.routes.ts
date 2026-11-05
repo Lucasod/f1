@@ -61,6 +61,7 @@ export function createReviewRoutes({ authService, reviewService }: ReviewRoutesC
       const review = await reviewService.createReview({
         productId: readPathParameter(req.params.productId),
         consumerId: req.user.sub,
+        orderId: req.body.orderId,
         orderItemId: req.body.orderItemId,
         rating: req.body.rating,
         comment: req.body.comment,

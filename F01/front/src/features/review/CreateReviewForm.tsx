@@ -6,7 +6,7 @@ import { Input, Textarea, Select, Button, ErrorAlert, Spinner } from '@/componen
 
 export interface CreateReviewFormProps {
   productId: string;
-  orderItemId?: string;
+  orderId?: string;
   onSuccess?: (review: Review) => void;
   onReviewCreated?: (review: Review) => void;
 }
@@ -18,13 +18,12 @@ const RATING_OPTIONS = [1, 2, 3, 4, 5].map((value) => ({
 
 export function CreateReviewForm({
   productId,
-  orderItemId: initialOrderItemId,
+  orderId: initialOrderId,
   onSuccess,
   onReviewCreated,
 }: CreateReviewFormProps) {
   const { isAuthenticated, hasRole } = useAuth();
 
-  // Safe access: tests or callers may render without a QueryClientProvider.
   let queryClient: ReturnType<typeof useQueryClient> | null = null;
   try {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -35,7 +34,7 @@ export function CreateReviewForm({
 
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
-  const [orderItemId, setOrderItemId] = useState(initialOrderItemId ?? '');
+  const [orderId, setOrderId] = useState(initialOrderId ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdReview, setCreatedReview] = useState<Review | null>(null);
@@ -63,23 +62,26 @@ export function CreateReviewForm({
     event.preventDefault();
     setError(null);
 
-    if (!orderItemId.trim()) {
-      setError('Order item ID is required.');
+    if (!orderId.trim()) {
+      setError('Order ID is required.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await reviewApi.createReview(productId, {
-        orderItemId: orderItemId.trim(),
+      const result = await reviewApi.createReview({
+        productId,
+        orderId: orderId.trim(),
         rating,
         comment: comment.trim() ? comment.trim() : undefined,
       });
+      const resultAny = result as unknown as { review?: Review };
+      const review = resultAny.review ? resultAny.review : (result as Review);
 
-      setCreatedReview(response.review);
+      setCreatedReview(review);
       setSuccessMessage('Review submitted successfully.');
-      onSuccess?.(response.review);
-      onReviewCreated?.(response.review);
+      onSuccess?.(review);
+      onReviewCreated?.(review);
 
       if (queryClient) {
         queryClient.invalidateQueries({ queryKey: ['reviews', productId] });
@@ -92,9 +94,9 @@ export function CreateReviewForm({
       if (status === 401) {
         setError('Please log in to submit a review.');
       } else if (status === 403) {
-        setError('You are not eligible to review this product. A delivered order item is required.');
+        setError('You are not eligible to review this product. A delivered order is required.');
       } else if (status === 409) {
-        setError('This order item has already been reviewed.');
+        setError('This order has already been reviewed.');
       } else if (typeof status === 'number' && status >= 500) {
         setError('Server error. Please try again later.');
       } else {
@@ -170,13 +172,13 @@ export function CreateReviewForm({
           />
 
           <Input
-            id="orderItemId"
-            label="Order Item ID"
+            id="orderId"
+            label="Order ID"
             required
-            value={orderItemId}
-            onChange={(event) => setOrderItemId(event.target.value)}
-            placeholder="Order item id"
-            disabled={isSubmitting || !!initialOrderItemId}
+            value={orderId}
+            onChange={(event) => setOrderId(event.target.value)}
+            placeholder="Order id"
+            disabled={isSubmitting || !!initialOrderId}
           />
 
           <Textarea

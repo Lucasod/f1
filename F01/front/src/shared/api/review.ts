@@ -10,7 +10,8 @@ export interface Review {
   id: string;
   productId: string;
   consumerId: string;
-  orderItemId: string;
+  orderItemId?: string;
+  orderId?: string;
   rating: number;
   comment: string | null | undefined;
   images: string[];
@@ -20,10 +21,12 @@ export interface Review {
 }
 
 export interface CreateReviewInput {
-  orderItemId: string;
+  productId: string;
+  orderId: string;
   rating: number;
   comment?: string;
   images?: string[];
+  orderItemId?: string;
 }
 
 export interface ListReviewsParams {
@@ -84,9 +87,11 @@ export const reviewApi = {
   /**
    * Create a new review for a product
    */
-  async createReview(productId: string, input: CreateReviewInput): Promise<{ review: Review }> {
+  async createReview(data: { productId: string; orderId: string; rating: number; comment?: string }): Promise<Review> {
+    const { productId, ...input } = data;
     const response = await apiClient.post(`/api/v1/products/${productId}/reviews`, input);
-    return handleResponse<{ review: Review }>(response);
+    const result = await handleResponse<{ review: Review }>(response);
+    return result.review;
   },
 
   /**

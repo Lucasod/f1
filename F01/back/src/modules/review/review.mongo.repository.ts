@@ -32,6 +32,11 @@ export class MongoReviewRepository implements ReviewRepository {
     return document ? Review.reconstruct(this.toReviewData(document)) : null;
   }
 
+  async findByOrderId(orderId: string): Promise<Review[]> {
+    const documents = await this.collection.find({ orderId }).sort({ createdAt: -1 }).toArray();
+    return documents.map(document => Review.reconstruct(this.toReviewData(document)));
+  }
+
   async findByProductId(productId: string): Promise<Review[]> {
     const documents = await this.collection.find({ productId }).sort({ createdAt: -1 }).toArray();
     return documents.map(document => Review.reconstruct(this.toReviewData(document)));

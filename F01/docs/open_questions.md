@@ -410,8 +410,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Editable vs immutable after submission
 - Post-moderation vs pre-moderation vs none
 - One comment per order vs multiple
-**Resolution:** One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 may proceed with these rules.
-**State:** **PARTIALLY_RESOLVED** — One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 may proceed with these rules. Moderation rules remain deferred (separate from Q-031).
+**Resolution:** One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 implemented and tests pass (MP-AFIRDD-CYCLE-EXEC-02).
+**State:** **PARTIALLY_RESOLVED** — One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 implemented and tests pass (MP-AFIRDD-CYCLE-EXEC-02). Moderation rules remain deferred (separate from Q-031).
 
 ---
 

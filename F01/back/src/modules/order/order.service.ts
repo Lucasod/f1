@@ -252,6 +252,18 @@ export class OrderService {
     };
   }
 
+  async addOrderComment(
+    orderId: string,
+    personId: string,
+    comment: string
+  ): Promise<Order> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) throw new Error(OrderError.ORDER_NOT_FOUND);
+    if (order.personId !== personId) throw new Error(OrderError.FORBIDDEN);
+    order.addComment(personId, comment.trim());
+    return this.orderRepo.update(order);
+  }
+
   async handlePaymentCallback(
     orderId: string,
     paymentStatus: PaymentStatus,

@@ -58,7 +58,10 @@ export enum OrderError {
   FORBIDDEN = 'FORBIDDEN',
   INVALID_QUANTITY = 'INVALID_QUANTITY',
   INVALID_AMOUNT = 'INVALID_AMOUNT',
-  INVALID_COMMISSION_PCT = 'INVALID_COMMISSION_PCT'
+  INVALID_COMMISSION_PCT = 'INVALID_COMMISSION_PCT',
+  ORDER_COMMENT_ALREADY_EXISTS = 'ORDER_COMMENT_ALREADY_EXISTS',
+  ORDER_NOT_DELIVERED = 'ORDER_NOT_DELIVERED',
+  INVALID_COMMENT = 'INVALID_COMMENT'
 }
 
 export interface Address {
@@ -106,6 +109,9 @@ export interface OrderData {
   financialStatus: FinancialStatus;
   createdAt: Date;
   updatedAt: Date;
+  comment?: string;
+  commentedAt?: Date;
+  commentedBy?: string;
 }
 
 export interface PaymentData {
@@ -357,6 +363,9 @@ export class Order {
   public financialStatus: FinancialStatus;
   public readonly createdAt: Date;
   public updatedAt: Date;
+  public comment?: string;
+  public commentedAt?: Date;
+  public commentedBy?: string;
 
   private constructor(data: OrderData) {
     this.id = data.id;
@@ -368,6 +377,9 @@ export class Order {
     this.financialStatus = data.financialStatus;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
+    this.comment = data.comment;
+    this.commentedAt = data.commentedAt;
+    this.commentedBy = data.commentedBy;
   }
 
   static create(data: {
@@ -510,6 +522,25 @@ export class Order {
     this.updatedAt = new Date();
   }
 
+  addComment(personId: string, text: string): void {
+    if (this.status !== OrderStatus.DELIVERED) {
+      throw new Error(OrderError.ORDER_NOT_DELIVERED);
+    }
+    if (personId !== this.personId) {
+      throw new Error(OrderError.FORBIDDEN);
+    }
+    if (this.comment !== undefined) {
+      throw new Error(OrderError.ORDER_COMMENT_ALREADY_EXISTS);
+    }
+    if (typeof text !== 'string' || text.trim().length === 0 || text.length > 1000) {
+      throw new Error(OrderError.INVALID_COMMENT);
+    }
+    this.comment = text;
+    this.commentedAt = new Date();
+    this.commentedBy = personId;
+    this.updatedAt = new Date();
+  }
+
   toJSON(): OrderData {
     return {
       id: this.id,
@@ -520,7 +551,10 @@ export class Order {
       totalAmount: this.totalAmount,
       financialStatus: this.financialStatus,
       createdAt: this.createdAt,
-      updatedAt: this.updatedAt
+      updatedAt: this.updatedAt,
+      comment: this.comment,
+      commentedAt: this.commentedAt,
+      commentedBy: this.commentedBy
     };
   }
 }
@@ -657,6 +691,7 @@ export interface OrderRepository {
   findByPersonId(personId: string): Promise<Order[]>;
   findByStatus(status: OrderStatus): Promise<Order[]>;
   findAll(): Promise<Order[]>;
+  findByCommentedBy?(personId: string): Promise<Order[]>;
   update(order: Order): Promise<Order>;
   delete(id: string): Promise<void>;
 }
@@ -708,6 +743,14 @@ export class InMemoryOrderRepository implements OrderRepository {
     const orders: Order[] = [];
     for (const order of this.orders.values()) {
       orders.push(order);
+    }
+    return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async findByCommentedBy(personId: string): Promise<Order[]> {
+    const orders: Order[] = [];
+    for (const order of this.orders.values()) {
+      if (order.commentedBy === personId) orders.push(order);
     }
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }

@@ -1,5 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useOrderDetail, useOrderMutations } from './useOrder';
+import { OrderCommentSection } from './OrderCommentSection';
+import { OrderReviewSection } from './OrderReviewSection';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   Order,
@@ -571,6 +573,12 @@ export function OrderDetailPage() {
 
             {/* Order Totals */}
             <OrderTotals order={order} />
+
+            {/* Order Comment (delivered orders only) */}
+            <OrderCommentSection order={order} />
+
+            {/* Product Reviews (delivered orders only) */}
+            <OrderReviewSection order={order} canReview={isConsumer} />
           </div>
         </div>
       </div>

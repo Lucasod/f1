@@ -10,6 +10,7 @@ import {
   InMemoryOrderRepository,
   InMemoryPaymentRepository,
   Order,
+  OrderStatus,
 } from './order.domain';
 import { OrderService } from './order.service';
 import { createOrderRoutes } from './order.routes';
@@ -282,5 +283,178 @@ describe('Order routes ownership', () => {
       .set('Authorization', ['Bearer', ownerToken].join(' '))
       .expect(200);
     expect(detail.body.order.personId).toBe(owner!.id);
+  });
+});
+describe('Order comment route', () => {
+  let app: express.Express;
+  let ownerToken: string;
+  let otherConsumerToken: string;
+  let deliveredOrderId: string;
+  let pendingOrderId: string;
+  let ownerPersonId: string;
+  let personRepository: InMemoryPersonRepository;
+  let orderRepository: InMemoryOrderRepository;
+  let authService: AuthService;
+  const password = process.env.TEST_USER_PASSWORD!;
+
+  beforeEach(async () => {
+    personRepository = new InMemoryPersonRepository();
+    authService = new AuthService(personRepository, 'test-secret-key', '24h');
+    const owner = await authService.register({
+      name: 'Order Owner',
+      taxIdType: 'CPF',
+      taxIdValue: '52998224725',
+      email: 'order-owner-comment@example.com',
+      password: password,
+      role: PersonRole.CONSUMER,
+    });
+    const otherConsumer = await authService.register({
+      name: 'Other Consumer',
+      taxIdType: 'CPF',
+      taxIdValue: '98765432100',
+      email: 'other-consumer-comment@example.com',
+      password: password,
+      role: PersonRole.CONSUMER,
+    });
+    ownerToken = owner.tokens.accessToken;
+    ownerPersonId = owner.person.id;
+    otherConsumerToken = otherConsumer.tokens.accessToken;
+
+    orderRepository = new InMemoryOrderRepository();
+    const paymentRepository = new InMemoryPaymentRepository();
+    const vendorRepository = new InMemoryVendorRepository();
+
+    const deliveredOrder = Order.create({
+      personId: owner.person.id,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'order-product',
+          productName: 'Order Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 25,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'delivery-address',
+        street: 'Main Street',
+        number: '1',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    deliveredOrder.markPaymentAuthorized();
+    deliveredOrder.transitionTo(OrderStatus.PROCESSING);
+    deliveredOrder.transitionTo(OrderStatus.SHIPPED);
+    deliveredOrder.transitionTo(OrderStatus.DELIVERED);
+    deliveredOrderId = deliveredOrder.id;
+    await orderRepository.save(deliveredOrder);
+
+    const pendingOrder = Order.create({
+      personId: owner.person.id,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'pending-product',
+          productName: 'Pending Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 25,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'delivery-address',
+        street: 'Main Street',
+        number: '1',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    pendingOrderId = pendingOrder.id;
+    await orderRepository.save(pendingOrder);
+
+    const orderService = new OrderService(
+      orderRepository,
+      paymentRepository,
+      personRepository,
+      vendorRepository,
+      config,
+    );
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1', createOrderRoutes({
+      authService,
+      orderService,
+      personRepo: personRepository,
+      vendorRepo: vendorRepository,
+    }));
+  });
+
+  it('POST comment to delivered order by owner → 200, comment saved', async () => {
+    const res = await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: '  Great order  ' })
+      .expect(200);
+    expect(res.body.order.comment).toBe('Great order');
+  });
+
+  it('POST comment to non-delivered order → 422', async () => {
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrderId}/comment`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: 'hello' })
+      .expect(422);
+  });
+
+  it('POST comment by non-owner → 403', async () => {
+    await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .set('Authorization', `Bearer ${otherConsumerToken}`)
+      .send({ comment: 'hello' })
+      .expect(403);
+  });
+
+  it('POST second comment → 409', async () => {
+    await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: 'first' })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: 'second' })
+      .expect(409);
+  });
+
+  it('POST empty comment → 400', async () => {
+    await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: '   ' })
+      .expect(400);
+  });
+
+  it('POST comment to non-existent order → 404', async () => {
+    await request(app)
+      .post('/api/v1/orders/non-existent-order/comment')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ comment: 'hello' })
+      .expect(404);
+  });
+
+  it('POST comment without auth → 401', async () => {
+    await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/comment`)
+      .send({ comment: 'hello' })
+      .expect(401);
   });
 });

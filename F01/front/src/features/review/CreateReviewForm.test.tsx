@@ -43,7 +43,7 @@ describe('CreateReviewForm', () => {
   it('renders rating, order item, comment and submit button', () => {
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
     expect(screen.getByLabelText(/rating/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/order item/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/order/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/comment/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /submit review/i })).toBeInTheDocument();
   });
@@ -56,30 +56,30 @@ describe('CreateReviewForm', () => {
 
   it('submits review successfully', async () => {
     vi.mocked(reviewApi.createReview).mockResolvedValueOnce({
-      review: {
-        id: 'rev-1',
-        productId: 'prod-1',
-        consumerId: 'user-1',
-        orderItemId: 'item-1',
-        rating: 4,
-        comment: 'Nice',
-        images: [],
-        status: 'published',
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
-      },
+      id: 'rev-1',
+      productId: 'prod-1',
+      consumerId: 'user-1',
+      orderItemId: 'item-1',
+      orderId: 'item-1',
+      rating: 4,
+      comment: 'Nice',
+      images: [],
+      status: 'published',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
     } as any);
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.change(screen.getByLabelText(/rating/i), { target: { value: '4' } });
     fireEvent.change(screen.getByLabelText(/comment/i), { target: { value: 'Nice' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() =>
-      expect(reviewApi.createReview).toHaveBeenCalledWith('prod-1', {
-        orderItemId: 'item-1',
+      expect(reviewApi.createReview).toHaveBeenCalledWith({
+        productId: 'prod-1',
+        orderId: 'item-1',
         rating: 4,
         comment: 'Nice',
       })
@@ -94,7 +94,7 @@ describe('CreateReviewForm', () => {
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() => expect(screen.getByText(/eligible/i)).toBeInTheDocument());
@@ -107,7 +107,7 @@ describe('CreateReviewForm', () => {
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() => expect(screen.getByText(/already been reviewed/i)).toBeInTheDocument());
@@ -120,7 +120,7 @@ describe('CreateReviewForm', () => {
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() => expect(screen.getByText(/please log in/i)).toBeInTheDocument());
@@ -133,7 +133,7 @@ describe('CreateReviewForm', () => {
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() => expect(screen.getByText(/server error/i)).toBeInTheDocument());
@@ -141,18 +141,17 @@ describe('CreateReviewForm', () => {
 
   it('uploads image after review creation', async () => {
     vi.mocked(reviewApi.createReview).mockResolvedValueOnce({
-      review: {
-        id: 'rev-1',
-        productId: 'prod-1',
-        consumerId: 'user-1',
-        orderItemId: 'item-1',
-        rating: 5,
-        comment: null,
-        images: [],
-        status: 'published',
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
-      },
+      id: 'rev-1',
+      productId: 'prod-1',
+      consumerId: 'user-1',
+      orderItemId: 'item-1',
+      orderId: 'item-1',
+      rating: 5,
+      comment: null,
+      images: [],
+      status: 'published',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
     } as any);
     vi.mocked(reviewApi.addReviewImage).mockResolvedValueOnce({
       review: {
@@ -171,7 +170,7 @@ describe('CreateReviewForm', () => {
 
     render(<CreateReviewForm productId="prod-1" />, { wrapper: createWrapper() });
 
-    fireEvent.change(screen.getByLabelText(/order item/i), { target: { value: 'item-1' } });
+    fireEvent.change(screen.getByLabelText(/order/i), { target: { value: 'item-1' } });
     fireEvent.click(screen.getByRole('button', { name: /submit review/i }));
 
     await waitFor(() => expect(screen.getByLabelText(/add photo/i)).toBeInTheDocument());

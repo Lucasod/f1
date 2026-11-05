@@ -2893,3 +2893,47 @@ No secrets read or exposed. No commits made.
 - S3 integration (T-703b) remains blocked on actual wiring work.
 - PDF generation implementation remains pending (PDFKit not installed).
 - New requirements (T-1108/T-1109/T-1110) registered but implementation deferred to future cycle.
+
+---
+
+## MP-AFIRDD-CYCLE-EXEC-02: D Phase — Documentation Updates (D-Phase)
+
+**Date:** 2026-11-05
+**Objective:** Record completion of MP-AFIRDD-CYCLE-EXEC-02 tasks (T-1108, T-1109, T-1110) and update documentation accordingly.
+**Scope:** Documentation-only updates across task_list.md, open_questions.md, mp_log.md.
+
+### Cycle Execution Summary
+- Tasks completed: T-1108 (Backend Order Comment API), T-1109 (Frontend Order Comment UI), T-1110 (Product Review Submission via Orders — backend + frontend).
+- Tests: 993 passed, 3 skipped (backend); 585 passed (frontend).
+- Review verdict: PASS (R phase).
+- Documentation updated (this entry and related task/question status changes).
+
+### Tasks Completed
+- **T-1108:** Backend Order Comment API — Consumer can add one immutable comment to a delivered order; ownership enforced.
+- **T-1109:** Frontend Order Comment UI — Comment input in Order Details for delivered orders; loading/error states.
+- **T-1110:** Product Review Submission via Orders — Review form removed from product page; submission available in order flow for delivered items; existing review APIs reused.
+
+### Tests
+- Backend: 993 passed, 3 skipped.
+- Frontend: 585 passed.
+
+### Review Verdict
+- PASS (R phase) — independent code review approved; no corrective findings.
+
+### Documentation Updated
+- `F01/docs/task_list.md`: T-1108, T-1109 → ✅ completed; T-1110 → ✅ completed.
+- `F01/docs/open_questions.md`: Q-030 → PARTIALLY_RESOLVED (one comment per order, immutable; moderation deferred).
+- `F01/docs/mp_log.md`: this entry.
+
+### Blocked / Deferred Items
+- Item-Level Delivery and Delivery Disputes — deferred (complex new features, not implemented in this cycle).
+- PDFKit implementation — deferred (PDFKit approved but not installed; T-1103 remains in progress).
+- P5 tasks — remain blocked by `MAX_AUTHORIZED_PHASE = 4`.
+
+### Limitations
+- No code changes in this documentation phase.
+- No tests executed in this documentation phase.
+- Deferred items remain out of scope for this cycle.
+
+### Git State
+No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged.

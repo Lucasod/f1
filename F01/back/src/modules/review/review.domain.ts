@@ -23,7 +23,8 @@ export interface ReviewData {
   id: string;
   productId: string;
   consumerId: string;
-  orderItemId: string;
+  orderItemId?: string;
+  orderId?: string;
   rating: number;
   comment?: string;
   images: string[];
@@ -40,7 +41,8 @@ export class Review {
   public readonly id: string;
   public readonly productId: string;
   public readonly consumerId: string;
-  public readonly orderItemId: string;
+  public readonly orderItemId?: string;
+  public readonly orderId?: string;
   public rating: number;
   public comment?: string;
   public images: string[];
@@ -53,6 +55,7 @@ export class Review {
     this.productId = data.productId;
     this.consumerId = data.consumerId;
     this.orderItemId = data.orderItemId;
+    this.orderId = data.orderId;
     this.rating = data.rating;
     this.comment = data.comment;
     this.images = [...data.images];
@@ -64,15 +67,26 @@ export class Review {
   static create(data: {
     productId: string;
     consumerId: string;
-    orderItemId: string;
+    orderItemId?: string;
+    orderId?: string;
     rating: number;
     comment?: string;
   }): Review {
     if (
       typeof data.productId !== 'string' || data.productId.trim().length === 0
       || typeof data.consumerId !== 'string' || data.consumerId.trim().length === 0
-      || typeof data.orderItemId !== 'string' || data.orderItemId.trim().length === 0
     ) {
+      throw new Error(ReviewError.INVALID_REVIEW);
+    }
+    const hasOrderItem = typeof data.orderItemId === 'string' && data.orderItemId.trim().length > 0;
+    const hasOrderId = typeof data.orderId === 'string' && data.orderId.trim().length > 0;
+    if (!hasOrderItem && !hasOrderId) {
+      throw new Error(ReviewError.INVALID_REVIEW);
+    }
+    if (data.orderItemId !== undefined && (typeof data.orderItemId !== 'string' || data.orderItemId.trim().length === 0)) {
+      throw new Error(ReviewError.INVALID_REVIEW);
+    }
+    if (data.orderId !== undefined && (typeof data.orderId !== 'string' || data.orderId.trim().length === 0)) {
       throw new Error(ReviewError.INVALID_REVIEW);
     }
     if (!Number.isInteger(data.rating) || data.rating < 1 || data.rating > 5) {
@@ -91,6 +105,7 @@ export class Review {
       productId: data.productId,
       consumerId: data.consumerId,
       orderItemId: data.orderItemId,
+      orderId: data.orderId,
       rating: data.rating,
       comment: data.comment?.trim() || undefined,
       images: [],
@@ -133,6 +148,7 @@ export class Review {
       productId: this.productId,
       consumerId: this.consumerId,
       orderItemId: this.orderItemId,
+      orderId: this.orderId,
       rating: this.rating,
       comment: this.comment,
       images: [...this.images],
@@ -147,6 +163,7 @@ export interface ReviewRepository {
   save(review: Review): Promise<Review>;
   findById(id: string): Promise<Review | null>;
   findByOrderItemId(orderItemId: string): Promise<Review | null>;
+  findByOrderId(orderId: string): Promise<Review[]>;
   findByProductId(productId: string): Promise<Review[]>;
   findAll(): Promise<Review[]>;
   update(review: Review): Promise<Review>;
@@ -156,7 +173,10 @@ export class InMemoryReviewRepository implements ReviewRepository {
   private readonly reviews = new Map<string, Review>();
 
   async save(review: Review): Promise<Review> {
-    if ([...this.reviews.values()].some(existing => existing.orderItemId === review.orderItemId)) {
+    if ([...this.reviews.values()].some(existing =>
+      (review.orderId !== undefined && existing.orderId === review.orderId)
+      || (review.orderItemId !== undefined && existing.orderItemId === review.orderItemId)
+    )) {
       throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
     }
     this.reviews.set(review.id, review);
@@ -169,6 +189,10 @@ export class InMemoryReviewRepository implements ReviewRepository {
 
   async findByOrderItemId(orderItemId: string): Promise<Review | null> {
     return [...this.reviews.values()].find(review => review.orderItemId === orderItemId) ?? null;
+  }
+
+  async findByOrderId(orderId: string): Promise<Review[]> {
+    return [...this.reviews.values()].filter(review => review.orderId === orderId);
   }
 
   async findByProductId(productId: string): Promise<Review[]> {
