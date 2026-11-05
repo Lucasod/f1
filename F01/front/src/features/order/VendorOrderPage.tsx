@@ -152,7 +152,7 @@ function VendorGroupCard({
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.commissionAmount)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Líquido Vendedor</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Vendor Net</p>
           <p className="text-lg font-semibold text-green-700">{formatCurrency(vendorGroup.vendorNet)}</p>
         </div>
       </div>
@@ -251,7 +251,7 @@ export function VendorOrderPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
-            message="Não foi possível carregar os pedidos do vendedor. Tente novamente."
+            message="Could not load seller's orders. Try again."
             title="Erro ao carregar pedidos"
             variant="error"
             action={{

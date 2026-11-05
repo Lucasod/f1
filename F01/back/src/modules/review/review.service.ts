@@ -54,13 +54,10 @@ export class ReviewService {
       if (!order || order.personId !== input.consumerId) {
         throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
       }
-      if (order.status !== OrderStatus.DELIVERED) {
-        throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
-      }
       const matchingItem = order.vendorGroups
         .flatMap(group => group.items)
         .find(item => item.productId === input.productId);
-      if (!matchingItem) {
+      if (!matchingItem || !matchingItem.isDelivered) {
         throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
       }
       if (resolvedOrderItemId && resolvedOrderItemId !== matchingItem.id) {
@@ -78,10 +75,9 @@ export class ReviewService {
     } else if (resolvedOrderItemId) {
       const orders = await this.orderRepo.findByPersonId(input.consumerId);
       const eligibleOrder = orders.find(order =>
-        order.status === OrderStatus.DELIVERED
-        && order.vendorGroups.some(group =>
+        order.vendorGroups.some(group =>
           group.items.some(item =>
-            item.id === resolvedOrderItemId && item.productId === input.productId
+            item.id === resolvedOrderItemId && item.productId === input.productId && item.isDelivered
           )
         )
       );

@@ -47,7 +47,9 @@ export class InvoiceService {
     // exposed as a downloadable URL. The invoice is represented as PENDING until
     // actual PDF bytes are generated and stored (via markGenerated). The key is
     // regenerated when real PDF generation is implemented.
-    void key;
+    // Key generated but not stored per CD-035; PDF generation/storage deferred.
+    // The invoice remains PENDING until actual PDF bytes are generated and stored.
+    key;
 
     const invoice = Invoice.create({
       orderId: order.id,
@@ -105,20 +107,88 @@ export class InvoiceService {
     }
 
     const now = new Date();
-    const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
-    // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
-    // A generated storage key is NOT proof that a PDF exists, so it must not be
-    // exposed as a downloadable URL. The invoice remains PENDING until actual PDF
-    // bytes are generated and stored (via markGenerated). The key is regenerated
-    // when real PDF generation is implemented.
-    void key;
+    const order = await this.orderRepo.findById(invoice.orderId);
 
     invoice.pdfUrl = '';
     invoice.pdfPath = '';
     invoice.status = InvoiceStatus.PENDING;
     invoice.updatedAt = new Date();
+    await this.invoiceRepo.update(invoice);
 
+    if (this.storageAdapter && order) {
+      try {
+        await this.generatePdfForInvoice(invoice, order);
+      } catch {
+        // leave pending
+      }
+    }
+
+    return (await this.invoiceRepo.findById(invoice.id)) ?? invoice;
+  }
+
+  private async generatePdfForInvoice(invoice: Invoice, order: any): Promise<Invoice> {
+    if (!this.storageAdapter) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
+    const now = new Date();
+    const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
+    const buffer = await this.buildPdf(invoice, order);
+    const result = await this.storageAdapter.save(buffer, key, 'application/pdf');
+    invoice.markGenerated(result.url, result.key);
     return this.invoiceRepo.update(invoice);
+  }
+
+  private async buildPdf(invoice: Invoice, order: any): Promise<Buffer> {
+    const PDFDocument = require('pdfkit');
+    return new Promise<Buffer>((resolve, reject) => {
+      try {
+        const doc = new PDFDocument();
+        const chunks: Buffer[] = [];
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        doc.fontSize(18).text('Invoice', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Invoice ID: ${invoice.id}`);
+        doc.text(`Order ID: ${invoice.orderId}`);
+        doc.text(`Vendor ID: ${invoice.vendorId}`);
+        doc.text(`Emission: ${invoice.emissionAt.toISOString()}`);
+        doc.text(`Status: ${invoice.status}`);
+        doc.moveDown();
+        doc.text('Items:');
+        const groups = Array.isArray(order?.vendorGroups) ? order.vendorGroups : [];
+        for (const vg of groups) {
+          for (const item of (vg.items ?? [])) {
+            doc.text(`- ${item.productName} x${item.quantity} @ ${item.unitPrice} = ${item.totalPrice}`);
+          }
+        }
+        doc.moveDown();
+        doc.text(`Total: ${order?.totalAmount ?? ''}`);
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async generatePdf(invoiceId: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepo.findById(invoiceId.trim());
+    if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
+    const order = await this.orderRepo.findById(invoice.orderId);
+    if (!order) throw new Error(InvoiceError.ORDER_NOT_FOUND);
+    if (invoice.status !== InvoiceStatus.PENDING) {
+      // reset to pending to allow regeneration
+      invoice.pdfUrl = '';
+      invoice.pdfPath = '';
+      invoice.status = InvoiceStatus.PENDING;
+      invoice.updatedAt = new Date();
+      await this.invoiceRepo.update(invoice);
+    }
+    if (!this.storageAdapter) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
+    return this.generatePdfForInvoice(invoice, order);
   }
 
   async markGenerated(invoiceId: string, pdfUrl: string, pdfPath: string): Promise<Invoice> {

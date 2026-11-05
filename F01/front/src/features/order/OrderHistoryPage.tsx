@@ -103,7 +103,7 @@ export function OrderHistoryPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
-            message="Não foi possível carregar o histórico de pedidos. Tente novamente."
+            message="Could not load order history. Try again."
             title="Erro ao carregar pedidos"
             variant="error"
             action={{
@@ -125,7 +125,7 @@ export function OrderHistoryPage() {
           <EmptyState
             icon={EmptyStateIcons.orders}
             title="Nenhum pedido encontrado"
-            description={statusFilter ? 'Tente alterar o filtro de status para ver mais pedidos.' : 'Você ainda não fez nenhum pedido.'}
+            description={statusFilter ? 'Try adjusting the status filter to see more orders.' : 'You haven\'t made any orders yet.'}
             action={
               !statusFilter
                 ? {

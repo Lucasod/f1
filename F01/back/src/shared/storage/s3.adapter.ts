@@ -192,7 +192,18 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   async save(file: Buffer, key: string, contentType: string): Promise<{ url: string; key: string }> {
-    const validation = await this.validateFile(file, contentType);
+    let validation: ValidationResult;
+    if (contentType === 'application/pdf') {
+      if (file.length === 0) {
+        validation = { valid: false, error: 'Empty file' };
+      } else if (file.length > 10 * 1024 * 1024) {
+        validation = { valid: false, error: 'File size exceeds maximum' };
+      } else {
+        validation = { valid: true };
+      }
+    } else {
+      validation = await this.validateFile(file, contentType);
+    }
     if (!validation.valid) {
       throw new Error(validation.error || 'File validation failed');
     }

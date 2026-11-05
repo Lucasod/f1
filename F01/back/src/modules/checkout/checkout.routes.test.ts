@@ -475,9 +475,10 @@ describe('Checkout Routes', () => {
         expect(order.shippingAddress.id).toBe(addressId);
         expect(order.shippingAddress.street).toBe('Main Street');
 
-        // Verify cart is cleared
+        // Verify cart is preserved (not cleared at checkout initiation)
         const cart = await cartRepo.findById(consumerId);
-        expect(cart!.isEmpty).toBe(true);
+        expect(cart!.isEmpty).toBe(false);
+        expect(cart!.items).toHaveLength(1);
 
         // Verify payment was created
         const payments = await paymentRepo.findByOrderId(order.id);

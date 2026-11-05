@@ -80,7 +80,7 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): { label: st
 const TIMELINE_STEPS: { status: OrderStatus; label: string; description: string }[] = [
   { status: 'pending_payment', label: 'PENDING_PAYMENT', description: 'Aguardando pagamento' },
   { status: 'paid', label: 'PAID', description: 'Pagamento confirmado' },
-  { status: 'processing', label: 'PROCESSING', description: 'Em preparação' },
+  { status: 'processing', label: 'PROCESSING', description: 'Preparing' },
   { status: 'shipped', label: 'SHIPPED', description: 'Enviado para entrega' },
   { status: 'delivered', label: 'DELIVERED', description: 'Entregue' },
 ];
@@ -176,7 +176,7 @@ function VendorGroupCard({
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.commissionAmount)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Líquido Vendedor</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Vendor Net</p>
           <p className="text-lg font-semibold text-green-700">{formatCurrency(vendorGroup.vendorNet)}</p>
         </div>
       </div>
@@ -397,8 +397,8 @@ export function OrderDetailPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <EmptyState
               icon={EmptyStateIcons.orders}
-              title="Pedido não encontrado"
-              description="O pedido solicitado não existe ou foi removido."
+title="Order not found"
+description="The requested order does not exist or has been removed."
               action={{
                 label: 'Voltar para meus pedidos',
                 onClick: handleBackToOrders,
@@ -437,10 +437,10 @@ export function OrderDetailPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <EmptyState
             icon={EmptyStateIcons.orders}
-            title="Pedido não encontrado"
-            description="O pedido solicitado não existe ou foi removido."
+            title="Order not found"
+            description="The requested order does not exist or has been removed."
             action={{
-              label: 'Voltar para meus pedidos',
+              label: 'Back to my orders',
               onClick: handleBackToOrders,
               variant: 'primary',
             }}

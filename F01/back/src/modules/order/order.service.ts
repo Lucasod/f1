@@ -252,6 +252,57 @@ export class OrderService {
     };
   }
 
+  async markItemsDelivered(
+    orderId: string,
+    personId: string,
+    role: 'consumer' | 'vendor' | 'admin',
+    vendorId: string | undefined,
+    itemIds: string[] | undefined,
+    all: boolean | undefined,
+    deliveredByOverride?: string
+  ): Promise<Order> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      throw new Error(OrderError.ORDER_NOT_FOUND);
+    }
+
+    let resolvedItemIds: string[] = [];
+
+    if (role === 'consumer') {
+      if (order.personId !== personId) {
+        throw new Error(OrderError.FORBIDDEN);
+      }
+      const allItems = order.vendorGroups.flatMap(vg => vg.items);
+      resolvedItemIds = all
+        ? allItems.map(i => i.id)
+        : (itemIds ?? []).filter(id => allItems.some(i => i.id === id));
+    } else if (role === 'vendor') {
+      if (!vendorId) {
+        throw new Error(OrderError.VENDOR_ID_REQUIRED);
+      }
+      const vg = order.vendorGroups.find(g => g.vendorId === vendorId);
+      if (!vg) {
+        throw new Error(OrderError.FORBIDDEN);
+      }
+      resolvedItemIds = all
+        ? vg.items.map(i => i.id)
+        : (itemIds ?? []).filter(id => vg.items.some(i => i.id === id));
+    } else if (role === 'admin') {
+      const allItems = order.vendorGroups.flatMap(vg => vg.items);
+      resolvedItemIds = all
+        ? allItems.map(i => i.id)
+        : (itemIds ?? []).filter(id => allItems.some(i => i.id === id));
+    }
+
+    if (resolvedItemIds.length === 0) {
+      throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    }
+
+    const deliveredBy = deliveredByOverride ?? personId;
+    order.markItemsDeliveredByIds(resolvedItemIds, deliveredBy);
+    return this.orderRepo.update(order);
+  }
+
   async addOrderComment(
     orderId: string,
     personId: string,

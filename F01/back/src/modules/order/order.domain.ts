@@ -82,6 +82,8 @@ export interface OrderItemData {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  deliveredAt?: Date;
+  deliveredBy?: string;
 }
 
 export interface OrderVendorGroupData {
@@ -162,6 +164,8 @@ export class OrderItem {
   public readonly quantity: number;
   public readonly unitPrice: number;
   public readonly totalPrice: number;
+  public deliveredAt?: Date;
+  public deliveredBy?: string;
 
   private constructor(data: OrderItemData) {
     this.id = data.id;
@@ -171,6 +175,8 @@ export class OrderItem {
     this.quantity = data.quantity;
     this.unitPrice = data.unitPrice;
     this.totalPrice = data.totalPrice;
+    this.deliveredAt = data.deliveredAt ? new Date(data.deliveredAt) : undefined;
+    this.deliveredBy = data.deliveredBy;
   }
 
   static create(data: Omit<OrderItemData, 'id' | 'totalPrice'>): OrderItem {
@@ -209,8 +215,22 @@ export class OrderItem {
       vendorId: this.vendorId,
       quantity: this.quantity,
       unitPrice: this.unitPrice,
-      totalPrice: this.totalPrice
+      totalPrice: this.totalPrice,
+      deliveredAt: this.deliveredAt,
+      deliveredBy: this.deliveredBy
     };
+  }
+
+  markDelivered(deliveredBy: string): void {
+    if (typeof deliveredBy !== 'string' || deliveredBy.trim().length === 0) {
+      throw new Error(OrderError.VENDOR_ID_REQUIRED);
+    }
+    this.deliveredAt = new Date();
+    this.deliveredBy = deliveredBy.trim();
+  }
+
+  get isDelivered(): boolean {
+    return this.deliveredAt !== undefined;
   }
 }
 
@@ -300,6 +320,14 @@ export class OrderVendorGroup {
 
   updateStatus(newStatus: OrderVendorGroupStatus): void {
     if (this.status === newStatus) {
+      // Ensure item-level delivery metadata is present when already delivered
+      if (newStatus === OrderVendorGroupStatus.DELIVERED) {
+        for (const item of this.items) {
+          if (!item.isDelivered) {
+            item.markDelivered(this.vendorId);
+          }
+        }
+      }
       return;
     }
 
@@ -309,6 +337,13 @@ export class OrderVendorGroup {
     }
 
     this.status = newStatus;
+    if (newStatus === OrderVendorGroupStatus.DELIVERED) {
+      for (const item of this.items) {
+        if (!item.isDelivered) {
+          item.markDelivered(this.vendorId);
+        }
+      }
+    }
     this.updatedAt = new Date();
   }
 
@@ -438,6 +473,37 @@ export class Order {
       throw new Error(OrderError.VENDOR_NOT_FOUND);
     }
     vendorGroup.updateStatus(status);
+    this.updateOrderStatusFromVendorGroups();
+    this.updatedAt = new Date();
+  }
+
+  markItemsDeliveredByIds(itemIds: string[], deliveredBy: string): void {
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    }
+    const idSet = new Set(itemIds);
+    let changed = false;
+    for (const vendorGroup of this.vendorGroups) {
+      for (const item of vendorGroup.items) {
+        if (idSet.has(item.id) && !item.isDelivered) {
+          item.markDelivered(deliveredBy);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {
+      throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    }
+    // Update vendor group status if all items delivered
+    for (const vendorGroup of this.vendorGroups) {
+      if (vendorGroup.items.length > 0 && vendorGroup.items.every(i => i.isDelivered)) {
+        try {
+          vendorGroup.updateStatus(OrderVendorGroupStatus.DELIVERED);
+        } catch {
+          // ignore invalid transition
+        }
+      }
+    }
     this.updateOrderStatusFromVendorGroups();
     this.updatedAt = new Date();
   }

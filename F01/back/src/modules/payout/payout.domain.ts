@@ -13,10 +13,12 @@ export enum PayoutError {
   PAYOUT_NOT_FOUND = 'PAYOUT_NOT_FOUND',
   INVALID_AMOUNT = 'INVALID_AMOUNT',
   VENDOR_NOT_FOUND = 'VENDOR_NOT_FOUND',
+  INVALID_PERSON_ID = 'INVALID_PERSON_ID',
   PAYOUT_NOT_APPROVABLE = 'PAYOUT_NOT_APPROVABLE',
   PAYOUT_NOT_PROCESSABLE = 'PAYOUT_NOT_PROCESSABLE',
   PAYOUT_NOT_CANCELLABLE = 'PAYOUT_NOT_CANCELLABLE',
   FORBIDDEN = 'FORBIDDEN',
+  INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
   INVALID_STATUS_TRANSITION = 'INVALID_STATUS_TRANSITION',
 }
 
@@ -88,7 +90,7 @@ export class Payout {
       throw new Error(PayoutError.VENDOR_NOT_FOUND);
     }
     if (typeof data.personId !== 'string' || data.personId.trim().length === 0) {
-      throw new Error(PayoutError.VENDOR_NOT_FOUND);
+      throw new Error(PayoutError.INVALID_PERSON_ID);
     }
     if (typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount <= 0) {
       throw new Error(PayoutError.INVALID_AMOUNT);

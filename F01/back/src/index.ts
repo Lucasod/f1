@@ -28,6 +28,13 @@ import { createReviewRoutes } from './modules/review/review.routes';
 import { createPaymentRoutes } from './modules/order/payment.routes';
 import { createPayoutRoutes } from './modules/payout/payout.routes';
 import { createInvoiceRoutes } from './modules/invoice/invoice.routes';
+import { createWalletRoutes } from './modules/wallet/wallet.routes';
+import { WalletService } from './modules/wallet/wallet.service';
+import { InMemoryWalletRepository, InMemoryWalletTransactionRepository, WalletRepository, WalletTransactionRepository } from './modules/wallet/wallet.domain';
+import { MongoWalletRepository, MongoWalletTransactionRepository } from './modules/wallet/wallet.mongo.repository';
+import { FinancialService } from './modules/financial/financial.service';
+import { InMemoryFinancialAllocationRepository, FinancialAllocationRepository } from './modules/financial/financial.domain';
+import { MongoFinancialAllocationRepository } from './modules/financial/financial.mongo.repository';
 import { PayoutService } from './modules/payout/payout.service';
 import { InvoiceService } from './modules/invoice/invoice.service';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
@@ -71,6 +78,9 @@ let paymentRepo: PaymentRepository;
 let reviewRepo: ReviewRepository;
 let payoutRepo: PayoutRepository;
 let invoiceRepo: InvoiceRepository;
+let walletRepo: WalletRepository;
+let walletTxRepo: WalletTransactionRepository;
+let financialRepo: FinancialAllocationRepository;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -84,6 +94,8 @@ let reviewService!: ReviewService;
 let paymentService!: PaymentService;
 let payoutService!: PayoutService;
 let invoiceService!: InvoiceService;
+let walletService!: WalletService;
+let financialService!: FinancialService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
@@ -115,8 +127,10 @@ function initializeServices(): void {
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
-paymentService = new PaymentService(paymentRepo, orderRepo, productRepo);
-payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo);
+walletService = new WalletService(walletRepo, walletTxRepo);
+financialService = new FinancialService(financialRepo);
+paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService);
+payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService);
 invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
 }
 
@@ -214,6 +228,9 @@ orderRepo = new MongoOrderRepository(db);
 paymentRepo = new MongoPaymentRepository(db);
 payoutRepo = new MongoPayoutRepository(db);
 invoiceRepo = new MongoInvoiceRepository(db);
+walletRepo = new MongoWalletRepository(db);
+walletTxRepo = new MongoWalletTransactionRepository(db);
+financialRepo = new MongoFinancialAllocationRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -244,7 +261,8 @@ invoiceRepo = new MongoInvoiceRepository(db);
       // Stripe sends signed events using the unparsed request body.
       app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
         createStripeClientFromEnvironment(),
-        paymentService
+        paymentService,
+        cartService
       ));
 
       // Order routes
@@ -258,6 +276,9 @@ invoiceRepo = new MongoInvoiceRepository(db);
 
       // Invoice routes (T-1103)
       app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
+
+      // Wallet routes (T-1007)
+      app.use('/api/v1', createWalletRoutes({ authService, walletService, vendorRepo }));
 
       // Person routes
       app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));
@@ -292,6 +313,9 @@ paymentRepo = new InMemoryPaymentRepository();
 reviewRepo = new InMemoryReviewRepository();
 payoutRepo = new InMemoryPayoutRepository();
 invoiceRepo = new InMemoryInvoiceRepository();
+walletRepo = new InMemoryWalletRepository();
+walletTxRepo = new InMemoryWalletTransactionRepository();
+financialRepo = new InMemoryFinancialAllocationRepository();
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -339,6 +363,9 @@ invoiceRepo = new InMemoryInvoiceRepository();
 
         // Invoice routes (T-1103)
         app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
+
+        // Wallet routes (T-1007)
+        app.use('/api/v1', createWalletRoutes({ authService, walletService, vendorRepo }));
 
         // Person routes
         app.use('/api/v1/person', createPersonRoutes({ authService, personService, personRepo }));

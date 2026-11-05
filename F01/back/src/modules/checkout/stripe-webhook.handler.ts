@@ -1,10 +1,12 @@
 import { RequestHandler } from 'express';
 import Stripe from 'stripe';
 import { PaymentService, PaymentError } from '../order/payment.service';
+import { CartService } from '../cart/cart.service';
 
 export function createStripeWebhookHandler(
   stripe: Pick<Stripe, 'webhooks'>,
-  paymentService: PaymentService
+  paymentService: PaymentService,
+  cartService: CartService
 ): RequestHandler {
   return async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -48,7 +50,9 @@ export function createStripeWebhookHandler(
         if (!paymentIntentId || session.amount_total === null) {
           return res.status(400).json({ error: 'STRIPE_PAYMENT_INTENT_MISSING' });
         }
-        await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
+        const payment = await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
+        // Clear cart only after effective payment confirmation (CAPTURED)
+        cartService.clearCart(payment.personId);
       } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
         try {
           await paymentService.failPayment(paymentId);

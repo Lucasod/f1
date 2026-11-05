@@ -279,7 +279,7 @@ export function CheckoutPage() {
 
   // Payment options
   const paymentOptions = useMemo(() => [
-    { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'Você será redirecionado para concluir o pagamento' },
+    { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'You will be redirected to complete payment' },
   ], []);
 
   const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview;
@@ -289,7 +289,7 @@ export function CheckoutPage() {
     if (isSubmitting) return; // Double-click prevention
     if (!validateForm()) return;
     if (!preview) {
-      setSubmitError('Preview do pedido indisponível');
+      setSubmitError('Order preview unavailable');
       return;
     }
 
@@ -357,7 +357,7 @@ export function CheckoutPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <ErrorAlert
-          message="Não foi possível carregar o carrinho. Tente novamente."
+          message="Could not load cart. Try again."
           title="Erro ao carregar carrinho"
           variant="error"
           action={{
@@ -375,8 +375,8 @@ export function CheckoutPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <EmptyState
           icon={EmptyStateIcons.cart}
-          title="Seu carrinho está vazio"
-          description="Adicione produtos ao seu carrinho antes de prosseguir para o checkout."
+          title="Your cart is empty"
+          description="Add products to your cart before proceeding to checkout."
           action={{
             label: 'Continuar comprando',
             onClick: () => navigate('/products'),
@@ -453,7 +453,7 @@ export function CheckoutPage() {
             {/* Step 1: Address Selection */}
             <Card variant="bordered" padding="lg" data-testid="checkout-step-address">
               <CardHeader>
-                <CardTitle as="h2">1. Endereço de Entrega</CardTitle>
+                <CardTitle as="h2">1. Delivery Address</CardTitle>
                 <CardDescription>Selecione o endereço para onde o pedido será entregue</CardDescription>
               </CardHeader>
               <CardContent>
@@ -475,10 +475,10 @@ export function CheckoutPage() {
                 ) : addresses.length === 0 ? (
                   <EmptyState
                     icon={EmptyStateIcons.profile}
-                    title="Nenhum endereço cadastrado"
-                    description="Adicione um endereço para prosseguir com o checkout."
+                    title="No addresses registered"
+                    description="Add an address to proceed with checkout."
                     action={{
-                      label: 'Gerenciar endereços',
+                      label: 'Manage addresses',
                       onClick: () => navigate('/account/addresses'),
                       variant: 'primary',
                     }}
@@ -487,7 +487,7 @@ export function CheckoutPage() {
                 ) : (
                   <RadioGroup
                     name="shipping-address"
-                    label="Endereço de entrega"
+                    label="Delivery address"
                     options={addressOptions}
                     value={selectedAddressId}
                     onChange={setSelectedAddressId}
@@ -509,12 +509,12 @@ export function CheckoutPage() {
                   <Input
                     id="coupon-code"
                     type="text"
-                    placeholder="Código do cupom"
+                    placeholder="Coupon code"
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     error={couponError}
                     disabled
-                    aria-label="Código do cupom"
+                    aria-label="Coupon code"
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
                     data-testid="coupon-input"
                   />
@@ -530,7 +530,7 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  Cupons indisponíveis até a resolução do cálculo de desconto (Q-016).
+                  Coupons unavailable until Q-016 discount calculation resolution.
                 </p>
 
                 {couponCodes.length > 0 && (
@@ -628,7 +628,7 @@ export function CheckoutPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Frete</span>
                     <span className="font-medium text-gray-900" data-testid="main-shipping-amount">
-                      {shippingAmount > 0 ? formatCurrency(shippingAmount) : 'Grátis'}
+{shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                     </span>
                   </div>
                   <div className="border-t border-gray-200 pt-3">
@@ -700,7 +700,7 @@ export function CheckoutPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Frete</span>
                   <span className="font-medium text-gray-900" data-testid="sidebar-shipping-amount">
-                    {shippingAmount > 0 ? formatCurrency(shippingAmount) : 'Grátis'}
+                    {shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                   </span>
                 </div>
                 <div className="border-t border-gray-200 pt-4">

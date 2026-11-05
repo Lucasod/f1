@@ -1,12 +1,14 @@
 import { VendorRepository } from '../vendor/vendor.domain';
 import { Payout, PayoutStatus, PayoutError, PayoutRepository } from './payout.domain';
 import { OrderRepository } from '../order/order.domain';
+import type { WalletService } from '../wallet/wallet.service';
 
 export class PayoutService {
   constructor(
     private readonly payoutRepo: PayoutRepository,
     private readonly vendorRepo: VendorRepository,
     private readonly orderRepo?: OrderRepository,
+    private readonly walletService?: WalletService,
   ) {}
 
   async createPayout(
@@ -25,6 +27,13 @@ export class PayoutService {
     const vendor = await this.vendorRepo.findById(vendorId.trim());
     if (!vendor) {
       throw new Error(PayoutError.VENDOR_NOT_FOUND);
+    }
+
+    if (this.walletService) {
+      const balance = await this.walletService.getBalance(vendorId.trim());
+      if (balance < amount) {
+        throw new Error(PayoutError.INSUFFICIENT_BALANCE);
+      }
     }
 
     const payout = Payout.create({

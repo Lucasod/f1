@@ -222,6 +222,37 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
     }
   }) as RequestHandler);
 
+  // DELETE /cart - Voluntary cart clearing (auth required, CONSUMER role)
+  // Clears all cart items without changing order/payment status
+  router.delete('/', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const consumerId = req.user.sub;
+      const cart = await cartService.clearCart(consumerId);
+
+      const response: any = { cart: cartToResponse(cart) };
+      addGuestCartHeader(req, res, cart.id);
+
+      return res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // PATCH /cart/clear - Alternative voluntary cart clearing (auth required, CONSUMER role)
+  router.patch('/clear', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const consumerId = req.user.sub;
+      const cart = await cartService.clearCart(consumerId);
+
+      const response: any = { cart: cartToResponse(cart) };
+      addGuestCartHeader(req, res, cart.id);
+
+      return res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
   // POST /cart/merge-guest - Merge guest cart on login (auth required, CONSUMER role)
   router.post('/merge-guest', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {

@@ -308,6 +308,61 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
     }
   }) as RequestHandler);
 
+  // PATCH /orders/:orderId/items/delivery - Mark order items as delivered (item-level delivery)
+  // Body: { itemIds?: string[], all?: boolean }
+  // Vendor: own items only; Consumer: confirm delivery; Admin: any
+  router.patch('/orders/:orderId/items/delivery', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const personId = req.user.sub;
+      const { itemIds, all } = req.body ?? {};
+
+      if (!orderId || orderId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
+      }
+
+      let role: 'consumer' | 'vendor' | 'admin' = 'consumer';
+      let vendorId: string | undefined;
+      if (req.user.roles.includes(PersonRole.ADMIN)) {
+        role = 'admin';
+      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
+        role = 'vendor';
+        const vendor = await vendorRepo.findByPersonId(personId);
+        if (!vendor) {
+          return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+        }
+        vendorId = vendor.id;
+      } else {
+        role = 'consumer';
+      }
+
+      const order = await orderService.markItemsDelivered(
+        orderId,
+        personId,
+        role,
+        vendorId,
+        Array.isArray(itemIds) ? itemIds : undefined,
+        all === true
+      );
+
+      return res.json({ order: orderToResponse(order) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.ORDER_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
+          case OrderError.ORDER_ITEM_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.ORDER_ITEM_NOT_FOUND, message: 'Order item not found' });
+          case OrderError.FORBIDDEN:
+            return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+          case OrderError.VENDOR_ID_REQUIRED:
+            return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
   return router;
 }
 
@@ -341,7 +396,9 @@ function vendorGroupToResponse(vg: OrderVendorGroup) {
       vendorId: item.vendorId,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice
+      totalPrice: item.totalPrice,
+      deliveredAt: item.deliveredAt,
+      deliveredBy: item.deliveredBy
     })),
     subtotal: vg.subtotal,
     commissionPct: vg.commissionPct,

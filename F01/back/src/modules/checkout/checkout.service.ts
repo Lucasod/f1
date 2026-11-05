@@ -182,9 +182,6 @@ export class CheckoutService {
       payment.providerTransactionId = session.id;
       await this.paymentRepo.update(payment);
 
-      // Clear cart
-      await this.cartService.clearCart(consumerId);
-
       return {
         order,
         checkoutUrl: session.url

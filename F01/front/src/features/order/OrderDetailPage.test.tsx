@@ -294,7 +294,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(subtotalLabels.length).toBeGreaterThanOrEqual(2); // one per vendor group
     const comissaoLabels = screen.getAllByText(/comissão \(15%\)/i);
     expect(comissaoLabels.length).toBeGreaterThanOrEqual(2);
-    const liquidoLabels = screen.getAllByText(/líquido vendedor/i);
+    const liquidoLabels = screen.getAllByText(/Vendor Net/i);
     expect(liquidoLabels.length).toBeGreaterThanOrEqual(2);
   });
 

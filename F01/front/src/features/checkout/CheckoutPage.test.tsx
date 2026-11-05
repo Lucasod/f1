@@ -761,7 +761,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     // Use sidebar-shipping-amount testid to check for free shipping
     const sidebarShipping = screen.getByTestId('sidebar-shipping-amount');
-    expect(sidebarShipping).toHaveTextContent(/grátis/i);
+    expect(sidebarShipping).toHaveTextContent(/free/i);
   });
 
   it('shows empty addresses state when user has no addresses', async () => {
@@ -776,7 +776,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     expect(screen.getByText(/nenhum endereço cadastrado/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /gerenciar endereços/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /manage addresses/i })).toBeInTheDocument();
   });
 
   it('navigates to address management when button clicked', async () => {
@@ -790,7 +790,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /gerenciar endereços/i }));
+    fireEvent.click(screen.getByRole('button', { name: /manage addresses/i }));
     expect(navigateMock).toHaveBeenCalledWith('/account/addresses');
   });
 

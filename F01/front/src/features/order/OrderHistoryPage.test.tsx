@@ -258,7 +258,7 @@ describe('OrderHistoryPage', () => {
 
     expect(screen.getByText(/nenhum pedido encontrado/i)).toBeInTheDocument();
     expect(screen.getByText(/você ainda não fez nenhum pedido/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /começar a comprar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start shopping/i })).toBeInTheDocument();
   });
 
   it('shows empty state with filter when no orders match filter', async () => {
@@ -499,7 +499,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const startShoppingButton = screen.getByRole('button', { name: /começar a comprar/i });
+    const startShoppingButton = screen.getByRole('button', { name: /start shopping/i });
     fireEvent.click(startShoppingButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/products');

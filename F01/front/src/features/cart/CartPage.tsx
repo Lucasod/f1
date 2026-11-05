@@ -186,7 +186,7 @@ export function CartPage() {
       if (maxStock !== undefined && newQuantity > maxStock) {
         setQuantityErrors((prev) => ({
           ...prev,
-          [productId]: `Estoque máximo: ${maxStock}`,
+          [productId]: `Maximum stock: ${maxStock}`,
         }));
         return;
       }
@@ -262,7 +262,7 @@ export function CartPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
-            message="Não foi possível carregar o carrinho. Tente novamente."
+            message="Could not load cart. Try again."
             title="Erro ao carregar carrinho"
             variant="error"
             action={{
@@ -283,8 +283,8 @@ export function CartPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <EmptyState
             icon={EmptyStateIcons.cart}
-            title="Seu carrinho está vazio"
-            description="Adicione produtos ao seu carrinho para começar a comprar."
+            title="Your cart is empty"
+            description="Add products to your cart to start shopping."
             action={{
               label: 'Continuar comprando',
               onClick: () => navigate('/products'),

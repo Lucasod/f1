@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type Stripe from 'stripe';
 import type { Request, Response } from 'express';
-import { PaymentService } from '../order/payment.service';
+import { PaymentService, PaymentError } from '../order/payment.service';
 import { createStripeWebhookHandler } from './stripe-webhook.handler';
 
 describe('Stripe webhook handler', () => {
@@ -19,10 +19,13 @@ describe('Stripe webhook handler', () => {
       } },
     } as unknown as Stripe.Event;
     const constructEvent = vi.fn().mockReturnValue(event);
-    const completeCheckoutPayment = vi.fn().mockResolvedValue(undefined);
+    // Mock completeCheckoutPayment to return a Payment object with personId
+    const mockPayment = { id: 'payment-1', personId: 'consumer-1', status: 'pending', orderId: 'order-1', amount: 10000, provider: 'stripe' };
+    const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService
+      { completeCheckoutPayment } as unknown as PaymentService,
+      { clearCart: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -110,10 +113,12 @@ describe('Stripe webhook handler', () => {
       } },
     } as unknown as Stripe.Event;
     const constructEvent = vi.fn().mockReturnValue(event);
-    const completeCheckoutPayment = vi.fn().mockResolvedValue(undefined);
+    const mockPayment = { id: 'payment-1', personId: 'consumer-1', status: 'pending', orderId: 'order-1', amount: 10000, provider: 'stripe' };
+    const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService
+      { completeCheckoutPayment } as unknown as PaymentService,
+      { clearCart: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res1 = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
