@@ -150,6 +150,9 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       if (!allowed) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
+      if (invoice.status !== InvoiceStatus.GENERATED) {
+        return res.status(404).json({ error: 'PDF not yet generated', message: 'PDF not yet generated' });
+      }
       const pdfBuffer = await invoiceService.downloadInvoice(invoiceId);
       res.type('application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoiceId}.pdf"`);

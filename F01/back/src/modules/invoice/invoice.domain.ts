@@ -104,7 +104,7 @@ export class Invoice {
       throw new Error(InvoiceError.INVALID_INVOICE);
     }
     // Do NOT store pdfUrl/pdfPath permanently - they are informational only per MP-29
-    this.status = InvoiceStatus.PENDING;
+    this.status = InvoiceStatus.GENERATED;
     this.updatedAt = new Date();
     this.pdfUrl = '';
     this.pdfPath = '';

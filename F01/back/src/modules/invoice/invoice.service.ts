@@ -104,7 +104,7 @@ export class InvoiceService {
 
     invoice.pdfUrl = '';
     invoice.pdfPath = '';
-    invoice.status = InvoiceStatus.PENDING;
+    invoice.status = InvoiceStatus.GENERATED;
     invoice.updatedAt = new Date();
     await this.invoiceRepo.update(invoice);
 
@@ -161,7 +161,7 @@ export class InvoiceService {
       // reset to pending to allow regeneration
       invoice.pdfUrl = '';
       invoice.pdfPath = '';
-      invoice.status = InvoiceStatus.PENDING;
+invoice.status = InvoiceStatus.GENERATED;
       invoice.updatedAt = new Date();
       await this.invoiceRepo.update(invoice);
     }

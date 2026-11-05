@@ -19,10 +19,22 @@ import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
 import { CheckoutPaymentProvider } from './stripe-checkout.provider';
 
+export interface CouponTarget {
+  inclusionCategories: string[]; // category IDs to include (descendants included)
+  exclusionCategories: string[]; // category IDs to exclude (descendants excluded)
+}
+
 export interface CheckoutPreviewResponse {
   vendorGroups: CheckoutPreviewVendorGroup[];
   totalAmount: number;
+  discountAmount: number;
 }
+
+/**
+ * Maps coupon codes to their target categories for inclusion/exclusion rules.
+ * In a production system, this would be stored in a database or config file.
+ */
+export const couponTargets: Record<string, CouponTarget> = {};
 
 export interface CheckoutPreviewVendorGroup {
   id: string;
@@ -62,7 +74,8 @@ export class CheckoutService {
     personRepo: PersonRepository,
     cartService: CartService,
     config: typeof import('../../config').config,
-    paymentProvider: CheckoutPaymentProvider
+    paymentProvider: CheckoutPaymentProvider,
+    categoryRepo?: import('../product/product.domain').CategoryRepository
   ) {
     this.orderRepo = orderRepo;
     this.paymentRepo = paymentRepo;
@@ -73,6 +86,99 @@ export class CheckoutService {
     this.cartService = cartService;
     this.config = config;
     this.paymentProvider = paymentProvider;
+    this.categoryRepo = categoryRepo;
+  }
+
+  /**
+   * Get all descendant category IDs (including the category itself) for a given category.
+   * Categories form a parent-child hierarchy where descendants include all children, grandchildren, etc.
+   */
+  private getDescendantCategories(categoryId: string, allCategories: Map<string, string>): Set<string> {
+    const descendants = new Set<string>();
+    const visit = (catId: string) => {
+      descendants.add(catId);
+      // Find children of this category
+      for (const [childId, parentId] of allCategories.entries()) {
+        if (parentId === catId) {
+          visit(childId);
+        }
+      }
+    };
+    visit(categoryId);
+    return descendants;
+  }
+
+  /**
+   * Check if a product is eligible for a coupon based on inclusion/exclusion rules.
+   * - A product matches inclusion if its category (or any ancestor) is in the inclusion list
+   * - A product is excluded if its category (or any ancestor) is in the exclusion list
+   * - Exclusions override inclusions
+   */
+  private isProductEligibleForCoupon(
+    productCategoryId: string,
+    inclusionCategories: Set<string>,
+    exclusionCategories: Set<string>,
+    allCategories: Map<string, string>
+  ): boolean {
+    // Get all ancestors of the product's category (including itself)
+    const ancestors: Set<string> = new Set();
+    let current: string | null = productCategoryId;
+    while (current !== null) {
+      ancestors.add(current);
+      // Find parent of current category
+      const parentId = allCategories.get(current);
+      if (parentId) {
+        current = parentId;
+      } else {
+        current = null;
+      }
+    }
+
+    // Check exclusions first: if any ancestor is in exclusion list, product is excluded
+    for (const ancestor of ancestors) {
+      if (exclusionCategories.has(ancestor)) {
+        return false;
+      }
+    }
+
+    // Check inclusions: product is eligible if any ancestor is in inclusion list
+    // If inclusion list is empty, all products are eligible (no filtering)
+    if (inclusionCategories.size === 0) {
+      return true;
+    }
+
+    for (const ancestor of ancestors) {
+      if (inclusionCategories.has(ancestor)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get all product category IDs that are eligible for a coupon based on inclusion/exclusion rules.
+   * Returns a set of category IDs that match the coupon's targeting rules.
+   */
+  private getEligibleCategoriesForCoupon(
+    productCategories: string[],
+    coupon: CouponTarget,
+    allCategories: Map<string, string>
+  ): Set<string> {
+    const eligible = new Set<string>();
+    const inclusionCategories = new Set(coupon.inclusionCategories);
+    const exclusionCategories = new Set(coupon.exclusionCategories);
+
+    for (const catId of productCategories) {
+      const descendants = this.getDescendantCategories(catId, allCategories);
+      for (const descId of descendants) {
+        if (this.isProductEligibleForCoupon(descId, inclusionCategories, exclusionCategories, allCategories)) {
+          eligible.add(descId);
+        }
+      }
+    }
+
+    return eligible;
   }
 
   async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
@@ -220,6 +326,16 @@ export class CheckoutService {
     // Validate and prepare vendor groups for preview
     const vendorGroupsData = await this.prepareVendorGroups(cart);
 
+    // Build category parent map from category repository for coupon targeting
+    // Map: categoryId -> parent categoryId (null for root categories)
+    const categoryParentMap = new Map<string, string | null>();
+    if (this.categoryRepo) {
+      const allCategories = await this.categoryRepo.findAll();
+      for (const cat of allCategories) {
+        categoryParentMap.set(cat.id, cat.parentId);
+      }
+    }
+
     // Build preview response
     const previewVendorGroups: CheckoutPreviewVendorGroup[] = vendorGroupsData.map(vg => ({
       id: vg.vendorId,
@@ -237,7 +353,7 @@ export class CheckoutService {
       }))
     }));
 
-    // Fill vendor names and calculate amounts
+    // Fill vendor names and calculate base amounts
     for (const vg of previewVendorGroups) {
       const vendor = await this.vendorRepo.findById(vg.id);
       if (vendor) {
@@ -247,11 +363,97 @@ export class CheckoutService {
       vg.vendorNet = vg.subtotal - vg.commissionAmount;
     }
 
+    // Apply coupon discounts if coupon codes are provided
+    let discountAmount = 0;
+    const applicableCouponsByVendor = new Map<string, string>(); // vendorId -> selected coupon code
+
+    if (couponCodes && couponCodes.length > 0 && this.categoryRepo) {
+      // For each vendor group, determine eligible coupons
+      for (const vg of previewVendorGroups) {
+        let eligibleCouponCodes: string[] = [];
+
+        for (const code of couponCodes) {
+          const target = couponTargets[code];
+          if (!target) continue; // Unknown coupon code, skip
+
+          // Check if any product in this vendor group is eligible for this coupon
+          let anyProductEligible = false;
+
+          for (const item of vg.items) {
+            const product = await this.productRepo.findById(item.productId);
+            if (!product) continue;
+
+            // Check inclusion/exclusion rules using category hierarchy
+            const eligible = this.isProductEligibleForCoupon(
+              product.categoryId,
+              new Set(target.inclusionCategories),
+              new Set(target.exclusionCategories),
+              categoryParentMap
+            );
+
+            if (eligible) {
+              anyProductEligible = true;
+              break;
+            }
+          }
+
+          if (anyProductEligible) {
+            // Only add first eligible coupon (no stacking per vendor)
+            if (eligibleCouponCodes.length === 0) {
+              eligibleCouponCodes.push(code);
+            }
+          }
+        }
+
+        // Apply the first eligible coupon (consumer selects per vendor, no automatic priority)
+        if (eligibleCouponCodes.length > 0) {
+          const selectedCouponCode = eligibleCouponCodes[0];
+          const target = couponTargets[selectedCouponCode];
+          
+          // Calculate discount: proportion of eligible items' subtotal
+          // For simplicity, apply discount to the full vendor subtotal proportionally
+          // based on which items are eligible
+          let eligibleSubtotal = 0;
+          let totalEligibleItems = 0;
+          
+          for (const item of vg.items) {
+            const product = await this.productRepo.findById(item.productId);
+            if (!product) continue;
+            
+            const isEligible = this.isProductEligibleForCoupon(
+              product.categoryId,
+              new Set(target.inclusionCategories),
+              new Set(target.exclusionCategories),
+              categoryParentMap
+            );
+            
+            if (isEligible) {
+              eligibleSubtotal += item.unitPrice * item.quantity;
+              totalEligibleItems++;
+            }
+          }
+          
+          // Apply percentage discount to eligible portion of subtotal
+          // Default 10% discount if no specific discount defined for the coupon
+          const discountPct = 10; // Default discount percentage
+          const discount = eligibleSubtotal * (discountPct / 100);
+          
+          vg.subtotal -= discount;
+          vg.vendorNet -= discount;
+          discountAmount += discount;
+          
+          // Track which coupon applies to which vendor (no stacking)
+          applicableCouponsByVendor.set(vg.id, selectedCouponCode);
+        }
+      }
+    }
+
     const totalAmount = previewVendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
 
     return {
       vendorGroups: previewVendorGroups,
-      totalAmount
+      totalAmount,
+      discountAmount
     };
   }
 

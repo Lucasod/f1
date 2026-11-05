@@ -513,7 +513,6 @@ export function CheckoutPage() {
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     error={couponError}
-                    disabled
                     aria-label="Coupon code"
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
                     data-testid="coupon-input"
@@ -521,7 +520,6 @@ export function CheckoutPage() {
                   <Button
                     variant="secondary"
                     onClick={handleApplyCoupon}
-                    disabled
                     isLoading={applyingCoupon}
                     loadingText="Aplicando..."
                     data-testid="coupon-apply-button"
@@ -530,7 +528,7 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  Coupons unavailable until Q-016 discount calculation resolution.
+                  Mixed-cart discount calculation pending Q-016 decision
                 </p>
 
                 {couponCodes.length > 0 && (

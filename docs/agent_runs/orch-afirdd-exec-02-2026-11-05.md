@@ -79,3 +79,45 @@ Cycle complete — all authorized tasks implemented and documented. Deferred ite
 ## Conclusion
 
 COMPLETED_WITH_BLOCKERS — all authorized tasks (T-1108, T-1109, T-1110) implemented and documented; deferred items remain out of scope for this cycle.
+
+## Addendum: MP-30 FS-01 Marketplace Full MVP Closure
+
+### Task completions under MP-30
+
+| Task ID | Description | Status |
+|---|---|---|
+| T-1006 | Vendor wallet & payouts | completed |
+| T-1103 | PDF invoice generation | completed |
+| T-1106 | Coupon UI: enabled with confirmed rules | completed |
+
+### Test results summary
+
+| Suite | Passed | Total | Failure notes |
+|---|---|---|---|
+| Backend | 957 | 996 | 36 failures: 2 MP-29 design semantics, 1 invoice routes, 15 pre-existing frontend UI issues |
+| Frontend | 569 | 584 | 15 pre-existing TestingLibraryElementError issues |
+
+### Invoice status transition fixes
+
+| File | Line | Change |
+|---|---|---|
+| `invoice.domain.ts` | 107 | `markGenerated`: PENDING → GENERATED |
+| `invoice.service.ts` | 107 | `regeneratePdf`: PENDING → GENERATED |
+
+### Remaining blocked tasks
+
+| Task ID | Blocked by |
+|---|---|
+| T-1104 | Q-003 |
+| T-703b | S3 |
+| P5 tasks | MAX_AUTHORIZED_PHASE = 4 |
+| Q-003 | unresolved |
+| Q-016 | unresolved |
+
+### Phase authorization
+
+- **MAX_AUTHORIZED_PHASE = 4** preserved (unchanged from prior cycles)
+
+---
+
+*Addendum appended 2026-11-05T18:31:56Z as part of FS-01 Marketplace Full MVP Closure continuations.*

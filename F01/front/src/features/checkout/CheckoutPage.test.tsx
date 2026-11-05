@@ -506,7 +506,7 @@ describe('CheckoutPage', () => {
     expect(submitButton).toBeDisabled();
   });
 
-  it('disables coupon input and apply button (coupons unavailable)', async () => {
+  it('coupon input and apply button are enabled', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -514,12 +514,11 @@ describe('CheckoutPage', () => {
     const couponInput = screen.getByTestId('coupon-input');
     const applyButton = screen.getByTestId('coupon-apply-button');
 
-    expect(couponInput).toBeDisabled();
-    expect(applyButton).toBeDisabled();
-    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
+    expect(couponInput).not.toBeDisabled();
+    expect(applyButton).not.toBeDisabled();
   });
 
-  it('disables coupon input and apply button and shows unavailable message', async () => {
+  it('applies coupon code successfully', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -527,19 +526,23 @@ describe('CheckoutPage', () => {
     const couponInput = screen.getByTestId('coupon-input');
     const applyButton = screen.getByTestId('coupon-apply-button');
 
-    expect(couponInput).toBeDisabled();
-    expect(applyButton).toBeDisabled();
-    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
+    // Enter a coupon code and apply
+    fireEvent.change(couponInput, { target: { value: 'TEST10' } });
+    fireEvent.click(applyButton);
+
+    // Should not show coupon error (valid coupon applied - element not in document)
+    const couponError = screen.queryByTestId('coupon-error');
+    expect(couponError).toBeNull();
   });
 
-  it('shows coupons unavailable message', async () => {
+  it('shows mixed-cart discount calculation pending note', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
-    expect(screen.getByTestId('coupon-input')).toBeDisabled();
-    expect(screen.getByTestId('coupon-apply-button')).toBeDisabled();
+    // The mixed-cart discount note should still be present for informational purposes
+    const mixedCartNote = screen.getByText(/Mixed-cart discount calculation pending Q-016 decision/i);
+    expect(mixedCartNote).toBeInTheDocument();
   });
 
 it('displays order summary with vendor groups, items, subtotal, discount, total', async () => {
@@ -818,22 +821,12 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
 
     // Apply coupon (already in state)
-    
+
     // Remove coupon
     fireEvent.click(screen.getByRole('button', { name: /remover cupom save10/i }));
 
     // Should call removeCouponCode
     expect(mockUseCheckoutState.removeCouponCode).toHaveBeenCalledWith('SAVE10');
-  });
-
-  it('disables coupon input and apply button (coupons unavailable)', async () => {
-    renderWithNav(<CheckoutPage />);
-
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-
-    expect(screen.getByTestId('coupon-input')).toBeDisabled();
-    expect(screen.getByTestId('coupon-apply-button')).toBeDisabled();
-    expect(screen.getByText(/cupons indisponíveis até a resolução do cálculo de desconto \(q-016\)\./i)).toBeInTheDocument();
   });
 
   it('shows progress steps', async () => {
