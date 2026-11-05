@@ -612,6 +612,10 @@ export class Order {
     this.updatedAt = new Date();
   }
 
+  getVendorGroupsWithoutTransfer(): OrderVendorGroup[] {
+    return this.vendorGroups.filter(vg => !vg.transferId);
+  }
+
   toJSON(): OrderData {
     return {
       id: this.id,

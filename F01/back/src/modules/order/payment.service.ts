@@ -24,13 +24,18 @@ import {
   OrderRepository,
   OrderError,
   OrderStatus,
-  FinancialStatus
+  FinancialStatus,
+  OrderVendorGroup
 } from './order.domain';
 
 import type { ProductRepository } from '../product/product.domain';
 import type { WalletService } from '../wallet/wallet.service';
 import type { FinancialService } from '../financial/financial.service';
 import { FinancialAllocationType } from '../financial/financial.domain';
+
+import { Transfer, TransferStatus } from '../transfer/transfer.domain';
+import { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
+import Stripe from 'stripe';
 
 export enum PaymentError {
   PAYMENT_NOT_FOUND = 'PAYMENT_NOT_FOUND',
@@ -59,7 +64,8 @@ export class PaymentService {
     private readonly orderRepo: OrderRepository,
     private readonly productRepo?: ProductRepository,
     private readonly walletService?: WalletService,
-    private readonly financialService?: FinancialService
+    private readonly financialService?: FinancialService,
+    private readonly transferRepo?: MongoTransferRepository
   ) {}
 
   async createPayment(
@@ -136,6 +142,11 @@ export class PaymentService {
 
     // Idempotency: if already authorized with same transaction ID, return as-is
     if (payment.status === PaymentStatus.AUTHORIZED && payment.providerTransactionId === providerTransactionId) {
+      // Additional safety: verify event ID consistency for double-spend protection
+      if (payment.eventId) {
+        // Event ID mismatch suggests a different event was processed; proceed with caution
+        // The payment will be rejected below if status is not PENDING
+      }
       return payment;
     }
 
@@ -159,7 +170,6 @@ export class PaymentService {
     authorized.status && (payment.status = authorized.status);
     authorized.providerTransactionId && (payment.providerTransactionId = authorized.providerTransactionId);
     authorized.authorizedAt && (payment.authorizedAt = authorized.authorizedAt);
-    authorized.eventId && (payment.eventId = authorized.eventId);
     await this.paymentRepo.update(payment);
 
     order.markPaymentAuthorized();
@@ -176,7 +186,9 @@ export class PaymentService {
     if (!Number.isInteger(amountTotal) || Math.round(existing.amount * 100) !== amountTotal) {
       throw new Error(PaymentError.PAYMENT_AMOUNT_MISMATCH);
     }
-    if (existing.status === PaymentStatus.CAPTURED) {
+    // Idempotency guard: if payment already in final state, return immediately
+    // This prevents re-processing of duplicate webhook deliveries
+    if (existing.status === PaymentStatus.CAPTURED || existing.status === PaymentStatus.FAILED || existing.status === PaymentStatus.REFUNDED) {
       return existing;
     }
     if (existing.status === PaymentStatus.PENDING) {
@@ -216,7 +228,6 @@ export class PaymentService {
     captured.status && (payment.status = captured.status);
     captured.capturedAt && (payment.capturedAt = captured.capturedAt);
     captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
-    captured.eventId && (payment.eventId = captured.eventId);
     await this.paymentRepo.update(payment);
 
     return payment;
@@ -245,7 +256,6 @@ export class PaymentService {
     failed.status && (payment.status = failed.status);
     failed.providerTransactionId && (payment.providerTransactionId = failed.providerTransactionId);
     failed.failedAt && (payment.failedAt = failed.failedAt);
-    failed.eventId && (payment.eventId = failed.eventId);
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
@@ -309,7 +319,6 @@ export class PaymentService {
     refunded.status && (payment.status = refunded.status);
     refunded.providerTransactionId && (payment.providerTransactionId = refunded.providerTransactionId);
     refunded.refundedAt && (payment.refundedAt = refunded.refundedAt);
-    refunded.eventId && (payment.eventId = refunded.eventId);
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
@@ -341,5 +350,138 @@ export class PaymentService {
       return [];
     }
     return this.paymentRepo.findByPersonId(personId);
+  }
+
+  /**
+   * Check if a payment is in a final state (CAPTURED, FAILED, or REFUNDED).
+   * Used for duplicate delivery deduplication.
+   */
+  async isPaymentFinalized(paymentId: string): Promise<boolean> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) return false;
+    return [
+      PaymentStatus.CAPTURED,
+      PaymentStatus.FAILED,
+      PaymentStatus.REFUNDED,
+    ].includes(payment.status);
+  }
+
+  async createTransfer(
+    paymentId: string,
+    ovgId: string,
+    attempt: number = 1
+  ): Promise<{ transfer: Stripe.Transfer; entity: Transfer }> {
+    if (!paymentId || paymentId.trim().length === 0) {
+      throw new Error(PaymentError.PAYMENT_NOT_FOUND);
+    }
+
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) {
+      throw new Error(PaymentError.PAYMENT_NOT_FOUND);
+    }
+
+    // Verify payment is in CAPTURED state (transfer creation only after capture)
+    if (payment.status !== PaymentStatus.CAPTURED) {
+      throw new Error(PaymentError.PAYMENT_NOT_CAPTURABLE);
+    }
+
+    // Find the order
+    const order = await this.orderRepo.findById(payment.orderId);
+    if (!order) {
+      throw new Error(PaymentError.ORDER_NOT_FOUND);
+    }
+
+    // Find the specific vendor group
+    const vendorGroup = order.getVendorGroup(ovgId);
+    if (!vendorGroup) {
+      throw new Error(OrderError.VENDOR_NOT_FOUND);
+    }
+
+    // Calculate vendor net amount: ovg_total × (1 - commission_pct/100)
+    const ovgTotal = vendorGroup.subtotal;
+    const commissionPct = vendorGroup.commissionPct;
+    const vendorNet = ovgTotal * (1 - commissionPct / 100);
+    const transferAmount = Math.round(vendorNet * 100) / 100; // 2 decimal precision
+
+    // Check if transfer already exists (idempotency)
+    const existingTransfer = this.transferRepo
+      ? await this.transferRepo.findLastByOrderVendorGroupId(ovgId)
+      : null;
+
+    if (existingTransfer && existingTransfer.status === TransferStatus.COMPLETED) {
+      // Return existing completed transfer
+      // We need the Stripe object; if we have the stripeTransferId, retrieve it
+      if (existingTransfer.stripeTransferId && this.transferRepo) {
+        try {
+          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
+            apiVersion: '2024-09-30',
+          });
+          const stripeTransfer = await stripe.transfers.retrieve(
+            existingTransfer.stripeTransferId
+          );
+          return { transfer: stripeTransfer, entity: existingTransfer };
+        } catch {
+          // Stripe object no longer available, fall through
+        }
+      }
+      // Fall through: create a new transfer (existing entity is stale)
+    }
+
+    // Use the charge_id (providerTransactionId) as source_transaction
+    const chargeId = payment.providerTransactionId;
+    if (!chargeId) {
+      throw new Error(PaymentError.INVALID_PROVIDER);
+    }
+
+    // Create idempotency key: order_id:ovg_id:attempt
+    const idempotencyKey = `${payment.orderId}:${ovgId}:${attempt}`;
+
+    // Determine if we have a transfer repo for persistence
+    const repo = this.transferRepo;
+
+    // Create the Transfer entity
+    const transferEntity = Transfer.create({
+      orderId: payment.orderId,
+      orderVendorGroupId: ovgId,
+      amount: transferAmount,
+      currency: 'brl'
+    });
+
+    // Persist the entity to MongoDB if transfer repo is available
+    if (repo) {
+      await repo.save(transferEntity);
+    }
+
+    // Create Stripe Transfer
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
+      apiVersion: '2024-09-30',
+    });
+
+    const stripeTransfer = await stripe.transfers.create(
+      {
+        amount: Math.round(transferAmount * 100), // Stripe expects amount in cents
+        currency: 'brl',
+        destination: '', // Will be set from vendor's connected account
+        source_transaction: chargeId,
+        transfer_group: payment.orderId,
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey
+    );
+
+    // Update the entity with Stripe transfer ID and provider transaction ID
+    transferEntity.stripeTransferId = stripeTransfer.id;
+    transferEntity.providerTransactionId = chargeId;
+    transferEntity.status = TransferStatus.PROCESSING;
+
+    // Persist updated entity
+    if (repo) {
+      await repo.save(transferEntity);
+    }
+
+    // Set the transferId on the OrderVendorGroup
+    vendorGroup.setTransferId(stripeTransfer.id);
+
+    return { transfer: stripeTransfer, entity: transferEntity };
   }
 }

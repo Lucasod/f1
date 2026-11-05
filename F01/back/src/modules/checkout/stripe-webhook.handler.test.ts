@@ -24,8 +24,9 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService,
-      { clearCart: vi.fn() } as any
+      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService,
+      { clearCart: vi.fn() } as any,
+      { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -34,6 +35,33 @@ describe('Stripe webhook handler', () => {
 
     expect(constructEvent).toHaveBeenCalledWith(req.body, 'sig_test', 'whsec_test');
     expect(completeCheckoutPayment).toHaveBeenCalledWith('payment-1', 'pi_test_1', 10000);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('handles transfer.paid webhook event', async () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
+    const event = {
+      type: 'transfer.paid',
+      data: { object: {
+        id: 'trs_test_transfer_id',
+        amount: 5000,
+        currency: 'brl',
+        status: 'paid',
+      } },
+    } as unknown as Stripe.Event;
+    const constructEvent = vi.fn().mockReturnValue(event);
+    const handler = createStripeWebhookHandler(
+      { webhooks: { constructEvent } } as never,
+      {} as PaymentService,
+      {} as any,
+      { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
+    );
+    const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+
+    await handler(req, res, vi.fn());
+
+    expect(constructEvent).toHaveBeenCalledWith(req.body, 'sig_test', 'whsec_test');
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -90,7 +118,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_NOT_AUTHORIZABLE'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment } as unknown as PaymentService
+      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -100,7 +128,7 @@ describe('Stripe webhook handler', () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
-  it('returns 200 on duplicate webhook delivery and calls completeCheckoutPayment twice', async () => {
+  it('returns 200 on duplicate webhook delivery without re-processing', async () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
     const event = {
       type: 'checkout.session.completed',
@@ -114,10 +142,12 @@ describe('Stripe webhook handler', () => {
     } as unknown as Stripe.Event;
     const constructEvent = vi.fn().mockReturnValue(event);
     const mockPayment = { id: 'payment-1', personId: 'consumer-1', status: 'pending', orderId: 'order-1', amount: 10000, provider: 'stripe' };
+    const isPaymentFinalized = vi.fn();
+    isPaymentFinalized.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService,
+      { completeCheckoutPayment, isPaymentFinalized } as unknown as PaymentService,
       { clearCart: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
@@ -127,7 +157,9 @@ describe('Stripe webhook handler', () => {
     await handler(req, res1, vi.fn());
     await handler(req, res2, vi.fn());
 
-    expect(completeCheckoutPayment).toHaveBeenCalledTimes(2);
+    // First call processes the payment; second call is a duplicate delivery
+    // and returns 200 OK immediately without re-processing since payment is now in final state
+    expect(completeCheckoutPayment).toHaveBeenCalledTimes(1);
     expect(res1.status).toHaveBeenCalledWith(200);
     expect(res2.status).toHaveBeenCalledWith(200);
   });
@@ -145,7 +177,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_NOT_AUTHORIZABLE'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment } as unknown as PaymentService
+      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -170,7 +202,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment } as unknown as PaymentService
+      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -198,7 +230,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_AMOUNT_MISMATCH'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService
+      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -225,7 +257,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, failPayment } as unknown as PaymentService
+      { completeCheckoutPayment, failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -251,7 +283,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment } as unknown as PaymentService
+      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
