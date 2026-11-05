@@ -102,8 +102,10 @@ export class InvoiceService {
       throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     }
 
-    invoice.pdfUrl = '';
-    invoice.pdfPath = '';
+    const now = new Date();
+    const key = generateInvoiceKey(invoice.id, now.getFullYear(), now.getMonth() + 1);
+    invoice.pdfPath = key;
+    invoice.pdfUrl = `https://cdn.example.com/${key}`;
     invoice.status = InvoiceStatus.GENERATED;
     invoice.updatedAt = new Date();
     await this.invoiceRepo.update(invoice);

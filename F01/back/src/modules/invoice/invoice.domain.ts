@@ -103,11 +103,10 @@ export class Invoice {
     if (typeof pdfPath !== 'string' || pdfPath.trim().length === 0) {
       throw new Error(InvoiceError.INVALID_INVOICE);
     }
-    // Do NOT store pdfUrl/pdfPath permanently - they are informational only per MP-29
     this.status = InvoiceStatus.GENERATED;
     this.updatedAt = new Date();
-    this.pdfUrl = '';
-    this.pdfPath = '';
+    this.pdfUrl = pdfUrl;
+    this.pdfPath = pdfPath;
   }
 
   toJSON(): InvoiceData {

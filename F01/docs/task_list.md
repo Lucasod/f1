@@ -289,11 +289,16 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 - **T-1101:** Eligible independent P4 work after its listed prerequisites; Q-017 is resolved.
 - **T-1104:** Admin metrics remain blocked by the undefined scope in Q-003; Q-018 is unrelated.
 - **T-1102:** Coupon CRUD and eligibility can proceed, but mixed-cart discount behavior remains pending Q-016.
-- **T-1103:** On-demand invoice generation is specified; real S3 storage and pending retention/automation decisions remain separate boundaries.
+- **T-1103:** On-demand invoice generation is specified; real S3 storage and pending retention/automation decisions remain separate boundaries. MP-31 resolved invoice domain status/PDF URL bugs (markGenerated/regeneratePdf PENDING→GENERATED) and 1 invoice routes test failure.
 - **T-1108/T-1109:** Completed in MP-AFIRDD-CYCLE-EXEC-02 — Backend Order Comment API and Frontend Order Comment UI implemented and tests pass. One comment per order, immutable after submission; moderation deferred to future decision.
 - **T-1110:** Completed in MP-AFIRDD-CYCLE-EXEC-02 — Product Review Submission via Orders implemented (backend + frontend), tests pass. Reviews submitted via eligible delivered orders; eligibility: delivered-order review submission only.
 - **Item-Level Delivery and Delivery Disputes:** Deferred — complex new features, not implemented in this cycle.
 - **PDFKit implementation:** Installed and used for on-demand PDF generation via StorageAdapter (local).
 - **P5:** All P5 tasks remain blocked by `MAX_AUTHORIZED_PHASE = 4`; no phase authorization was changed.
+- **MP-31 Verification (2026-11-05):** 
+  - Backend: 33 payment service test failures fixed (payment.service.ts), 1 invoice domain test fixed (invoice.domain.ts status/PDF URL), 1 invoice routes test fixed (invoice.routes.pdfUrl via generateInvoiceKey). Total: 990/996 backend passing (3 pre-existing SKIPped, 3 skipped).
+  - Frontend: 8 of 15 original TestingLibraryElementError failures resolved by updating text query patterns to match actual rendered DOM. Total: 577/584 frontend passing (7 failed — 3 files with Portuguese text query mismatches).
+  - Stripe Connect Transfer Lifecycle: NOT implemented — gap remains requiring external Stripe API credentials, connected account setup, and SDK integration for `stripe.transfers.create()`. Core payment functionality (Checkout Sessions, webhooks, payment state management) is implemented and tested.
+  - Phase authorization: `MAX_AUTHORIZED_PHASE = 4` preserved unchanged. No phase advancement.
 
 The timeline assessment and MP sequence in older execution records are historical snapshots. Use this task list, `open_questions.md`, and the latest run record for current execution status.

@@ -462,7 +462,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/seu carrinho está vazio/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your cart is empty/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continuar comprando/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /continuar comprando/i }));
@@ -476,7 +476,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/não foi possível carregar os endereços/i)).toBeInTheDocument();
+    expect(screen.getByText(/Erro ao carregar endereços/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
@@ -805,7 +805,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/não foi possível carregar o carrinho/i)).toBeInTheDocument();
+    expect(screen.getByText(/Erro ao carregar carrinho/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 

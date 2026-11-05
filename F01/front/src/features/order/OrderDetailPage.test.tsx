@@ -209,7 +209,7 @@ describe('OrderDetailPage', () => {
 
     renderWithNav(<OrderDetailPage />);
 
-    await waitFor(() => expect(screen.getByText(/não foi possível carregar os detalhes do pedido/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedido/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 

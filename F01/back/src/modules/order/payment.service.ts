@@ -155,7 +155,11 @@ export class PaymentService {
       throw new Error(PaymentError.ORDER_NOT_PAYABLE);
     }
 
-    payment.authorize(providerTransactionId);
+    const authorized = payment.authorize(providerTransactionId);
+    authorized.status && (payment.status = authorized.status);
+    authorized.providerTransactionId && (payment.providerTransactionId = authorized.providerTransactionId);
+    authorized.authorizedAt && (payment.authorizedAt = authorized.authorizedAt);
+    authorized.eventId && (payment.eventId = authorized.eventId);
     await this.paymentRepo.update(payment);
 
     order.markPaymentAuthorized();
@@ -208,7 +212,11 @@ export class PaymentService {
       throw new Error(PaymentError.ORDER_NOT_PAYABLE);
     }
 
-    payment.capture();
+    const captured = payment.capture();
+    captured.status && (payment.status = captured.status);
+    captured.capturedAt && (payment.capturedAt = captured.capturedAt);
+    captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
+    captured.eventId && (payment.eventId = captured.eventId);
     await this.paymentRepo.update(payment);
 
     return payment;
@@ -233,7 +241,11 @@ export class PaymentService {
       throw new Error(PaymentError.PAYMENT_NOT_AUTHORIZABLE);
     }
 
-    payment.fail();
+    const failed = payment.fail();
+    failed.status && (payment.status = failed.status);
+    failed.providerTransactionId && (payment.providerTransactionId = failed.providerTransactionId);
+    failed.failedAt && (payment.failedAt = failed.failedAt);
+    failed.eventId && (payment.eventId = failed.eventId);
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
@@ -293,7 +305,11 @@ export class PaymentService {
       throw new Error(PaymentError.PAYMENT_NOT_REFUNDABLE);
     }
 
-    payment.refund();
+    const refunded = payment.refund();
+    refunded.status && (payment.status = refunded.status);
+    refunded.providerTransactionId && (payment.providerTransactionId = refunded.providerTransactionId);
+    refunded.refundedAt && (payment.refundedAt = refunded.refundedAt);
+    refunded.eventId && (payment.eventId = refunded.eventId);
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);

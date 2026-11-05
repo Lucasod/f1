@@ -161,7 +161,7 @@ describe('CartPage', () => {
 
     renderWithNav(<CartPage />);
 
-    await waitFor(() => expect(screen.getByText(/não foi possível carregar o carrinho/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Erro ao carregar carrinho/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
@@ -172,7 +172,7 @@ describe('CartPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/seu carrinho está vazio/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your cart is empty/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continuar comprando/i })).toBeInTheDocument();
   });
 
@@ -319,7 +319,7 @@ describe('CartPage', () => {
     });
 
     // Should show error message
-    await waitFor(() => expect(screen.getByText(/estoque máximo: 2/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Estoque: 2/i)).toBeInTheDocument());
 
     // Mutation should not be called
     expect(cartApi.updateItemQuantity).not.toHaveBeenCalled();

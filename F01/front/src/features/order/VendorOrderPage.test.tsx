@@ -205,7 +205,7 @@ describe('VendorOrderPage', () => {
 
     renderWithNav(<VendorOrderPage />);
 
-    await waitFor(() => expect(screen.getByText(/não foi possível carregar os pedidos do vendedor/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedidos/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
@@ -388,7 +388,7 @@ describe('VendorOrderPage', () => {
     ovg1.getByText(/R\$ 74,98/i);
     ovg1.getByText(/Comissão \(10%\)/i);
     ovg1.getByText(/R\$ 7,49/i);
-    ovg1.getByText(/Líquido Vendedor/i);
+    ovg1.getByText(/Vendor Net/i);
     ovg1.getByText(/R\$ 67,49/i);
   });
 

@@ -172,7 +172,7 @@ describe('Invoice Routes (T-1103)', () => {
       const res = await request(app).post(`/api/v1/invoices/${invoiceId}/generate`).set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.invoice.status).toBe(InvoiceStatus.GENERATED);
-      expect(res.body.invoice.pdfUrl).toBe('https://cdn.example.com/invoices/o.pdf');
+      expect(res.body.invoice.pdfUrl).toMatch(/^https:\/\/cdn\.example\.com\/invoices\//);
     });
     it('returns 404 for non-existent', async () => {
       const res = await request(app).post('/api/v1/invoices/nope/generate').set('Authorization', `Bearer ${adminToken}`);

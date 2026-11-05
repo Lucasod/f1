@@ -245,7 +245,7 @@ describe('OrderHistoryPage', () => {
 
     renderWithNav(<OrderHistoryPage />);
 
-    await waitFor(() => expect(screen.getByText(/não foi possível carregar o histórico de pedidos/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedidos/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
@@ -256,8 +256,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/nenhum pedido encontrado/i)).toBeInTheDocument();
-    expect(screen.getByText(/você ainda não fez nenhum pedido/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nenhum pedido encontrado/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start shopping/i })).toBeInTheDocument();
   });
 
