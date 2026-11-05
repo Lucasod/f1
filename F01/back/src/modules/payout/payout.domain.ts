@@ -44,6 +44,11 @@ export interface PayoutData {
   bankAccount?: string;
   createdAt: Date;
   updatedAt: Date;
+  eventId?: string;
+  originalEventId?: string;
+  eventType?: string;
+  eventSource?: string;
+  eventTimestamp?: Date;
 }
 
 function generateId(): string {
@@ -64,6 +69,13 @@ export class Payout {
   public readonly createdAt: Date;
   public updatedAt: Date;
 
+  // New fields for MP-29 immutable event tracking
+  public readonly eventId: string;
+  public originalEventId?: string;
+  public eventType?: string;
+  public eventSource?: string;
+  public eventTimestamp?: Date;
+
   private constructor(data: PayoutData) {
     this.id = data.id;
     this.vendorId = data.vendorId;
@@ -77,6 +89,11 @@ export class Payout {
     this.bankAccount = data.bankAccount;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
+    this.eventId = data.eventId ?? generateId();
+    this.originalEventId = data.originalEventId;
+    this.eventType = data.eventType;
+    this.eventSource = data.eventSource;
+    this.eventTimestamp = data.eventTimestamp;
   }
 
   static create(data: {
@@ -97,6 +114,7 @@ export class Payout {
     }
 
     const now = new Date();
+    const eventId = generateId();
     return new Payout({
       id: generateId(),
       vendorId: data.vendorId.trim(),
@@ -114,6 +132,11 @@ export class Payout {
           : undefined,
       createdAt: now,
       updatedAt: now,
+      eventId: eventId,
+      originalEventId: undefined,
+      eventType: 'payout_requested',
+      eventSource: 'internal',
+      eventTimestamp: now,
     });
   }
 
@@ -121,19 +144,70 @@ export class Payout {
     return new Payout(data);
   }
 
-  transitionTo(newStatus: PayoutStatus): void {
+  private static eventTypeForStatus(status: PayoutStatus): string {
+    switch (status) {
+      case PayoutStatus.PENDING:
+        return 'payout_requested';
+      case PayoutStatus.APPROVED:
+        return 'payout_approved';
+      case PayoutStatus.PROCESSING:
+        return 'payout_processing';
+      case PayoutStatus.COMPLETED:
+        return 'payout_completed';
+      case PayoutStatus.FAILED:
+        return 'payout_failed';
+      case PayoutStatus.CANCELLED:
+        return 'payout_cancelled';
+      default:
+        return 'payout_unknown';
+    }
+  }
+
+  transitionTo(newStatus: PayoutStatus): Payout {
     if (this.status === newStatus) {
-      return;
+      return new Payout({
+        id: this.id,
+        vendorId: this.vendorId,
+        personId: this.personId,
+        amount: this.amount,
+        status: newStatus,
+        requestedAt: this.requestedAt,
+        processedAt: newStatus === PayoutStatus.COMPLETED ? new Date() : this.processedAt,
+        failureReason: this.failureReason,
+        reference: this.reference,
+        bankAccount: this.bankAccount,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt,
+        eventId: generateId(),
+        originalEventId: this.eventId,
+        eventType: Payout.eventTypeForStatus(newStatus),
+        eventSource: 'internal',
+        eventTimestamp: new Date(),
+      });
     }
     const allowed = VALID_PAYOUT_TRANSITIONS[this.status];
     if (!allowed.includes(newStatus)) {
       throw new Error(PayoutError.INVALID_STATUS_TRANSITION);
     }
-    this.status = newStatus;
-    this.updatedAt = new Date();
-    if (newStatus === PayoutStatus.COMPLETED) {
-      this.processedAt = new Date();
-    }
+    return new Payout({
+      id: this.id,
+      vendorId: this.vendorId,
+      personId: this.personId,
+      amount: this.amount,
+      status: newStatus,
+      requestedAt: this.requestedAt,
+      processedAt: newStatus === PayoutStatus.COMPLETED ? new Date() : this.processedAt,
+      failureReason: this.failureReason,
+      reference: this.reference,
+      bankAccount: this.bankAccount,
+      createdAt: this.createdAt,
+      updatedAt: new Date(),
+      eventId: generateId(),
+      originalEventId: this.eventId,
+      eventType: Payout.eventTypeForStatus(newStatus),
+      eventSource: 'internal',
+      eventTimestamp: new Date(),
+    });
   }
 
   canTransitionTo(status: PayoutStatus): boolean {
@@ -141,25 +215,60 @@ export class Payout {
   }
 
   approve(): void {
-    this.transitionTo(PayoutStatus.APPROVED);
+    const newPayout = this.transitionTo(PayoutStatus.APPROVED);
+    this.status = newPayout.status;
+    this.updatedAt = newPayout.updatedAt;
+    this.eventId = newPayout.eventId;
+    this.originalEventId = newPayout.originalEventId;
+    this.eventType = newPayout.eventType;
+    this.eventSource = newPayout.eventSource;
+    this.eventTimestamp = newPayout.eventTimestamp;
   }
 
   startProcessing(): void {
-    this.transitionTo(PayoutStatus.PROCESSING);
+    const newPayout = this.transitionTo(PayoutStatus.PROCESSING);
+    this.status = newPayout.status;
+    this.updatedAt = newPayout.updatedAt;
+    this.eventId = newPayout.eventId;
+    this.originalEventId = newPayout.originalEventId;
+    this.eventType = newPayout.eventType;
+    this.eventSource = newPayout.eventSource;
+    this.eventTimestamp = newPayout.eventTimestamp;
   }
 
   complete(): void {
-    this.transitionTo(PayoutStatus.COMPLETED);
+    const newPayout = this.transitionTo(PayoutStatus.COMPLETED);
+    this.status = newPayout.status;
+    this.updatedAt = newPayout.updatedAt;
+    this.processedAt = newPayout.processedAt;
+    this.eventId = newPayout.eventId;
+    this.originalEventId = newPayout.originalEventId;
+    this.eventType = newPayout.eventType;
+    this.eventSource = newPayout.eventSource;
+    this.eventTimestamp = newPayout.eventTimestamp;
   }
 
   fail(reason: string): void {
-    this.transitionTo(PayoutStatus.FAILED);
+    const newPayout = this.transitionTo(PayoutStatus.FAILED);
+    this.status = newPayout.status;
+    this.updatedAt = newPayout.updatedAt;
     this.failureReason = typeof reason === 'string' ? reason.trim() : reason;
-    this.updatedAt = new Date();
+    this.eventId = newPayout.eventId;
+    this.originalEventId = newPayout.originalEventId;
+    this.eventType = newPayout.eventType;
+    this.eventSource = newPayout.eventSource;
+    this.eventTimestamp = newPayout.eventTimestamp;
   }
 
   cancel(): void {
-    this.transitionTo(PayoutStatus.CANCELLED);
+    const newPayout = this.transitionTo(PayoutStatus.CANCELLED);
+    this.status = newPayout.status;
+    this.updatedAt = newPayout.updatedAt;
+    this.eventId = newPayout.eventId;
+    this.originalEventId = newPayout.originalEventId;
+    this.eventType = newPayout.eventType;
+    this.eventSource = newPayout.eventSource;
+    this.eventTimestamp = newPayout.eventTimestamp;
   }
 
   toJSON(): PayoutData {
@@ -176,6 +285,11 @@ export class Payout {
       bankAccount: this.bankAccount,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+      eventId: this.eventId,
+      originalEventId: this.originalEventId,
+      eventType: this.eventType,
+      eventSource: this.eventSource,
+      eventTimestamp: this.eventTimestamp,
     };
   }
 }

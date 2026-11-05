@@ -138,7 +138,7 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
     }
   }) as RequestHandler);
 
-  // GET /invoices/:invoiceId/download - download PDF
+  // GET /invoices/:invoiceId/download - download PDF (on-demand generation, no permanent storage)
   router.get('/:invoiceId/download', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const invoiceId = readPathParameter(req.params.invoiceId);
@@ -150,10 +150,10 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       if (!allowed) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      if (invoice.status === InvoiceStatus.PENDING || !invoice.pdfUrl) {
-        return res.status(404).json({ error: InvoiceError.INVALID_INVOICE, message: 'PDF not yet generated' });
-      }
-      return res.json({ pdfUrl: invoice.pdfUrl, url: invoice.pdfUrl });
+      const pdfBuffer = await invoiceService.downloadInvoice(invoiceId);
+      res.type('application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoiceId}.pdf"`);
+      return res.send(pdfBuffer);
     } catch (error) {
       return handleInvoiceError(error, res, next);
     }

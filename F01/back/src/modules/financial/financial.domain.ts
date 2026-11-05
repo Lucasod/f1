@@ -21,6 +21,11 @@ export interface FinancialAllocationData {
   net: number;
   referenceId: string;
   createdAt: Date;
+  eventId?: string;
+  originalEventId?: string;
+  eventType?: string;
+  eventSource?: string;
+  eventTimestamp?: Date;
 }
 
 function generateId(): string {
@@ -38,6 +43,11 @@ export class FinancialAllocation {
   public readonly net: number;
   public readonly referenceId: string;
   public readonly createdAt: Date;
+  public readonly eventId?: string;
+  public readonly originalEventId?: string;
+  public readonly eventType?: string;
+  public readonly eventSource?: string;
+  public readonly eventTimestamp?: Date;
 
   private constructor(data: FinancialAllocationData) {
     this.id = data.id;
@@ -50,6 +60,11 @@ export class FinancialAllocation {
     this.net = data.net;
     this.referenceId = data.referenceId;
     this.createdAt = data.createdAt;
+    this.eventId = data.eventId;
+    this.originalEventId = data.originalEventId;
+    this.eventType = data.eventType;
+    this.eventSource = data.eventSource;
+    this.eventTimestamp = data.eventTimestamp;
   }
 
   static create(data: {
@@ -76,6 +91,13 @@ export class FinancialAllocation {
     }
     const adjustments = data.adjustments ?? 0;
     const now = new Date();
+    const eventType =
+      data.type === FinancialAllocationType.CAPTURE
+        ? 'allocation_capture'
+        : data.type === FinancialAllocationType.REFUND
+        ? 'allocation_refund'
+        : undefined;
+    const eventId = generateId();
     return new FinancialAllocation({
       id: generateId(),
       orderId: data.orderId.trim(),
@@ -87,6 +109,11 @@ export class FinancialAllocation {
       net: data.net,
       referenceId: data.referenceId.trim(),
       createdAt: now,
+      eventId: eventId,
+      originalEventId: undefined,
+      eventType: eventType,
+      eventSource: 'internal',
+      eventTimestamp: now,
     });
   }
 
@@ -106,6 +133,11 @@ export class FinancialAllocation {
       net: this.net,
       referenceId: this.referenceId,
       createdAt: this.createdAt,
+      eventId: this.eventId,
+      originalEventId: this.originalEventId,
+      eventType: this.eventType,
+      eventSource: this.eventSource,
+      eventTimestamp: this.eventTimestamp,
     };
   }
 }

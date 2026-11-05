@@ -29,6 +29,11 @@ export interface WalletTransactionData {
   reason: string;
   orderId?: string;
   createdAt: Date;
+  eventId?: string;
+  originalEventId?: string;
+  eventType?: string;
+  eventSource?: string;
+  eventTimestamp?: Date;
 }
 
 function generateId(): string {
@@ -108,6 +113,11 @@ export class WalletTransaction {
   public readonly reason: string;
   public readonly orderId?: string;
   public readonly createdAt: Date;
+  public readonly eventId?: string;
+  public readonly originalEventId?: string;
+  public readonly eventType?: string;
+  public readonly eventSource?: string;
+  public readonly eventTimestamp?: Date;
 
   private constructor(data: WalletTransactionData) {
     this.id = data.id;
@@ -119,6 +129,11 @@ export class WalletTransaction {
     this.reason = data.reason;
     this.orderId = data.orderId;
     this.createdAt = data.createdAt;
+    this.eventId = data.eventId;
+    this.originalEventId = data.originalEventId;
+    this.eventType = data.eventType;
+    this.eventSource = data.eventSource;
+    this.eventTimestamp = data.eventTimestamp;
   }
 
   static create(data: {
@@ -146,6 +161,10 @@ export class WalletTransaction {
       throw new Error(WalletError.DUPLICATE_REFERENCE);
     }
     const now = new Date();
+    const eventTypeMap: Record<WalletTransactionType, string> = {
+      [WalletTransactionType.CREDIT]: 'wallet_credit',
+      [WalletTransactionType.DEBIT]: 'wallet_debit',
+    };
     return new WalletTransaction({
       id: generateId(),
       walletId: data.walletId.trim(),
@@ -156,6 +175,11 @@ export class WalletTransaction {
       reason: data.reason,
       orderId: data.orderId,
       createdAt: now,
+      eventId: generateId(),
+      originalEventId: undefined,
+      eventType: eventTypeMap[data.type],
+      eventSource: 'internal',
+      eventTimestamp: now,
     });
   }
 
@@ -174,6 +198,11 @@ export class WalletTransaction {
       reason: this.reason,
       orderId: this.orderId,
       createdAt: this.createdAt,
+      eventId: this.eventId,
+      originalEventId: this.originalEventId,
+      eventType: this.eventType,
+      eventSource: this.eventSource,
+      eventTimestamp: this.eventTimestamp,
     };
   }
 }

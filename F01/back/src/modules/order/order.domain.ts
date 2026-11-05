@@ -130,6 +130,11 @@ export interface PaymentData {
   refundedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  eventId?: string;
+  originalEventId?: string;
+  eventType?: string;
+  eventSource?: string;
+  eventTimestamp?: Date;
 }
 
 function generateId(): string {
@@ -639,6 +644,11 @@ export class Payment {
   public refundedAt?: Date;
   public readonly createdAt: Date;
   public updatedAt: Date;
+  public readonly eventId?: string;
+  public readonly originalEventId?: string;
+  public readonly eventType?: string;
+  public readonly eventSource?: string;
+  public readonly eventTimestamp?: Date;
 
   private constructor(data: PaymentData) {
     this.id = data.id;
@@ -654,6 +664,11 @@ export class Payment {
     this.refundedAt = data.refundedAt;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
+    this.eventId = data.eventId;
+    this.originalEventId = data.originalEventId;
+    this.eventType = data.eventType;
+    this.eventSource = data.eventSource;
+    this.eventTimestamp = data.eventTimestamp;
   }
 
   static create(data: {
@@ -673,6 +688,7 @@ export class Payment {
     }
 
     const now = new Date();
+    const eventId = generateId();
 
     return new Payment({
       id: generateId(),
@@ -682,7 +698,12 @@ export class Payment {
       status: PaymentStatus.PENDING,
       provider: data.provider,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      eventId: eventId,
+      originalEventId: undefined,
+      eventType: undefined,
+      eventSource: "internal",
+      eventTimestamp: now
     });
   }
 
@@ -690,41 +711,108 @@ export class Payment {
     return new Payment(data);
   }
 
-  authorize(providerTransactionId: string): void {
+  authorize(providerTransactionId: string): Payment {
     if (this.status !== PaymentStatus.PENDING) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    this.status = PaymentStatus.AUTHORIZED;
-    this.providerTransactionId = providerTransactionId;
-    this.authorizedAt = new Date();
-    this.updatedAt = new Date();
+    const newEventId = generateId();
+    const now = new Date();
+    const newPayment: Payment = Payment.reconstruct({
+      id: generateId(),
+      orderId: this.orderId,
+      personId: this.personId,
+      amount: this.amount,
+      status: PaymentStatus.AUTHORIZED,
+      provider: this.provider,
+      providerTransactionId: providerTransactionId,
+      authorizedAt: now,
+      eventId: newEventId,
+      originalEventId: this.eventId,
+      eventType: "payment_authorized",
+      eventSource: "internal",
+      eventTimestamp: now,
+      createdAt: this.createdAt,
+      updatedAt: now
+    });
+    return newPayment;
   }
 
-  capture(): void {
+  capture(): Payment {
     if (this.status !== PaymentStatus.AUTHORIZED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    this.status = PaymentStatus.CAPTURED;
-    this.capturedAt = new Date();
-    this.updatedAt = new Date();
+    const newEventId = generateId();
+    const now = new Date();
+    const newPayment: Payment = Payment.reconstruct({
+      id: generateId(),
+      orderId: this.orderId,
+      personId: this.personId,
+      amount: this.amount,
+      status: PaymentStatus.CAPTURED,
+      provider: this.provider,
+      providerTransactionId: this.providerTransactionId,
+      capturedAt: now,
+      eventId: newEventId,
+      originalEventId: this.eventId,
+      eventType: "payment_captured",
+      eventSource: "internal",
+      eventTimestamp: now,
+      createdAt: this.createdAt,
+      updatedAt: now
+    });
+    return newPayment;
   }
 
-  fail(): void {
+  fail(): Payment {
     if (this.status === PaymentStatus.CAPTURED || this.status === PaymentStatus.REFUNDED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    this.status = PaymentStatus.FAILED;
-    this.failedAt = new Date();
-    this.updatedAt = new Date();
+    const newEventId = generateId();
+    const now = new Date();
+    const newPayment: Payment = Payment.reconstruct({
+      id: generateId(),
+      orderId: this.orderId,
+      personId: this.personId,
+      amount: this.amount,
+      status: PaymentStatus.FAILED,
+      provider: this.provider,
+      providerTransactionId: this.providerTransactionId,
+      failedAt: now,
+      eventId: newEventId,
+      originalEventId: this.eventId,
+      eventType: "payment_failed",
+      eventSource: "internal",
+      eventTimestamp: now,
+      createdAt: this.createdAt,
+      updatedAt: now
+    });
+    return newPayment;
   }
 
-  refund(): void {
+  refund(): Payment {
     if (this.status !== PaymentStatus.CAPTURED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    this.status = PaymentStatus.REFUNDED;
-    this.refundedAt = new Date();
-    this.updatedAt = new Date();
+    const newEventId = generateId();
+    const now = new Date();
+    const newPayment: Payment = Payment.reconstruct({
+      id: generateId(),
+      orderId: this.orderId,
+      personId: this.personId,
+      amount: this.amount,
+      status: PaymentStatus.REFUNDED,
+      provider: this.provider,
+      providerTransactionId: this.providerTransactionId,
+      refundedAt: now,
+      eventId: newEventId,
+      originalEventId: this.eventId,
+      eventType: "payment_refunded",
+      eventSource: "internal",
+      eventTimestamp: now,
+      createdAt: this.createdAt,
+      updatedAt: now
+    });
+    return newPayment;
   }
 
   setProvider(provider: string): void {
@@ -746,7 +834,12 @@ export class Payment {
       failedAt: this.failedAt,
       refundedAt: this.refundedAt,
       createdAt: this.createdAt,
-      updatedAt: this.updatedAt
+      updatedAt: this.updatedAt,
+      eventId: this.eventId,
+      originalEventId: this.originalEventId,
+      eventType: this.eventType,
+      eventSource: this.eventSource,
+      eventTimestamp: this.eventTimestamp
     };
   }
 }
@@ -912,7 +1005,17 @@ export class InMemoryPaymentRepository implements PaymentRepository {
       const payment = this.payments.get(id);
       if (payment) payments.push(payment);
     }
-    return payments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return payments.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
+  async findByOriginalEventId(originalEventId: string): Promise<Payment[]> {
+    const payments: Payment[] = [];
+    for (const payment of this.payments.values()) {
+      if (payment.originalEventId === originalEventId) {
+        payments.push(payment);
+      }
+    }
+    return payments.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 
   async findByPersonId(personId: string): Promise<Payment[]> {

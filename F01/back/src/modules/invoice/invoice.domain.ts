@@ -103,13 +103,11 @@ export class Invoice {
     if (typeof pdfPath !== 'string' || pdfPath.trim().length === 0) {
       throw new Error(InvoiceError.INVALID_INVOICE);
     }
-    if (this.status !== InvoiceStatus.PENDING) {
-      throw new Error(InvoiceError.INVALID_INVOICE);
-    }
-    this.pdfUrl = pdfUrl;
-    this.pdfPath = pdfPath;
-    this.status = InvoiceStatus.GENERATED;
+    // Do NOT store pdfUrl/pdfPath permanently - they are informational only per MP-29
+    this.status = InvoiceStatus.PENDING;
     this.updatedAt = new Date();
+    this.pdfUrl = '';
+    this.pdfPath = '';
   }
 
   toJSON(): InvoiceData {

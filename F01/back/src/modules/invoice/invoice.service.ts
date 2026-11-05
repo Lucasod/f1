@@ -42,13 +42,9 @@ export class InvoiceService {
 
     const now = new Date();
     const key = generateInvoiceKey(order.id, now.getFullYear(), now.getMonth() + 1);
-    // Real PDF generation/storage is deferred (no PDF library, no S3 credentials).
-    // A generated storage key is NOT proof that a PDF exists, so it must not be
-    // exposed as a downloadable URL. The invoice is represented as PENDING until
-    // actual PDF bytes are generated and stored (via markGenerated). The key is
-    // regenerated when real PDF generation is implemented.
-    // Key generated but not stored per CD-035; PDF generation/storage deferred.
-    // The invoice remains PENDING until actual PDF bytes are generated and stored.
+    // Key generated but not stored per MP-29; PDF generation is on-demand and
+    // streamed directly for download. The invoice remains PENDING until on-demand
+    // PDF bytes are generated and streamed.
     key;
 
     const invoice = Invoice.create({
@@ -106,36 +102,20 @@ export class InvoiceService {
       throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     }
 
-    const now = new Date();
-    const order = await this.orderRepo.findById(invoice.orderId);
-
     invoice.pdfUrl = '';
     invoice.pdfPath = '';
     invoice.status = InvoiceStatus.PENDING;
     invoice.updatedAt = new Date();
     await this.invoiceRepo.update(invoice);
 
-    if (this.storageAdapter && order) {
-      try {
-        await this.generatePdfForInvoice(invoice, order);
-      } catch {
-        // leave pending
-      }
-    }
-
-    return (await this.invoiceRepo.findById(invoice.id)) ?? invoice;
+    return invoice;
   }
 
-  private async generatePdfForInvoice(invoice: Invoice, order: any): Promise<Invoice> {
-    if (!this.storageAdapter) {
-      throw new Error(InvoiceError.INVALID_INVOICE);
-    }
+  private async generatePdfForInvoice(invoice: Invoice, order: any): Promise<Buffer> {
     const now = new Date();
     const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
     const buffer = await this.buildPdf(invoice, order);
-    const result = await this.storageAdapter.save(buffer, key, 'application/pdf');
-    invoice.markGenerated(result.url, result.key);
-    return this.invoiceRepo.update(invoice);
+    return buffer;
   }
 
   private async buildPdf(invoice: Invoice, order: any): Promise<Buffer> {
@@ -172,7 +152,7 @@ export class InvoiceService {
     });
   }
 
-  async generatePdf(invoiceId: string): Promise<Invoice> {
+  async generatePdf(invoiceId: string): Promise<Buffer> {
     const invoice = await this.invoiceRepo.findById(invoiceId.trim());
     if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     const order = await this.orderRepo.findById(invoice.orderId);
@@ -185,9 +165,14 @@ export class InvoiceService {
       invoice.updatedAt = new Date();
       await this.invoiceRepo.update(invoice);
     }
-    if (!this.storageAdapter) {
-      throw new Error(InvoiceError.INVALID_INVOICE);
-    }
+    return this.generatePdfForInvoice(invoice, order);
+  }
+
+  async downloadInvoice(invoiceId: string): Promise<Buffer> {
+    const invoice = await this.invoiceRepo.findById(invoiceId.trim());
+    if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
+    const order = await this.orderRepo.findById(invoice.orderId);
+    if (!order) throw new Error(InvoiceError.ORDER_NOT_FOUND);
     return this.generatePdfForInvoice(invoice, order);
   }
 
