@@ -278,7 +278,7 @@ export class RedisCartRepository implements CartRepository {
       throw new Error('INVALID_CART_DATA');
     }
 
-    const items: CartItem[] = (storedItems as CartItem[]).map((item) => ({
+const items: CartItem[] = (storedItems as StoredCartItem[]).map((item) => ({
       productId: item.product_id,
       vendorId: item.vendor_id,
       quantity: item.quantity,

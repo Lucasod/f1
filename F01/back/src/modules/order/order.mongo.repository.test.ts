@@ -5,7 +5,9 @@ import { MongoOrderRepository } from './order.mongo.repository';
 
 // Test database configuration
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
-const TEST_DB_NAME = 'fs01_marketplace_test';
+const TEST_DB_NAME_BASE = 'fs01_marketplace_test';
+const TEST_DB_NAME_SUFFIX = `_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const TEST_DB_NAME = `${TEST_DB_NAME_BASE}${TEST_DB_NAME_SUFFIX}`;
 
 // MongoDB availability check utility
 async function isMongoAvailable(uri: string): Promise<boolean> {
@@ -37,6 +39,7 @@ describeIfMongo('MongoOrderRepository Contract Tests', () => {
     client = new MongoClient(TEST_MONGO_URI);
     await client.connect();
     db = client.db(TEST_DB_NAME);
+    global.__testDbName = TEST_DB_NAME;
     
     ordersCollection = db.collection('orders');
     
@@ -48,11 +51,12 @@ describeIfMongo('MongoOrderRepository Contract Tests', () => {
   });
 
   afterAll(async () => {
+    await db?.admin().command({ dropDatabase: 1 });
     await client.close();
   });
 
   beforeEach(async () => {
-    // Clear collections before each test
+    // Clear orders collection before each test
     await ordersCollection.deleteMany({});
     
     // Create repository instance
@@ -105,11 +109,16 @@ describeIfMongo('MongoOrderRepository Contract Tests', () => {
     it('should find orders by status', async () => {
       const order1 = createTestOrder();
       const order2 = createTestOrder();
-      order2.transitionTo(OrderStatus.PAID);
       const order3 = createTestOrder();
-      order3.transitionTo(OrderStatus.PAID);
 
+      // Save all as PENDING_PAYMENT first (real flow)
       await repo.save(order1);
+      await repo.save(order2);
+      await repo.save(order3);
+
+      // Transition and re-save as PAID
+      order2.transitionTo(OrderStatus.PAID);
+      order3.transitionTo(OrderStatus.PAID);
       await repo.save(order2);
       await repo.save(order3);
 

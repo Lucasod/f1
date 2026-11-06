@@ -108,7 +108,7 @@ export function OrderCommentSection({
   return (
     <Card variant="bordered" padding="md" className="mb-6" data-testid="order-comment-section">
       <CardHeader>
-        <CardTitle as="h3">Comentário do Pedido</CardTitle>
+        <CardTitle as="h3">Order Comment</CardTitle>
       </CardHeader>
       <CardContent>
         {existingComment ? (
@@ -143,7 +143,7 @@ export function OrderCommentSection({
 
             <Textarea
               id="order-comment"
-              label="Comentário"
+              label="Comment"
               aria-label="Order comment"
               value={commentText}
               onChange={(event) => setCommentText(event.target.value)}

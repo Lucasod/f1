@@ -33,6 +33,7 @@ import { WalletService } from './modules/wallet/wallet.service';
 import { InMemoryWalletRepository, InMemoryWalletTransactionRepository, WalletRepository, WalletTransactionRepository } from './modules/wallet/wallet.domain';
 import { MongoWalletRepository, MongoWalletTransactionRepository } from './modules/wallet/wallet.mongo.repository';
 import { FinancialService } from './modules/financial/financial.service';
+import { TransferService } from './modules/transfer/transfer.service';
 import { InMemoryFinancialAllocationRepository, FinancialAllocationRepository } from './modules/financial/financial.domain';
 import { MongoFinancialAllocationRepository } from './modules/financial/financial.mongo.repository';
 import { PayoutService } from './modules/payout/payout.service';
@@ -48,6 +49,7 @@ import { SeedRepositories } from './shared/seed.types';
 // MongoDB repositories and client
 import { MongoPersonRepository } from './modules/person/person.mongo.repository';
 import { MongoVendorRepository } from './modules/vendor/vendor.mongo.repository';
+import { MongoTransferRepository } from './modules/transfer/transfer.mongo.repository';
 import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
 import { MongoProductRepository } from './modules/product/product.mongo.repository';
 import { MongoReviewRepository } from './modules/review/review.mongo.repository';
@@ -96,12 +98,16 @@ let payoutService!: PayoutService;
 let invoiceService!: InvoiceService;
 let walletService!: WalletService;
 let financialService!: FinancialService;
+let transferService!: TransferService;
 
 // Initialize storage adapter
 const storageAdapter = new LocalStorageAdapter();
 
 // Initialize cart repository (Redis)
 cartRepo = new RedisCartRepository();
+
+// Transfer repository and service
+let transferRepo: MongoTransferRepository;
 
 function initializeServices(): void {
   const stripeClient = createStripeClientFromEnvironment();
@@ -130,6 +136,9 @@ reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAda
 walletService = new WalletService(walletRepo, walletTxRepo);
 financialService = new FinancialService(financialRepo);
 paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService);
+  if (transferRepo) {
+    transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '');
+  }
 payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService);
 invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
 }
@@ -231,6 +240,7 @@ invoiceRepo = new MongoInvoiceRepository(db);
 walletRepo = new MongoWalletRepository(db);
 walletTxRepo = new MongoWalletTransactionRepository(db);
 financialRepo = new MongoFinancialAllocationRepository(db);
+      transferRepo = new MongoTransferRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -262,7 +272,8 @@ financialRepo = new MongoFinancialAllocationRepository(db);
       app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
         createStripeClientFromEnvironment(),
         paymentService,
-        cartService
+        cartService,
+        transferService
       ));
 
       // Order routes
@@ -346,7 +357,9 @@ financialRepo = new InMemoryFinancialAllocationRepository();
         try {
           app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
             createStripeClientFromEnvironment(),
-            paymentService
+            paymentService,
+            cartService,
+            transferService
           ));
         } catch {
           // Stripe not configured in dev fallback; skip

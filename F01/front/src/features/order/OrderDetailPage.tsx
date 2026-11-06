@@ -172,7 +172,7 @@ function VendorGroupCard({
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.subtotal)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Comissão ({vendorGroup.commissionPct}%)</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Commission ({vendorGroup.commissionPct}%)</p>
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.commissionAmount)}</p>
         </div>
         <div>
@@ -242,7 +242,7 @@ function ShippingAddressCard({ address }: ShippingAddressCardProps) {
   return (
     <Card variant="bordered" padding="md">
       <CardHeader>
-        <CardTitle as="h3">Endereço de Entrega</CardTitle>
+        <CardTitle as="h3">Delivery Address</CardTitle>
       </CardHeader>
       <CardContent>
         <address className="not-italic space-y-1">
@@ -415,7 +415,7 @@ description="The requested order does not exist or has been removed."
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
-            message="Não foi possível carregar os detalhes do pedido. Tente novamente."
+            message="Could not load order details. Try again."
             title="Erro ao carregar pedido"
             variant="error"
             action={{

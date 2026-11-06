@@ -703,7 +703,7 @@ export function ConsumerProfile() {
                     value={newAddressForm.city}
                     onChange={(e) => setNewAddressForm({ ...newAddressForm, city: e.target.value })}
                     error={addressErrors.city}
-                    placeholder="São Paulo"
+                    placeholder="City"
                   />
                   <Select
                     id="address-state"

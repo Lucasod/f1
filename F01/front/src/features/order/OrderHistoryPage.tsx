@@ -52,7 +52,7 @@ function getStatusConfig(status: OrderStatus): { label: string; variant: 'defaul
  * Status filter options for the Select component
  */
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos os status' },
+  { value: '', label: 'All status' },
   { value: 'pending_payment', label: 'PENDING_PAYMENT' },
   { value: 'paid', label: 'PAID' },
   { value: 'processing', label: 'PROCESSING' },
@@ -124,12 +124,12 @@ export function OrderHistoryPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <EmptyState
             icon={EmptyStateIcons.orders}
-            title="Nenhum pedido encontrado"
+            title="No orders found"
             description={statusFilter ? 'Try adjusting the status filter to see more orders.' : 'You haven\'t made any orders yet.'}
             action={
               !statusFilter
                 ? {
-                    label: 'Começar a comprar',
+                    label: 'Start shopping',
                     onClick: () => navigate('/products'),
                     variant: 'primary' as const,
                   }
@@ -153,7 +153,7 @@ export function OrderHistoryPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Meus Pedidos</h1>
           <p className="mt-1 text-gray-600">
-            {totalOrders} pedido{totalOrders !== 1 ? 's' : ''} encontrado{totalOrders !== 1 ? 's' : ''}
+            {totalOrders} order{totalOrders !== 1 ? 's' : ''} found{totalOrders !== 1 ? 's' : ''}
           </p>
         </div>
 
@@ -163,7 +163,7 @@ export function OrderHistoryPage() {
             <div className="w-full sm:w-64">
               <Select
                 id="status-filter"
-                label="Filtrar por status"
+                label="Filter by status"
                 options={STATUS_FILTER_OPTIONS}
                 value={statusFilter}
                 onChange={(e) => {
@@ -197,7 +197,7 @@ export function OrderHistoryPage() {
               Anterior
             </Button>
             <span className="px-4 text-sm text-gray-600">
-              Página {currentPage} de {totalPages}
+              Page {currentPage} of {totalPages}
             </span>
             <Button
               variant="outline"
@@ -205,7 +205,7 @@ export function OrderHistoryPage() {
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
             >
-              Próxima
+              Next
             </Button>
           </div>
         )}

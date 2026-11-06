@@ -172,9 +172,6 @@ export class PaymentService {
     authorized.authorizedAt && (payment.authorizedAt = authorized.authorizedAt);
     await this.paymentRepo.update(payment);
 
-    order.markPaymentAuthorized();
-    await this.orderRepo.update(order);
-
     return payment;
   }
 
@@ -188,7 +185,7 @@ export class PaymentService {
     }
     // Idempotency guard: if payment already in final state, return immediately
     // This prevents re-processing of duplicate webhook deliveries
-    if (existing.status === PaymentStatus.CAPTURED || existing.status === PaymentStatus.FAILED || existing.status === PaymentStatus.REFUNDED) {
+    if (existing.status === PaymentStatus.FAILED || existing.status === PaymentStatus.REFUNDED) {
       return existing;
     }
     if (existing.status === PaymentStatus.PENDING) {
@@ -207,8 +204,9 @@ export class PaymentService {
       throw new Error(PaymentError.PAYMENT_NOT_FOUND);
     }
 
-    // Idempotency: if already captured, return as-is
+    // A persisted capture may still need its order update repaired after a retry.
     if (payment.status === PaymentStatus.CAPTURED) {
+      await this.markCapturedOrderPaid(payment.orderId);
       return payment;
     }
 
@@ -220,7 +218,7 @@ export class PaymentService {
     if (!order) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
-    if (![OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status)) {
+    if (![OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status)) {
       throw new Error(PaymentError.ORDER_NOT_PAYABLE);
     }
 
@@ -230,7 +228,41 @@ export class PaymentService {
     captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
     await this.paymentRepo.update(payment);
 
+    await this.markCapturedOrderPaid(payment.orderId);
+
     return payment;
+  }
+
+  private async markCapturedOrderPaid(orderId: string): Promise<void> {
+    // Reload after capture persistence; never regress advanced or terminal orders.
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      throw new Error(PaymentError.ORDER_NOT_FOUND);
+    }
+    // CD-063: callers reach this only after capture persistence has succeeded.
+    if (order.status === OrderStatus.PENDING_PAYMENT) {
+      order.transitionTo(OrderStatus.PAID);
+      try {
+        const result = await this.orderRepo.update(order);
+        // If repository refused (returned unchanged non-PAID), treat as no-op.
+        if (result && result.status !== OrderStatus.PAID) {
+          return;
+        }
+      } catch (err) {
+        try { console.error('markCapturedOrderPaid: conditional update failed for order', orderId, err); } catch { /* blocked in isolated test env */ }
+        // Re-throw unexpected errors (not conditional-update failures)
+        if (typeof err?.message !== 'string' || !err.message.startsWith('INVALID_STATUS_TRANSITION')) {
+          throw err;
+        }
+        // Conditional update failed; re-read persisted state.
+        const persisted = await this.orderRepo.findById(orderId);
+        if (persisted && persisted.status === OrderStatus.PAID) {
+          return; // idempotent success
+        }
+        // Advanced/terminal state: do not overwrite.
+        return;
+      }
+    }
   }
 
   async failPayment(paymentId: string): Promise<Payment> {
@@ -353,14 +385,17 @@ export class PaymentService {
   }
 
   /**
-   * Check if a payment is in a final state (CAPTURED, FAILED, or REFUNDED).
-   * Used for duplicate delivery deduplication.
+   * Check whether duplicate delivery can skip processing. A captured payment
+   * whose order is still pending must retry the order update, not capture again.
    */
   async isPaymentFinalized(paymentId: string): Promise<boolean> {
     const payment = await this.paymentRepo.findById(paymentId);
     if (!payment) return false;
+    if (payment.status === PaymentStatus.CAPTURED) {
+      const order = await this.orderRepo.findById(payment.orderId);
+      return order !== null && order.status !== OrderStatus.PENDING_PAYMENT;
+    }
     return [
-      PaymentStatus.CAPTURED,
       PaymentStatus.FAILED,
       PaymentStatus.REFUNDED,
     ].includes(payment.status);
@@ -414,7 +449,7 @@ export class PaymentService {
       if (existingTransfer.stripeTransferId && this.transferRepo) {
         try {
           const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
-            apiVersion: '2024-09-30',
+apiVersion: '2026-10-28.endive',
           });
           const stripeTransfer = await stripe.transfers.retrieve(
             existingTransfer.stripeTransferId
@@ -454,7 +489,7 @@ export class PaymentService {
 
     // Create Stripe Transfer
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
-      apiVersion: '2024-09-30',
+      apiVersion: '2026-10-28.endive',
     });
 
     const stripeTransfer = await stripe.transfers.create(
@@ -464,9 +499,10 @@ export class PaymentService {
         destination: '', // Will be set from vendor's connected account
         source_transaction: chargeId,
         transfer_group: payment.orderId,
-        idempotency_key: idempotencyKey,
       },
-      idempotencyKey
+      {
+        idempotencyKey: idempotencyKey,
+      }
     );
 
     // Update the entity with Stripe transfer ID and provider transaction ID

@@ -89,13 +89,13 @@ const checkReviewImageOwnership = async (req: AuthenticatedRequest, res: Respons
   next();
 };
 
-router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsumer as RequestHandler, checkReviewImageOwnership, parseReviewImage, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsumer as RequestHandler, checkReviewImageOwnership as RequestHandler, parseReviewImage, (async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
         throw new Error(ReviewError.REVIEW_IMAGE_REQUIRED);
       }
       const review = await reviewService.addReviewImage(
-        req.user.sub,
+        (req as AuthenticatedRequest).user.sub,
         readPathParameter(req.params.reviewId),
         req.file.buffer,
         req.file.mimetype,

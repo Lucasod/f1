@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { PaymentService, PaymentError } from '../order/payment.service';
 import { CartService } from '../cart/cart.service';
 import { TransferService } from '../transfer/transfer.service';
+import { Transfer } from '../transfer/transfer.domain';
 import { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
 
 export function createStripeWebhookHandler(
@@ -32,21 +33,29 @@ export function createStripeWebhookHandler(
     const session = event.data.object as Stripe.Checkout.Session;
     if (!event.type.startsWith('checkout.session.')) {
       // Handle Stripe Connect transfer webhook events
-      if (event.type === 'transfer.paid' || event.type === 'transfer.failed') {
-        const stripeTransferId = event.data.object.id;
-        if (!stripeTransferId) {
-          return res.status(200).json({ received: true });
-        }
-        // Look up the corresponding Transfer by stripeTransferId
-        const transfer = await transferService.findByStripeTransferId(stripeTransferId);
-        // Update transfer status if found; if not found, log and continue
-        // (webhook may arrive before DB entry is created or in edge cases)
-        if (transfer) {
-          if (event.type === 'transfer.paid') {
-            await transferService.completeTransfer(stripeTransferId);
-          } else if (event.type === 'transfer.failed') {
-            await transferService.failTransfer(stripeTransferId);
+      if (event.type.startsWith('transfer.')) {
+        // At this point, event.type is narrowed to transfer.* types
+        const transferType = event.type as
+          | 'transfer.paid'
+          | 'transfer.failed'
+          | 'transfer.reversed';
+        if (transferType === 'transfer.paid' || transferType === 'transfer.failed') {
+          const stripeTransferId = (event.data as { object: any }).object.id;
+          if (!stripeTransferId) {
+            return res.status(200).json({ received: true });
           }
+// Look up the corresponding Transfer by stripeTransferId
+const transfer = await (transferService as any).findByStripeTransferId(stripeTransferId);
+          // Update transfer status if found; if not found, log and continue
+          // (webhook may arrive before DB entry is created or in edge cases)
+          if (transfer) {
+            if (transferType === 'transfer.paid') {
+              await transferService.completeTransfer(stripeTransferId);
+            } else if (transferType === 'transfer.failed') {
+              await transferService.failTransfer(stripeTransferId);
+            }
+          }
+          return res.status(200).json({ received: true });
         }
         return res.status(200).json({ received: true });
       }

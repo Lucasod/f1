@@ -486,7 +486,7 @@ describe('CheckoutPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check address section - use the legend in RadioGroup which is more specific
-    expect(screen.getByText(/^endereço de entrega$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Delivery address$/i)).toBeInTheDocument();
     
     // Check radio buttons for addresses (labels contain street, number, neighborhood)
     expect(screen.getByLabelText(/rua das flores, 123 - centro/i)).toBeInTheDocument();
@@ -778,7 +778,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/nenhum endereço cadastrado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No addresses registered/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /manage addresses/i })).toBeInTheDocument();
   });
 
@@ -869,8 +869,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/acesso negado/i)).toBeInTheDocument();
-    expect(screen.getByText(/você precisa estar logado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Access denied/i)).toBeInTheDocument();
+    expect(screen.getByText(/You need to be logged in to access the checkout/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /fazer login/i })).toBeInTheDocument();
     
     // Restore auth state for other tests (though this is the last test)

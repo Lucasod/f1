@@ -227,10 +227,10 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
   router.delete('/', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const consumerId = req.user.sub;
-      const cart = await cartService.clearCart(consumerId);
+      await cartService.clearCart(consumerId);
 
-      const response: any = { cart: cartToResponse(cart) };
-      addGuestCartHeader(req, res, cart.id);
+      const response: any = { cart: null };
+      addGuestCartHeader(req, res, consumerId);
 
       return res.json(response);
     } catch (error) {
@@ -242,10 +242,10 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
   router.patch('/clear', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const consumerId = req.user.sub;
-      const cart = await cartService.clearCart(consumerId);
+      await cartService.clearCart(consumerId);
 
-      const response: any = { cart: cartToResponse(cart) };
-      addGuestCartHeader(req, res, cart.id);
+      const response: any = { cart: null };
+      addGuestCartHeader(req, res, consumerId);
 
       return res.json(response);
     } catch (error) {

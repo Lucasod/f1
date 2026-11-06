@@ -4,7 +4,8 @@ import { Product, ProductStatus, ProductRepository, ProductError } from './produ
 import { MongoProductRepository } from './product.mongo.repository';
 
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
-const TEST_DB_NAME = 'fs01_marketplace_test';
+const DB_SUFFIX = Math.random().toString(36).substring(2, 9);
+const TEST_DB_NAME = `fs01_marketplace_test_${DB_SUFFIX}`;
 
 // MongoDB availability check utility
 async function isMongoAvailable(uri: string): Promise<boolean> {
@@ -31,11 +32,13 @@ describeIfMongo('MongoProductRepository Contract Tests', () => {
   let db: Db;
   let productsCollection: Collection;
   let repo: ProductRepository;
+  let dbNameForDrop: string;
 
   beforeAll(async () => {
     client = new MongoClient(TEST_MONGO_URI);
     await client.connect();
     db = client.db(TEST_DB_NAME);
+    dbNameForDrop = TEST_DB_NAME;
 
     productsCollection = db.collection('products');
 
@@ -44,11 +47,11 @@ describeIfMongo('MongoProductRepository Contract Tests', () => {
   });
 
   afterAll(async () => {
+    await client.db(dbNameForDrop).drop();
     await client.close();
   });
 
   beforeEach(async () => {
-    await productsCollection.deleteMany({});
     repo = new MongoProductRepository(db);
   });
 

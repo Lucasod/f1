@@ -67,7 +67,7 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): {
  * Status filter options for the Select component
  */
 const VENDOR_GROUP_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos os status' },
+  { value: '', label: 'All status' },
   { value: 'pending', label: 'PENDENTE' },
   { value: 'confirmed', label: 'CONFIRMADO' },
   { value: 'preparing', label: 'PREPARANDO' },
@@ -148,7 +148,7 @@ function VendorGroupCard({
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.subtotal)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Comissão ({vendorGroup.commissionPct}%)</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Commission ({vendorGroup.commissionPct}%)</p>
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.commissionAmount)}</p>
         </div>
         <div>
@@ -272,11 +272,11 @@ export function VendorOrderPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <EmptyState
             icon={EmptyStateIcons.orders}
-            title="Nenhum grupo de pedidos encontrado"
+            title="No order groups found"
             description={
               statusFilter
-                ? 'Tente alterar o filtro de status para ver mais grupos de pedidos.'
-                : 'Você ainda não tem nenhum grupo de pedidos associado.'
+                ? 'Try changing the status filter to see more order groups.'
+                : 'You don\'t have any order groups associated.'
             }
             action={
               !statusFilter
@@ -301,7 +301,7 @@ export function VendorOrderPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Meus Pedidos (Vendedor)</h1>
           <p className="mt-1 text-gray-600">
-            {totalGroups} grupo{totalGroups !== 1 ? 's' : ''} de pedido{totalGroups !== 1 ? 's' : ''} encontrado{totalGroups !== 1 ? 's' : ''}
+            {totalGroups} order group{totalGroups !== 1 ? 's' : ''} found{totalGroups !== 1 ? 's' : ''}
           </p>
         </div>
 
@@ -349,7 +349,7 @@ export function VendorOrderPage() {
               Anterior
             </Button>
             <span className="px-4 text-sm text-gray-600">
-              Página {currentPage} de {totalPages}
+              Page {currentPage} of {totalPages}
             </span>
             <Button
               variant="outline"
@@ -357,7 +357,7 @@ export function VendorOrderPage() {
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
             >
-              Próxima
+              Next
             </Button>
           </div>
         )}

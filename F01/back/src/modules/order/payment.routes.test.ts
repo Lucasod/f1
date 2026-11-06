@@ -104,23 +104,22 @@ describe('Payment Routes (T-1004 Refund API)', () => {
   });
 
   describe('POST /payments/:id/authorize', () => {
-    it('should authorize a pending payment', async () => {
+    it('should reject public authorize with 403 PROVIDER_CONFIRMATION_REQUIRED', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
       const pid = cr.body.payment.id;
       const res = await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
-      expect(res.status).toBe(200);
-      expect(res.body.payment.status).toBe(PaymentStatus.AUTHORIZED);
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('PROVIDER_CONFIRMATION_REQUIRED');
     });
   });
 
   describe('POST /payments/:id/capture', () => {
-    it('should capture an authorized payment', async () => {
+    it('should reject public capture with 403 PROVIDER_CONFIRMATION_REQUIRED', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
       const pid = cr.body.payment.id;
-      await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
       const res = await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
-      expect(res.status).toBe(200);
-      expect(res.body.payment.status).toBe(PaymentStatus.CAPTURED);
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('PROVIDER_CONFIRMATION_REQUIRED');
     });
   });
 
@@ -128,8 +127,8 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     it('should refund a captured payment', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
       const pid = cr.body.payment.id;
-      await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
-      await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
+      await paymentService.authorizePayment(pid, 'pi_123');
+      await paymentService.capturePayment(pid);
       const res = await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
       expect(res.status).toBe(200);
       expect(res.body.payment.status).toBe(PaymentStatus.REFUNDED);
@@ -145,8 +144,8 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     it('should return 409 when already refunded', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
       const pid = cr.body.payment.id;
-      await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
-      await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
+      await paymentService.authorizePayment(pid, 'pi_123');
+      await paymentService.capturePayment(pid);
       await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
       const res = await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
       expect(res.status).toBe(409);
@@ -178,8 +177,8 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     it('should return 409 when payment is captured', async () => {
       const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
       const pid = cr.body.payment.id;
-      await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
-      await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
+      await paymentService.authorizePayment(pid, 'pi_123');
+      await paymentService.capturePayment(pid);
       const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
       expect(res.status).toBe(409);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_AUTHORIZABLE);

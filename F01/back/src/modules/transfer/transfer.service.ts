@@ -20,7 +20,7 @@ export class TransferService {
     this.transferRepo = transferRepo;
     this.financialService = financialService;
     this.stripe = new Stripe(stripeKey, {
-      apiVersion: '2024-09-30',
+      apiVersion: '2026-10-28.endive',
     });
   }
 

@@ -247,11 +247,11 @@ export function CheckoutPage() {
   // Validate form before submit
   const validateForm = useCallback((): boolean => {
     if (!selectedAddressId) {
-      setSubmitError('Selecione um endereço de entrega');
+      setSubmitError('Select delivery address');
       return false;
     }
     if (!paymentMethod) {
-      setSubmitError('Selecione uma forma de pagamento');
+      setSubmitError('Select payment method');
       return false;
     }
     setSubmitError(null);
@@ -340,8 +340,8 @@ export function CheckoutPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <ErrorAlert
-          message="Você precisa estar logado para acessar o checkout."
-          title="Acesso negado"
+          message="You need to be logged in to access the checkout."
+          title="Access denied"
           variant="error"
           action={{
             label: 'Fazer login',
@@ -653,7 +653,7 @@ export function CheckoutPage() {
                   value={paymentMethod}
                   onChange={setPaymentMethod}
                   required
-                  error={submitError && !paymentMethod ? 'Selecione uma forma de pagamento' : undefined}
+                  error={submitError && !paymentMethod ? 'Select payment method' : undefined}
                 />
                 <p className="mt-4 text-sm text-gray-500">
                   <span className="font-medium">Nota:</span> Este é um ambiente de demonstração. 

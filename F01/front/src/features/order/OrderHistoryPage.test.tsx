@@ -256,7 +256,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/Nenhum pedido encontrado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No orders found/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start shopping/i })).toBeInTheDocument();
   });
 
@@ -271,7 +271,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Apply a filter - this will trigger a refetch with the second mock (empty response)
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'delivered' } });
     });
@@ -279,9 +279,9 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(orderApi.list).toHaveBeenCalledWith(expect.objectContaining({ status: 'delivered', page: 1 })));
 
     // Wait for the empty state to render with filter-specific message
-    await waitFor(() => expect(screen.getByText(/tente alterar o filtro de status para ver mais pedidos/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Try adjusting the status filter to see more orders./i)).toBeInTheDocument());
 
-    expect(screen.getByText(/nenhum pedido encontrado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No orders found/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument();
   });
 
@@ -292,7 +292,7 @@ describe('OrderHistoryPage', () => {
 
     // Check header with total count
     expect(screen.getByText(/meus pedidos/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 pedidos encontrados/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 orders founds/i)).toBeInTheDocument();
 
     // Check order cards are displayed - use ORDER-1 which is unique
     expect(screen.getByText(/ORDER-1/i)).toBeInTheDocument();
@@ -332,7 +332,7 @@ describe('OrderHistoryPage', () => {
     expect(orderApi.list).toHaveBeenCalledWith(expect.objectContaining({ status: undefined, page: 1, limit: 10 }));
 
     // Change status filter to 'delivered'
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'delivered' } });
     });
@@ -350,7 +350,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check pagination is visible (totalPages = ceil(25/10) = 3)
-    expect(screen.getByText(/página 1 de 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
 
     // Previous button should be disabled on page 1
     expect(screen.getByRole('button', { name: /anterior/i })).toBeDisabled();
@@ -360,14 +360,14 @@ describe('OrderHistoryPage', () => {
 
     // Click Next
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /próxima/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
     });
 
     // Should call API with page 2
     await waitFor(() => expect(orderApi.list).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })));
 
     // Wait for the UI to update with new page data
-    await waitFor(() => expect(screen.getByText(/página 2 de 3/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Page 2 of 3/i)).toBeInTheDocument());
 
     // Previous button should be enabled now
     expect(screen.getByRole('button', { name: /anterior/i })).not.toBeDisabled();
@@ -384,7 +384,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(orderApi.list).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })));
 
     // Page indicator should update back
-    await waitFor(() => expect(screen.getByText(/página 1 de 3/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument());
   });
 
   it('clicking order card navigates to /orders/:orderId', async () => {
@@ -471,7 +471,7 @@ describe('OrderHistoryPage', () => {
     vi.mocked(orderApi.list).mockResolvedValueOnce(mockFilteredEmptyResponse);
 
     // Apply a filter first
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'delivered' } });
     });

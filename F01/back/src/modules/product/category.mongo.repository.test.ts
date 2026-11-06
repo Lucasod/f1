@@ -5,7 +5,8 @@ import { MongoCategoryRepository } from './category.mongo.repository';
 
 // Test database configuration
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
-const TEST_DB_NAME = 'fs01_marketplace_test';
+const DB_SUFFIX = Math.random().toString(36).substring(2, 9);
+const TEST_DB_NAME = `fs01_marketplace_test_${DB_SUFFIX}`;
 
 // MongoDB availability check utility
 async function isMongoAvailable(uri: string): Promise<boolean> {
@@ -32,11 +33,13 @@ describeIfMongo('MongoCategoryRepository Contract Tests', () => {
   let db: Db;
   let categoriesCollection: Collection;
   let repo: CategoryRepository;
+  let dbNameForDrop: string;
 
   beforeAll(async () => {
     client = new MongoClient(TEST_MONGO_URI);
     await client.connect();
     db = client.db(TEST_DB_NAME);
+    dbNameForDrop = TEST_DB_NAME;
 
     categoriesCollection = db.collection('categories');
 
@@ -47,13 +50,11 @@ describeIfMongo('MongoCategoryRepository Contract Tests', () => {
   });
 
   afterAll(async () => {
+    await client.db(dbNameForDrop).drop();
     await client.close();
   });
 
   beforeEach(async () => {
-    // Clear collection before each test
-    await categoriesCollection.deleteMany({});
-
     // Create repository instance
     repo = new MongoCategoryRepository(db);
   });

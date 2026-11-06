@@ -185,7 +185,8 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         actorId
       );
 
-      return res.json({ order: orderToResponse(order) });
+      const responseVendorId = actorRole === 'vendor' ? actorId : undefined;
+      return res.json({ order: orderToResponse(order, responseVendorId) });
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -366,12 +367,14 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
   return router;
 }
 
-function orderToResponse(order: Order) {
+function orderToResponse(order: Order, vendorId?: string) {
   return {
     id: order.id,
     personId: order.personId,
     status: order.status,
-    vendorGroups: order.vendorGroups.map(vg => vendorGroupToResponse(vg)),
+    vendorGroups: order.vendorGroups
+      .map(vg => vendorGroupToResponse(vg))
+      .filter(vg => vendorId === undefined || vg.vendorId === vendorId),
     shippingAddress: order.shippingAddress,
     totalAmount: order.totalAmount,
     financialStatus: order.financialStatus,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PaymentService, PaymentError } from './payment.service';
-import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, InMemoryOrderRepository } from './order.domain';
+import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, FinancialStatus, InMemoryOrderRepository } from './order.domain';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
 import { Product, InMemoryProductRepository } from '../product/product.domain';
 import { config } from '../../config';
@@ -248,13 +248,19 @@ describe('Payment Service', () => {
       expect(authorized.authorizedAt).toBeDefined();
     });
 
-    it('should update order status to PAID when payment authorized', async () => {
+    it('should keep order status PENDING_PAYMENT when payment authorized (CD-063: PAID requires captured payment)', async () => {
       const payment = await createTestPayment();
       await paymentService.authorizePayment(payment.id, 'txn_test_123');
 
-      const order = await orderRepo.findById(testOrder.id);
-      expect(order!.status).toBe(OrderStatus.PAID);
-      expect(order!.financialStatus).toBe('paid');
+      const orderAfterAuthorize = await orderRepo.findById(testOrder.id);
+      expect(orderAfterAuthorize!.status).toBe(OrderStatus.PENDING_PAYMENT);
+      expect(orderAfterAuthorize!.financialStatus).toBe('pending');
+
+      // Capture promotes order to PAID
+      await paymentService.capturePayment(payment.id);
+      const orderAfterCapture = await orderRepo.findById(testOrder.id);
+      expect(orderAfterCapture!.status).toBe(OrderStatus.PAID);
+      expect(orderAfterCapture!.financialStatus).toBe('paid');
     });
 
     it('should throw PAYMENT_NOT_FOUND for non-existent payment', async () => {
@@ -652,6 +658,7 @@ describe('Payment Service', () => {
       expect(payments[0].createdAt.getTime()).toBeGreaterThanOrEqual(payments[1].createdAt.getTime());
     });
   });
+
   describe('failPayment stock restoration', () => {
     it('restores reserved stock on failed payment', async () => {
       const productRepo = new InMemoryProductRepository();

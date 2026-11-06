@@ -219,8 +219,8 @@ describe('OrderDetailPage', () => {
 
     renderWithNav(<OrderDetailPage />);
 
-    await waitFor(() => expect(screen.getByText(/pedido não encontrado/i)).toBeInTheDocument());
-    expect(screen.getByText(/o pedido solicitado não existe ou foi removido/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Order not found/i)).toBeInTheDocument());
+    expect(screen.getByText(/The requested order does not exist or has been removed./i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /voltar para meus pedidos/i })).toBeInTheDocument();
   });
 
@@ -250,7 +250,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/endereço de entrega/i)).toBeInTheDocument();
+    expect(screen.getByText(/Delivery Address/i)).toBeInTheDocument();
     expect(screen.getByText(/Rua das Flores, 123/i)).toBeInTheDocument();
     expect(screen.getByText(/Centro/i)).toBeInTheDocument();
     expect(screen.getByText(/São Paulo - SP/i)).toBeInTheDocument();
@@ -292,7 +292,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     // Check vendor group financial summary
     const subtotalLabels = screen.getAllByText(/subtotal/i);
     expect(subtotalLabels.length).toBeGreaterThanOrEqual(2); // one per vendor group
-    const comissaoLabels = screen.getAllByText(/comissão \(15%\)/i);
+    const comissaoLabels = screen.getAllByText(/Commission \(15%\)/i);
     expect(comissaoLabels.length).toBeGreaterThanOrEqual(2);
     const liquidoLabels = screen.getAllByText(/Vendor Net/i);
     expect(liquidoLabels.length).toBeGreaterThanOrEqual(2);
@@ -331,7 +331,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     // Check all timeline steps exist - use descriptions which are unique to timeline
     expect(screen.getByText((content) => content.includes('Aguardando pagamento'))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('Pagamento confirmado'))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('Em preparação'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Preparing'))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('Enviado para entrega'))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('Entregue'))).toBeInTheDocument();
     

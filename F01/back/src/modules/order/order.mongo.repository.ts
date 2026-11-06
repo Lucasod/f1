@@ -114,8 +114,14 @@ export class MongoOrderRepository implements OrderRepository {
       commentedBy: order.commentedBy
     };
 
-    await this.ordersCollection.updateOne(
-      { _id: orderId },
+    const isPaidTransition = order.status === OrderStatus.PAID;
+
+    const filter = isPaidTransition
+      ? { _id: orderId, status: OrderStatus.PENDING_PAYMENT }
+      : { _id: orderId };
+
+    const result = await this.ordersCollection.updateOne(
+      filter,
       {
         $set: {
           personId: orderDoc.personId,
@@ -133,8 +139,21 @@ export class MongoOrderRepository implements OrderRepository {
           createdAt: order.createdAt
         }
       },
-      { upsert: true }
+      { upsert: !isPaidTransition }
     );
+
+    if (isPaidTransition && result.modifiedCount === 0) {
+      const existing = await this.ordersCollection.findOne({ _id: orderId });
+      if (existing && existing.status === OrderStatus.PAID) {
+        // idempotent success: already PAID, do not overwrite
+        return Order.reconstruct({
+          ...order.toJSON(),
+          status: OrderStatus.PAID,
+          updatedAt: existing.updatedAt
+        } as any);
+      }
+      throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+    }
 
     return Order.reconstruct({
       ...order.toJSON(),

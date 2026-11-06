@@ -5,7 +5,8 @@ import { MongoPersonRepository } from './person.mongo.repository';
 
 // Test database configuration
 const TEST_MONGO_URI = process.env.TEST_MONGO_URI || 'mongodb://localhost:27017';
-const TEST_DB_NAME = 'fs01_marketplace_test';
+const DB_SUFFIX = Math.random().toString(36).substring(2, 9);
+const TEST_DB_NAME = `fs01_marketplace_test_${DB_SUFFIX}`;
 
 // MongoDB availability check utility
 async function isMongoAvailable(uri: string): Promise<boolean> {
@@ -63,16 +64,11 @@ describeIfMongo('MongoPersonRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
-    // Clear all collections before each test
-    await Promise.all([
-      peopleCollection.deleteMany({}),
-      mainInfosCollection.deleteMany({}),
-      credentialsCollection.deleteMany({}),
-      addressesCollection.deleteMany({}),
-      contactInfosCollection.deleteMany({}),
-    ]);
-    
-    // Create repository instance
+    await peopleCollection.deleteMany({});
+    await mainInfosCollection.deleteMany({});
+    await credentialsCollection.deleteMany({});
+    await addressesCollection.deleteMany({});
+    await contactInfosCollection.deleteMany({});
     repo = new MongoPersonRepository(db);
   });
 

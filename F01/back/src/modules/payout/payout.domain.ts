@@ -218,7 +218,6 @@ export class Payout {
     const newPayout = this.transitionTo(PayoutStatus.APPROVED);
     this.status = newPayout.status;
     this.updatedAt = newPayout.updatedAt;
-    this.eventId = newPayout.eventId;
     this.originalEventId = newPayout.originalEventId;
     this.eventType = newPayout.eventType;
     this.eventSource = newPayout.eventSource;
@@ -229,7 +228,6 @@ export class Payout {
     const newPayout = this.transitionTo(PayoutStatus.PROCESSING);
     this.status = newPayout.status;
     this.updatedAt = newPayout.updatedAt;
-    this.eventId = newPayout.eventId;
     this.originalEventId = newPayout.originalEventId;
     this.eventType = newPayout.eventType;
     this.eventSource = newPayout.eventSource;
@@ -241,7 +239,6 @@ export class Payout {
     this.status = newPayout.status;
     this.updatedAt = newPayout.updatedAt;
     this.processedAt = newPayout.processedAt;
-    this.eventId = newPayout.eventId;
     this.originalEventId = newPayout.originalEventId;
     this.eventType = newPayout.eventType;
     this.eventSource = newPayout.eventSource;
@@ -253,7 +250,6 @@ export class Payout {
     this.status = newPayout.status;
     this.updatedAt = newPayout.updatedAt;
     this.failureReason = typeof reason === 'string' ? reason.trim() : reason;
-    this.eventId = newPayout.eventId;
     this.originalEventId = newPayout.originalEventId;
     this.eventType = newPayout.eventType;
     this.eventSource = newPayout.eventSource;
@@ -264,7 +260,6 @@ export class Payout {
     const newPayout = this.transitionTo(PayoutStatus.CANCELLED);
     this.status = newPayout.status;
     this.updatedAt = newPayout.updatedAt;
-    this.eventId = newPayout.eventId;
     this.originalEventId = newPayout.originalEventId;
     this.eventType = newPayout.eventType;
     this.eventSource = newPayout.eventSource;

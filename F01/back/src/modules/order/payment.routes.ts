@@ -101,80 +101,18 @@ export function createPaymentRoutes({ authService, paymentService, vendorRepo, o
     }
   }) as RequestHandler);
 
-  // POST /payments/:id/authorize - Authorize a payment (auth required)
-  router.post('/:id/authorize', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const { providerTransactionId } = req.body || {};
-
-      if (!providerTransactionId || typeof providerTransactionId !== 'string' || providerTransactionId.trim().length === 0) {
-        return res.status(400).json({ error: 'PROVIDER_TRANSACTION_ID_REQUIRED', message: 'Provider transaction ID is required' });
-      }
-
-      const existingPayment = await paymentService.getPaymentById(paymentId);
-      if (!existingPayment) {
-        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-      }
-      const allowed = await isOwner(req, existingPayment);
-      if (!allowed) {
-        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-      }
-
-      const payment = await paymentService.authorizePayment(paymentId, providerTransactionId);
-
-      return res.json({ payment: paymentToResponse(payment) });
-    } catch (error) {
-      if (error instanceof Error) {
-        switch (error.message) {
-          case PaymentError.PAYMENT_NOT_FOUND:
-            return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-          case PaymentError.PAYMENT_NOT_AUTHORIZABLE:
-            return res.status(409).json({ error: PaymentError.PAYMENT_NOT_AUTHORIZABLE, message: 'Payment is not authorizable' });
-          case PaymentError.ORDER_NOT_FOUND:
-            return res.status(404).json({ error: PaymentError.ORDER_NOT_FOUND, message: 'Order not found' });
-          case PaymentError.PAYMENT_AMOUNT_MISMATCH:
-            return res.status(409).json({ error: PaymentError.PAYMENT_AMOUNT_MISMATCH, message: 'Payment amount does not match order total' });
-          case PaymentError.ORDER_NOT_PAYABLE:
-            return res.status(409).json({ error: PaymentError.ORDER_NOT_PAYABLE, message: 'Order is not payable' });
-        }
-      }
-      next(error);
-    }
-  }) as RequestHandler);
-
-  // POST /payments/:id/capture - Capture an authorized payment (auth required)
-  router.post('/:id/capture', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-
-      const existingPayment = await paymentService.getPaymentById(paymentId);
-      if (!existingPayment) {
-        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-      }
-      const allowed = await isOwner(req, existingPayment);
-      if (!allowed) {
-        return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-      }
-
-      const payment = await paymentService.capturePayment(paymentId);
-
-      return res.json({ payment: paymentToResponse(payment) });
-    } catch (error) {
-      if (error instanceof Error) {
-        switch (error.message) {
-          case PaymentError.PAYMENT_NOT_FOUND:
-            return res.status(404).json({ error: PaymentError.PAYMENT_NOT_FOUND, message: 'Payment not found' });
-          case PaymentError.PAYMENT_NOT_CAPTURABLE:
-            return res.status(409).json({ error: PaymentError.PAYMENT_NOT_CAPTURABLE, message: 'Payment is not capturable' });
-          case PaymentError.ORDER_NOT_FOUND:
-            return res.status(404).json({ error: PaymentError.ORDER_NOT_FOUND, message: 'Order not found' });
-          case PaymentError.ORDER_NOT_PAYABLE:
-            return res.status(409).json({ error: PaymentError.ORDER_NOT_PAYABLE, message: 'Order is not payable' });
-        }
-      }
-      next(error);
-    }
-  }) as RequestHandler);
+  // CD-063: an authenticated owner/admin and a supplied provider reference are
+  // not provider confirmation. These public endpoints cannot assert financial
+  // success. Clients must await the verified provider flow; the signed webhook
+  // continues to call the internal PaymentService directly.
+  const rejectUnverifiedConfirmation: RequestHandler = (_req, res) => {
+    res.status(403).json({
+      error: 'PROVIDER_CONFIRMATION_REQUIRED',
+      message: 'Payment authorization and capture require verified provider confirmation',
+    });
+  };
+  router.post('/:id/authorize', authMw as RequestHandler, rejectUnverifiedConfirmation);
+  router.post('/:id/capture', authMw as RequestHandler, rejectUnverifiedConfirmation);
 
   // POST /payments/:id/refund - Refund a captured payment (T-1004) (auth required)
   router.post('/:id/refund', authMw as RequestHandler, requireConsumerVendorAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

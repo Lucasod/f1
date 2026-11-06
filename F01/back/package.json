@@ -7,7 +7,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run",
+    "test": "npm run test:checkout-duplicate && npm run test:payment-consumer-confirmation && vitest run",
+    "test:checkout-duplicate": "vitest run --config vitest.isolated.config.ts",
+    "test:payment-consumer-confirmation": "node --test src/modules/order/payment.consumer-confirmation.test.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "seed": "tsx scripts/seed.ts"

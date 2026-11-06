@@ -216,8 +216,8 @@ describe('VendorOrderPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/nenhum grupo de pedidos encontrado/i)).toBeInTheDocument();
-    expect(screen.getByText(/você ainda não tem nenhum grupo de pedidos associado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No order groups found/i)).toBeInTheDocument();
+    expect(screen.getByText(/You don't have any order groups associated./i)).toBeInTheDocument();
   });
 
   it('shows empty state with filter when no groups match filter', async () => {
@@ -238,9 +238,9 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(orderApi.getVendorOrderGroups).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending', page: 1 })));
 
     // Wait for the empty state to render with filter-specific message
-    await waitFor(() => expect(screen.getByText(/tente alterar o filtro de status para ver mais grupos de pedidos/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Try changing the status filter to see more order groups./i)).toBeInTheDocument());
 
-    expect(screen.getByText(/nenhum grupo de pedidos encontrado/i)).toBeInTheDocument();
+    expect(screen.getByText(/No order groups found/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument();
   });
 
@@ -251,7 +251,7 @@ describe('VendorOrderPage', () => {
 
     // Check header with total count - component uses "grupo(s) de pedido(s) encontrado(s)"
     expect(screen.getByText(/meus pedidos \(vendedor\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 grupos? de pedidos? encontrados?/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 order groups founds/i)).toBeInTheDocument();
 
     // Check vendor group cards are displayed - check Order IDs
     expect(screen.getByText(/ORDER-1/i)).toBeInTheDocument();
@@ -286,9 +286,9 @@ describe('VendorOrderPage', () => {
     expect(screen.getByText(/R\$ 89,99/i)).toBeInTheDocument(); // vendor net ovg-3
 
     // Check commission percentage - both ovg-1 and ovg-3 have 10%, ovg-2 has 12%
-    const commission10 = screen.getAllByText(/Comissão \(10%\)/i);
+    const commission10 = screen.getAllByText(/Commission \(10%\)/i);
     expect(commission10).toHaveLength(2);
-    expect(screen.getByText(/Comissão \(12%\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Commission \(12%\)/i)).toBeInTheDocument();
 
     // Check View Details buttons
     expect(screen.getAllByRole('button', { name: /ver detalhes/i })).toHaveLength(3);
@@ -321,7 +321,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check pagination is visible (totalPages = ceil(25/10) = 3)
-    expect(screen.getByText(/página 1 de 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
 
     // Previous button should be disabled on page 1
     expect(screen.getByRole('button', { name: /anterior/i })).toBeDisabled();
@@ -331,14 +331,14 @@ describe('VendorOrderPage', () => {
 
     // Click Next
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /próxima/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
     });
 
     // Should call API with page 2
     await waitFor(() => expect(orderApi.getVendorOrderGroups).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })));
 
     // Wait for the UI to update with new page data
-    await waitFor(() => expect(screen.getByText(/página 2 de 3/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Page 2 of 3/i)).toBeInTheDocument());
 
     // Previous button should be enabled now
     expect(screen.getByRole('button', { name: /anterior/i })).not.toBeDisabled();
@@ -355,7 +355,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(orderApi.getVendorOrderGroups).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })));
 
     // Page indicator should update back
-    await waitFor(() => expect(screen.getByText(/página 1 de 3/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument());
   });
 
   it('each group shows: Order ID, Vendor group ID, Status badge, Items count, Created date, Subtotal, Commission %, Commission amount, Vendor net', async () => {
@@ -386,7 +386,7 @@ describe('VendorOrderPage', () => {
     // Financial summary
     ovg1.getByText(/Subtotal/i);
     ovg1.getByText(/R\$ 74,98/i);
-    ovg1.getByText(/Comissão \(10%\)/i);
+    ovg1.getByText(/Commission \(10%\)/i);
     ovg1.getByText(/R\$ 7,49/i);
     ovg1.getByText(/Vendor Net/i);
     ovg1.getByText(/R\$ 67,49/i);

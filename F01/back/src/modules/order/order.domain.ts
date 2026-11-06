@@ -719,104 +719,45 @@ export class Payment {
     if (this.status !== PaymentStatus.PENDING) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    const newEventId = generateId();
     const now = new Date();
-    const newPayment: Payment = Payment.reconstruct({
-      id: generateId(),
-      orderId: this.orderId,
-      personId: this.personId,
-      amount: this.amount,
-      status: PaymentStatus.AUTHORIZED,
-      provider: this.provider,
-      providerTransactionId: providerTransactionId,
-      authorizedAt: now,
-      eventId: newEventId,
-      originalEventId: this.eventId,
-      eventType: "payment_authorized",
-      eventSource: "internal",
-      eventTimestamp: now,
-      createdAt: this.createdAt,
-      updatedAt: now
-    });
-    return newPayment;
+    this.status = PaymentStatus.AUTHORIZED;
+    this.providerTransactionId = providerTransactionId;
+    this.authorizedAt = now;
+    this.updatedAt = now;
+    return this;
   }
 
   capture(): Payment {
     if (this.status !== PaymentStatus.AUTHORIZED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    const newEventId = generateId();
     const now = new Date();
-    const newPayment: Payment = Payment.reconstruct({
-      id: generateId(),
-      orderId: this.orderId,
-      personId: this.personId,
-      amount: this.amount,
-      status: PaymentStatus.CAPTURED,
-      provider: this.provider,
-      providerTransactionId: this.providerTransactionId,
-      capturedAt: now,
-      eventId: newEventId,
-      originalEventId: this.eventId,
-      eventType: "payment_captured",
-      eventSource: "internal",
-      eventTimestamp: now,
-      createdAt: this.createdAt,
-      updatedAt: now
-    });
-    return newPayment;
+    this.status = PaymentStatus.CAPTURED;
+    this.capturedAt = now;
+    this.updatedAt = now;
+    return this;
   }
 
   fail(): Payment {
     if (this.status === PaymentStatus.CAPTURED || this.status === PaymentStatus.REFUNDED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    const newEventId = generateId();
     const now = new Date();
-    const newPayment: Payment = Payment.reconstruct({
-      id: generateId(),
-      orderId: this.orderId,
-      personId: this.personId,
-      amount: this.amount,
-      status: PaymentStatus.FAILED,
-      provider: this.provider,
-      providerTransactionId: this.providerTransactionId,
-      failedAt: now,
-      eventId: newEventId,
-      originalEventId: this.eventId,
-      eventType: "payment_failed",
-      eventSource: "internal",
-      eventTimestamp: now,
-      createdAt: this.createdAt,
-      updatedAt: now
-    });
-    return newPayment;
+    this.status = PaymentStatus.FAILED;
+    this.failedAt = now;
+    this.updatedAt = now;
+    return this;
   }
 
   refund(): Payment {
     if (this.status !== PaymentStatus.CAPTURED) {
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
-    const newEventId = generateId();
     const now = new Date();
-    const newPayment: Payment = Payment.reconstruct({
-      id: generateId(),
-      orderId: this.orderId,
-      personId: this.personId,
-      amount: this.amount,
-      status: PaymentStatus.REFUNDED,
-      provider: this.provider,
-      providerTransactionId: this.providerTransactionId,
-      refundedAt: now,
-      eventId: newEventId,
-      originalEventId: this.eventId,
-      eventType: "payment_refunded",
-      eventSource: "internal",
-      eventTimestamp: now,
-      createdAt: this.createdAt,
-      updatedAt: now
-    });
-    return newPayment;
+    this.status = PaymentStatus.REFUNDED;
+    this.refundedAt = now;
+    this.updatedAt = now;
+    return this;
   }
 
   setProvider(provider: string): void {
@@ -923,8 +864,11 @@ export class InMemoryOrderRepository implements OrderRepository {
     if (!existing) {
       throw new Error(OrderError.ORDER_NOT_FOUND);
     }
-
-    if (existing.status !== order.status) {
+    if (order.status === OrderStatus.PAID) {
+      if (existing.status !== OrderStatus.PAID && existing.status !== OrderStatus.PENDING_PAYMENT) {
+        throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+      }
+    }
       const oldStatusOrders = this.statusIndex.get(existing.status);
       if (oldStatusOrders) {
         oldStatusOrders.delete(order.id);
@@ -932,7 +876,6 @@ export class InMemoryOrderRepository implements OrderRepository {
       const newStatusOrders = this.statusIndex.get(order.status) || new Set();
       newStatusOrders.add(order.id);
       this.statusIndex.set(order.status, newStatusOrders);
-    }
 
     if (existing.personId !== order.personId) {
       const oldPersonOrders = this.personIndex.get(existing.personId);

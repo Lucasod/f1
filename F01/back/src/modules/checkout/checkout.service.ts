@@ -61,6 +61,7 @@ export class CheckoutService {
   private readonly productRepo: ProductRepository;
   private readonly vendorRepo: VendorRepository;
   private readonly personRepo: PersonRepository;
+  private categoryRepo;
   private readonly cartService: CartService;
   private readonly config: typeof import('../../config').config;
   private readonly paymentProvider: CheckoutPaymentProvider;
@@ -118,7 +119,7 @@ export class CheckoutService {
     productCategoryId: string,
     inclusionCategories: Set<string>,
     exclusionCategories: Set<string>,
-    allCategories: Map<string, string>
+    allCategories: Map<string, string | null>
   ): boolean {
     // Get all ancestors of the product's category (including itself)
     const ancestors: Set<string> = new Set();
@@ -198,6 +199,43 @@ export class CheckoutService {
     const shippingAddress = person.addresses.find(addr => addr.id === shippingAddressId);
     if (!shippingAddress) {
       throw new Error(OrderError.INVALID_SHIPPING_ADDRESS);
+    }
+
+    // Reuse existing unpaid order for the same cart instead of creating a duplicate
+    const cartSignature = cart.items
+      .map(i => `${i.productId}:${i.quantity}`)
+      .sort()
+      .join('|');
+
+    const existingOrders = await this.orderRepo.findByPersonId(consumerId);
+    for (const existing of existingOrders) {
+      if (existing.status !== OrderStatus.PENDING_PAYMENT) continue;
+      const existingSignature = existing.vendorGroups
+        .flatMap(vg => vg.items)
+        .map(i => `${i.productId}:${i.quantity}`)
+        .sort()
+        .join('|');
+      if (existingSignature !== cartSignature) continue;
+
+      const payments = await this.paymentRepo.findByOrderId(existing.id);
+      const existingPayment = payments[0] || Payment.create({
+        orderId: existing.id,
+        personId: consumerId,
+        amount: existing.totalAmount,
+        provider: 'stripe'
+      });
+      if (!payments[0]) {
+        await this.paymentRepo.save(existingPayment);
+      }
+
+      const session = await this.paymentProvider.createSession(existing, existingPayment);
+      existingPayment.providerTransactionId = session.id;
+      await this.paymentRepo.update(existingPayment);
+
+      return {
+        order: existing,
+        checkoutUrl: session.url
+      };
     }
 
     // Validate and prepare vendor groups
