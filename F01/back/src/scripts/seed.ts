@@ -1,7 +1,7 @@
 import { config } from '../config/index.js';
 import { Person, PersonRole, PersonRepository, ContactInfo, Address, MainInfo } from '../modules/person/person.domain.js';
 import { Vendor, VendorStatus, VendorRepository } from '../modules/vendor/vendor.domain.js';
-import { Product, Category, ProductStatus, ProductRepository, CategoryRepository } from '../modules/product/product.domain.js';
+import { Product, Category, ProductStatus, ProductError, ProductRepository, CategoryRepository } from '../modules/product/product.domain.js';
 import { hashPassword } from '../modules/auth/credential.domain.js';
 import { SeedRepositories } from '../shared/seed.types.js';
 import { Db } from 'mongodb';
@@ -108,6 +108,7 @@ interface AccountSeedData {
 
 interface ProductSeedData {
   id: string;
+  seedIdentity: string;
   vendorSlug: string;
   categorySlug: string;
   name: string;
@@ -184,6 +185,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'tech-store',
     categorySlug: 'smartphones',
     name: 'iPhone 15 Pro',
+    seedIdentity: 'fs01:product:tech-iphone-15-pro',
     description: 'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system.',
     price: 9999.00,
     quantity: 50,
@@ -194,6 +196,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'tech-store',
     categorySlug: 'laptops',
     name: 'MacBook Pro 16',
+    seedIdentity: 'fs01:product:tech-macbook-pro-16',
     description: 'Powerful laptop with M3 Max chip, 16-inch Liquid Retina XDR display.',
     price: 24999.00,
     quantity: 30,
@@ -204,6 +207,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'tech-store',
     categorySlug: 'electronics',
     name: 'iPad Pro',
+    seedIdentity: 'fs01:product:tech-ipad-pro',
     description: 'iPad Pro with M2 chip, 12.9-inch Liquid Retina XDR display.',
     price: 8999.00,
     quantity: 40,
@@ -214,6 +218,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'tech-store',
     categorySlug: 'electronics',
     name: 'AirPods Pro',
+    seedIdentity: 'fs01:product:tech-airpods-pro',
     description: 'Active noise cancelling wireless earbuds with transparency mode.',
     price: 2499.00,
     quantity: 100,
@@ -225,6 +230,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'fashion-hub',
     categorySlug: 'clothing',
     name: 'Classic T-Shirt',
+    seedIdentity: 'fs01:product:fashion-classic-tshirt',
     description: '100% cotton classic fit t-shirt, available in multiple colors.',
     price: 79.90,
     quantity: 200,
@@ -235,6 +241,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'fashion-hub',
     categorySlug: 'clothing',
     name: 'Denim Jeans',
+    seedIdentity: 'fs01:product:fashion-denim-jeans',
     description: 'Premium denim jeans with modern fit and stretch comfort.',
     price: 199.90,
     quantity: 150,
@@ -245,6 +252,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'fashion-hub',
     categorySlug: 'clothing',
     name: 'Summer Dress',
+    seedIdentity: 'fs01:product:fashion-summer-dress',
     description: 'Light and flowy summer dress, perfect for warm days.',
     price: 149.90,
     quantity: 120,
@@ -255,6 +263,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'fashion-hub',
     categorySlug: 'clothing',
     name: 'Leather Jacket',
+    seedIdentity: 'fs01:product:fashion-leather-jacket',
     description: 'Genuine leather jacket with classic biker style.',
     price: 899.90,
     quantity: 40,
@@ -266,6 +275,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'book-world',
     categorySlug: 'books',
     name: 'Clean Code',
+    seedIdentity: 'fs01:product:book-clean-code',
     description: 'A Handbook of Agile Software Craftsmanship by Robert C. Martin.',
     price: 129.90,
     quantity: 80,
@@ -276,6 +286,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'book-world',
     categorySlug: 'books',
     name: 'Design Patterns',
+    seedIdentity: 'fs01:product:book-design-patterns',
     description: 'Elements of Reusable Object-Oriented Software by Gang of Four.',
     price: 149.90,
     quantity: 70,
@@ -286,6 +297,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'book-world',
     categorySlug: 'books',
     name: 'The Pragmatic Programmer',
+    seedIdentity: 'fs01:product:book-pragmatic-programmer',
     description: 'Your Journey to Mastery by Andrew Hunt and David Thomas.',
     price: 119.90,
     quantity: 90,
@@ -296,6 +308,7 @@ const PRODUCTS: ProductSeedData[] = [
     vendorSlug: 'book-world',
     categorySlug: 'books',
     name: 'Domain-Driven Design',
+    seedIdentity: 'fs01:product:book-domain-driven-design',
     description: 'Tackling Complexity in the Heart of Software by Eric Evans.',
     price: 159.90,
     quantity: 60,
@@ -407,9 +420,14 @@ async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
   }
 }
 
-export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepository, 'save'>, product: Product): Promise<void> {
-  // Existing order-based IDs cannot establish seed-entry identity on conflict.
-  await productRepo.save(product);
+export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepository, 'save' | 'findById'>, product: Product): Promise<void> {
+  try {
+    await productRepo.save(product);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== ProductError.PRODUCT_CONFLICT || !product.seedIdentity) throw error;
+    const existing = await productRepo.findById(product.id);
+    if (!existing || existing.id !== product.id || existing.vendorId !== product.vendorId || existing.seedIdentity !== product.seedIdentity) throw error;
+  }
 }
 
 export async function runDevelopmentSeed(repositories: SeedRepositories): Promise<void> {
@@ -568,6 +586,7 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
       price: prodData.price,
       quantity: prodData.quantity,
       images: prodData.images,
+      seedIdentity: prodData.seedIdentity,
       status: ProductStatus.ACTIVE,
     });
     // Set deterministic ID for idempotency

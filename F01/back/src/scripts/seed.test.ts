@@ -40,16 +40,35 @@ describe('Seed Integration', () => {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin-secret';
 
   describe('runSeed', () => {
-    it('fails explicitly on an unverified existing seed product without overwriting it', async () => {
+    it('resumes the missing catalog entry through runDevelopmentSeed without changing other products', async () => {
       await runSeed(repositories);
       const products = await productRepo.findAll();
       const preserved = products[0];
       preserved.images = ['/retained'];
       await productRepo.delete(products[1].id);
-      await expect(runSeed(repositories)).rejects.toThrow('PRODUCT_CONFLICT');
+      await runDevelopmentSeed(repositories);
+      expect(await productRepo.findById(products[1].id)).not.toBeNull();
       expect((await productRepo.findById(preserved.id))?.images).toEqual(['/retained']);
+    });
+    it('does not resume a partial catalog through runDevelopmentSeed', async () => {
+      await runSeed(repositories);
+      const products = await productRepo.findAll();
+      await productRepo.delete(products[1].id);
+      await runDevelopmentSeed(repositories);
       expect(await productRepo.findById(products[1].id)).toBeNull();
       expect(await productRepo.findAll()).toHaveLength(products.length - 1);
+    });
+
+    it('resumes verified seed products without overwriting them', async () => {
+      await runSeed(repositories);
+      const products = await productRepo.findAll();
+      const preserved = products[0];
+      preserved.images = ['/retained'];
+      await productRepo.delete(products[1].id);
+      await runSeed(repositories);
+      expect((await productRepo.findById(preserved.id))?.images).toEqual(['/retained']);
+      expect(await productRepo.findById(products[1].id)).not.toBeNull();
+      expect(await productRepo.findAll()).toHaveLength(products.length);
     });
     it('requires deployment-managed passwords for every production seed account before seeding', () => {
       expect(() => validateSeedEnvironment({

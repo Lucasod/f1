@@ -3,6 +3,7 @@ import { Product, ProductRepository, ProductStatus, ProductError } from './produ
 
 interface ProductDoc {
   _id: string;
+  seedIdentity?: string;
   vendorId: string;
   categoryId: string;
   name: string;
@@ -30,6 +31,25 @@ export class MongoProductRepository implements ProductRepository {
     const productId = product.id;
     const now = new Date();
 
+    if (product.seedIdentity) {
+      let indexes;
+      try {
+        indexes = await this.productsCollection.listIndexes().toArray();
+      } catch {
+        throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
+      }
+      const safeIndex = indexes.some(index => {
+        const key = index.key;
+        const partial = index.partialFilterExpression;
+        return index.unique === true && !!key && Object.keys(key).length === 1 && key.seedIdentity === 1
+          && !!partial && Object.keys(partial).length === 1
+          && !!partial.seedIdentity && Object.keys(partial.seedIdentity).length === 1
+          && partial.seedIdentity.$type === 'string'
+          && (!index.collation || index.collation.locale === 'simple');
+      });
+      if (!safeIndex) throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
+    }
+
     let result;
     try {
       result = await this.productsCollection.updateOne(
@@ -37,6 +57,7 @@ export class MongoProductRepository implements ProductRepository {
         {
           $setOnInsert: {
             vendorId: product.vendorId,
+            ...(product.seedIdentity ? { seedIdentity: product.seedIdentity } : {}),
             categoryId: product.categoryId,
             name: product.name,
             description: product.description,
@@ -201,6 +222,7 @@ export class MongoProductRepository implements ProductRepository {
   private mapToProduct(doc: ProductDoc): Product {
     return Product.reconstruct({
       id: doc._id,
+      seedIdentity: doc.seedIdentity,
       vendorId: doc.vendorId,
       categoryId: doc.categoryId,
       name: doc.name,

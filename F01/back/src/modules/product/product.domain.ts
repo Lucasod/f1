@@ -39,6 +39,7 @@ export enum ProductError {
 
 export interface ProductData {
   id?: string;
+  seedIdentity?: string;
   vendorId: string;
   categoryId: string;
   name: string;
@@ -78,6 +79,7 @@ function buildPath(parentPath: string | null, slug: string): string {
 
 export class Product {
   public id: string;
+  public readonly seedIdentity?: string;
   public vendorId: string;
   public categoryId: string;
   public name: string;
@@ -91,6 +93,7 @@ export class Product {
 
   private constructor(data: ProductData) {
     this.id = data.id || generateId();
+    this.seedIdentity = data.seedIdentity;
     this.vendorId = data.vendorId;
     this.categoryId = data.categoryId;
     this.name = data.name;
