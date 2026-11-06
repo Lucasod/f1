@@ -47,6 +47,8 @@ interface OrderItemDoc {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  deliveredAt?: Date;
+  deliveredBy?: string;
 }
 
 interface AddressDoc {
@@ -86,7 +88,9 @@ export class MongoOrderRepository implements OrderRepository {
           vendorId: item.vendorId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice
+          totalPrice: item.totalPrice,
+          deliveredAt: item.deliveredAt,
+          deliveredBy: item.deliveredBy
         })),
         subtotal: vg.subtotal,
         commissionPct: vg.commissionPct,
@@ -115,9 +119,12 @@ export class MongoOrderRepository implements OrderRepository {
     };
 
     const isPaidTransition = order.status === OrderStatus.PAID;
+    const isPendingWrite = order.status === OrderStatus.PENDING_PAYMENT;
 
     const filter = isPaidTransition
       ? { _id: orderId, status: OrderStatus.PENDING_PAYMENT }
+      : isPendingWrite
+        ? { _id: orderId, status: { $nin: [OrderStatus.PROCESSING, OrderStatus.CANCELLED] } }
       : { _id: orderId };
 
     const result = await this.ordersCollection.updateOne(
@@ -139,8 +146,25 @@ export class MongoOrderRepository implements OrderRepository {
           createdAt: order.createdAt
         }
       },
-      { upsert: !isPaidTransition }
+      { upsert: !isPaidTransition && !isPendingWrite }
     );
+
+    if (isPendingWrite && result.matchedCount === 0) {
+      const existing = await this.ordersCollection.findOne({ _id: orderId });
+      if (existing) {
+        throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+      }
+      try {
+        await this.ordersCollection.insertOne(orderDoc);
+      } catch (error) {
+        // A concurrent insert must never turn the conditional write into an upsert.
+        if ((error as { code?: number }).code === 11000 &&
+            await this.ordersCollection.findOne({ _id: orderId })) {
+          throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+        }
+        throw error;
+      }
+    }
 
     if (isPaidTransition && result.modifiedCount === 0) {
       const existing = await this.ordersCollection.findOne({ _id: orderId });
@@ -233,7 +257,9 @@ export class MongoOrderRepository implements OrderRepository {
           vendorId: item.vendorId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice
+          totalPrice: item.totalPrice,
+          deliveredAt: item.deliveredAt,
+          deliveredBy: item.deliveredBy
         })),
         subtotal: vg.subtotal,
         commissionPct: vg.commissionPct,

@@ -192,7 +192,12 @@ export class ReviewService {
     const imageKey = `reviews/${review.productId}/${review.id}/${imageName}`;
     const { url } = await this.storageAdapter.save(buffer, imageKey, contentType);
     review.addImage(url);
-    return this.reviewRepo.update(review);
+    try {
+      return await this.reviewRepo.update(review);
+    } catch (err) {
+      try { await this.storageAdapter.delete(imageKey); } catch { /* ignore */ }
+      throw err;
+    }
   }
 
   async getReviewImageUrls(): Promise<string[]> {

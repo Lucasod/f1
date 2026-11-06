@@ -488,11 +488,13 @@ export class Order {
     }
     const idSet = new Set(itemIds);
     let changed = false;
+    const changedGroups = new Set<OrderVendorGroup>();
     for (const vendorGroup of this.vendorGroups) {
       for (const item of vendorGroup.items) {
         if (idSet.has(item.id) && !item.isDelivered) {
           item.markDelivered(deliveredBy);
           changed = true;
+          changedGroups.add(vendorGroup);
         }
       }
     }
@@ -500,7 +502,7 @@ export class Order {
       throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
     }
     // Update vendor group status if all items delivered
-    for (const vendorGroup of this.vendorGroups) {
+    for (const vendorGroup of changedGroups) {
       if (vendorGroup.items.length > 0 && vendorGroup.items.every(i => i.isDelivered)) {
         try {
           vendorGroup.updateStatus(OrderVendorGroupStatus.DELIVERED);
@@ -806,6 +808,11 @@ export class InMemoryOrderRepository implements OrderRepository {
   private statusIndex: Map<OrderStatus, Set<string>> = new Map();
 
   async save(order: Order): Promise<Order> {
+    const existing = this.orders.get(order.id);
+    if (order.status === OrderStatus.PENDING_PAYMENT && existing &&
+        [OrderStatus.PROCESSING, OrderStatus.CANCELLED].includes(existing.status)) {
+      throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+    }
     this.orders.set(order.id, order);
 
     const personOrders = this.personIndex.get(order.personId) || new Set();
@@ -863,6 +870,10 @@ export class InMemoryOrderRepository implements OrderRepository {
     const existing = this.orders.get(order.id);
     if (!existing) {
       throw new Error(OrderError.ORDER_NOT_FOUND);
+    }
+    if (order.status === OrderStatus.PENDING_PAYMENT &&
+        [OrderStatus.PROCESSING, OrderStatus.CANCELLED].includes(existing.status)) {
+      throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
     if (order.status === OrderStatus.PAID) {
       if (existing.status !== OrderStatus.PAID && existing.status !== OrderStatus.PENDING_PAYMENT) {

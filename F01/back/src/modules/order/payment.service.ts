@@ -251,7 +251,8 @@ export class PaymentService {
       } catch (err) {
         try { console.error('markCapturedOrderPaid: conditional update failed for order', orderId, err); } catch { /* blocked in isolated test env */ }
         // Re-throw unexpected errors (not conditional-update failures)
-        if (typeof err?.message !== 'string' || !err.message.startsWith('INVALID_STATUS_TRANSITION')) {
+        if (err == null || (typeof err !== 'object' && typeof err !== 'function') ||
+            !('message' in err) || typeof err.message !== 'string' || !err.message.startsWith('INVALID_STATUS_TRANSITION')) {
           throw err;
         }
         // Conditional update failed; re-read persisted state.

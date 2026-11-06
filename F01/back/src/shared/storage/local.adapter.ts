@@ -14,6 +14,8 @@ export interface CleanupResult {
 }
 
 export class LocalStorageAdapter implements StorageAdapter {
+  isRemote = false;
+
   constructor(
     private readonly storageRoot: string = config.storageRoot,
     private readonly publicUrlBase: string = config.storagePublicUrlBase
@@ -190,6 +192,10 @@ export class LocalStorageAdapter implements StorageAdapter {
   getUrl(key: string): string {
     const safeKey = this.sanitizeKey(key);
     return `${this.publicUrlBase}/${safeKey}`;
+  }
+
+  async getSignedUrl(key: string, _expiresIn?: number): Promise<string> {
+    return this.getUrl(key);
   }
 
   private async cleanupEmptyDirs(dirPath: string): Promise<void> {

@@ -166,11 +166,30 @@ export function createProductRoutes({ authService, productService, personRepo, v
       
       const products = await productService.listProducts(filters);
       
-      // Apply category filter in memory if needed (since service doesn't support it directly)
+      // Filter before pagination, retaining the repository's product order.
       let filteredProducts = products;
       const categoryIdStr = getQueryString(categoryId);
       if (categoryIdStr) {
-        filteredProducts = products.filter(p => p.categoryId === categoryIdStr);
+        const categories = await productService.listCategories();
+        const childrenByParent = new Map<string, string[]>();
+        for (const category of categories) {
+          if (category.parentId !== null) {
+            const children = childrenByParent.get(category.parentId) ?? [];
+            children.push(category.id);
+            childrenByParent.set(category.parentId, children);
+          }
+        }
+        const categoryIds = new Set([categoryIdStr]);
+        const pending = [categoryIdStr];
+        while (pending.length > 0) {
+          for (const childId of childrenByParent.get(pending.pop()!) ?? []) {
+            if (!categoryIds.has(childId)) {
+              categoryIds.add(childId);
+              pending.push(childId);
+            }
+          }
+        }
+        filteredProducts = products.filter(p => categoryIds.has(p.categoryId));
       }
 
       // Pagination
@@ -535,9 +554,16 @@ export function createProductRoutes({ authService, productService, personRepo, v
         newImageUrls.push(url);
       }
 
-      // Add images to product (maintain order: main first, then gallery)
-      const allImages = [...newImageUrls, ...product.images];
-      await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
+       // Add images to product (maintain order: main first, then gallery)
+       const allImages = [...newImageUrls, ...product.images];
+       try {
+         await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
+       } catch (updateErr) {
+         for (const uploaded of uploadedImages) {
+           try { await storageAdapter.delete(uploaded.key); } catch { /* ignore */ }
+         }
+         throw updateErr;
+       }
 
       // Return array for multiple, single object for backward compatibility with single upload
       if (files && files.length > 0) {
@@ -658,7 +684,13 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
         return res.status(400).json({ error: 'INVALID_KEY', message: 'Invalid image key' });
       }
 
-      const filePath = path.join(config.storageRoot, safeKey);
+       const filePath = path.join(config.storageRoot, safeKey);
+
+       // Remote (S3) adapter: redirect to a presigned URL instead of streaming local file
+       if (storageAdapter.isRemote && typeof storageAdapter.getSignedUrl === 'function') {
+         const signed = await storageAdapter.getSignedUrl(safeKey);
+         return res.redirect(302, signed);
+       }
       
       // Check if file exists and get stats
       let stats: fs.Stats;

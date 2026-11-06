@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { payoutApi, Payout, PayoutStatus, CreatePayoutInput } from '@/shared/api/payout';
+import { useAuthStore } from '@/app/providers/authStore';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -45,6 +46,8 @@ function getStatusVariant(status: PayoutStatus): 'default' | 'success' | 'warnin
 
 export function PayoutPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore(state => state.user);
+  const payoutsQueryKey = ['payouts', user?.id ?? 'anonymous'] as const;
 
   const [showForm, setShowForm] = useState(true);
   const [amount, setAmount] = useState('');
@@ -58,7 +61,7 @@ export function PayoutPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['payouts'],
+    queryKey: payoutsQueryKey,
     queryFn: () => payoutApi.list(),
   });
 
@@ -72,7 +75,7 @@ export function PayoutPage() {
       setBankAccount('');
       setReference('');
       setShowForm(false);
-      queryClient.invalidateQueries({ queryKey: ['payouts'] });
+      queryClient.invalidateQueries({ queryKey: payoutsQueryKey });
     },
     onError: (err) => {
       setFormError(err instanceof Error ? err.message : 'Failed to request payout');
@@ -82,7 +85,7 @@ export function PayoutPage() {
   const cancelMutation = useMutation({
     mutationFn: (id: string) => payoutApi.cancel(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payouts'] });
+      queryClient.invalidateQueries({ queryKey: payoutsQueryKey });
     },
   });
 

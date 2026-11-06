@@ -3,3 +3,8 @@ export * from './validation.js';
 export * from './storage.js';
 export * from './correction-engine.js';
 export * from './agent-orchestrator.js';
+export * from './provider-failover.js';
+export * from './task-state.js';
+export * from './continuity-checkpoint.js';
+export * from './resilient-orchestration.js';
+export * from './idle-recovery.js';

@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { queryClient } from './queryClient';
 import { useAuthStore } from './authStore';
 import { authApi } from '@/shared/api/auth';
 import { cartApi } from '@/shared/api/cart';
 import { personApi } from '@/shared/api/person';
+
+vi.mock('./queryClient', () => ({
+  queryClient: {
+    clear: vi.fn(),
+  },
+}));
 
 vi.mock('@/shared/api/auth', () => ({
   authApi: {
@@ -32,6 +39,16 @@ const mockMergeGuestCart = vi.mocked(cartApi.mergeGuestCart);
 const mockClearGuestCartId = vi.mocked(cartApi.clearGuestCartId);
 const mockGetMe = vi.mocked(personApi.getMe);
 
+const ACCESS_TOKEN_FIXTURE = 'access-token';
+const REFRESH_TOKEN_FIXTURE = 'refresh-token';
+const STORED_ACCESS_TOKEN_FIXTURE = 'stored-access-token';
+const STORED_REFRESH_TOKEN_FIXTURE = 'stored-refresh-token';
+const OLD_ACCESS_TOKEN_FIXTURE = 'old-access-token';
+const OLD_REFRESH_TOKEN_FIXTURE = 'old-refresh-token';
+const NEW_ACCESS_TOKEN_FIXTURE = 'new-access-token';
+const NEW_REFRESH_TOKEN_FIXTURE = 'new-refresh-token';
+const EXPIRED_REFRESH_TOKEN_FIXTURE = 'expired-refresh-token';
+const PASSWORD_FIXTURE = 'password123';
 describe('useAuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,12 +81,12 @@ describe('useAuthStore', () => {
     it('should set loading state during login', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockLogin.mockResolvedValueOnce(mockResponse);
 
-      const promise = useAuthStore.getState().login('john@example.com', 'password123');
+      const promise = useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       // Check loading state during async operation
       expect(useAuthStore.getState().isLoading).toBe(true);
@@ -82,17 +99,17 @@ describe('useAuthStore', () => {
     it('should store user and tokens on successful login', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockLogin.mockResolvedValueOnce(mockResponse);
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       const state = useAuthStore.getState();
       expect(state.user).toEqual(mockResponse.person);
-      expect(state.accessToken).toBe('access-token');
-      expect(state.refreshToken).toBe('refresh-token');
+      expect(state.accessToken).toBe(ACCESS_TOKEN_FIXTURE);
+      expect(state.refreshToken).toBe(REFRESH_TOKEN_FIXTURE);
       expect(state.isAuthenticated).toBe(true);
       expect(state.error).toBeNull();
     });
@@ -100,17 +117,17 @@ describe('useAuthStore', () => {
     it('should persist tokens to localStorage', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockLogin.mockResolvedValueOnce(mockResponse);
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       const persistedState = JSON.parse(localStorage.getItem('auth-storage') ?? 'null')?.state;
       expect(persistedState).toMatchObject({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
+        accessToken: ACCESS_TOKEN_FIXTURE,
+        refreshToken: REFRESH_TOKEN_FIXTURE,
         user: mockResponse.person
       });
     });
@@ -135,7 +152,7 @@ describe('useAuthStore', () => {
     it('should register user and store tokens', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockRegister.mockResolvedValueOnce(mockResponse);
@@ -145,14 +162,14 @@ describe('useAuthStore', () => {
         taxIdType: 'CNPJ',
         taxIdValue: '12345678000199',
         email: 'jane@example.com',
-        password: 'password123',
+        password: PASSWORD_FIXTURE,
         role: 'VENDOR'
       });
 
       const state = useAuthStore.getState();
       expect(state.user).toEqual(mockResponse.person);
-      expect(state.accessToken).toBe('access-token');
-      expect(state.refreshToken).toBe('refresh-token');
+      expect(state.accessToken).toBe(ACCESS_TOKEN_FIXTURE);
+      expect(state.refreshToken).toBe(REFRESH_TOKEN_FIXTURE);
       expect(state.isAuthenticated).toBe(true);
     });
 
@@ -165,7 +182,7 @@ describe('useAuthStore', () => {
           taxIdType: 'CPF',
           taxIdValue: '12345678901',
           email: 'jane@example.com',
-          password: 'password123',
+          password: PASSWORD_FIXTURE,
           role: 'CONSUMER'
         });
       } catch (e) {
@@ -183,12 +200,12 @@ describe('useAuthStore', () => {
       // First login
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockLogin.mockResolvedValueOnce(mockResponse);
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       // Then logout
       useAuthStore.getState().logout();
@@ -202,42 +219,55 @@ describe('useAuthStore', () => {
       expect(localStorage.getItem('refreshToken')).toBeNull();
       expect(localStorage.getItem('user')).toBeNull();
     });
+
+    it('AC3: clears React Query cached sensitive data on logout (prevents cross-account leakage)', () => {
+      useAuthStore.setState({
+        user: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] },
+        accessToken: ACCESS_TOKEN_FIXTURE,
+        refreshToken: REFRESH_TOKEN_FIXTURE,
+        isAuthenticated: true,
+      });
+
+      useAuthStore.getState().logout();
+
+      expect(queryClient.clear).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('refreshAccessToken', () => {
     it('should refresh access token using refresh token', async () => {
       // Set initial state with refresh token
       useAuthStore.setState({
-        refreshToken: 'old-refresh-token',
-        accessToken: 'old-access-token'
+        refreshToken: OLD_REFRESH_TOKEN_FIXTURE,
+        accessToken: OLD_ACCESS_TOKEN_FIXTURE
       });
 
       const mockResponse = {
-        tokens: { accessToken: 'new-access-token', refreshToken: 'new-refresh-token' }
+        tokens: { accessToken: NEW_ACCESS_TOKEN_FIXTURE, refreshToken: NEW_REFRESH_TOKEN_FIXTURE }
       };
       mockRefreshToken.mockResolvedValueOnce(mockResponse);
 
       await useAuthStore.getState().refreshAccessToken();
 
       const state = useAuthStore.getState();
-      expect(state.accessToken).toBe('new-access-token');
-      expect(state.refreshToken).toBe('new-refresh-token');
+      expect(state.accessToken).toBe(NEW_ACCESS_TOKEN_FIXTURE);
+      expect(state.refreshToken).toBe(NEW_REFRESH_TOKEN_FIXTURE);
       const persistedState = JSON.parse(localStorage.getItem('auth-storage') ?? 'null')?.state;
       expect(persistedState).toMatchObject({
-        accessToken: 'new-access-token',
-        refreshToken: 'new-refresh-token'
+        accessToken: NEW_ACCESS_TOKEN_FIXTURE,
+        refreshToken: NEW_REFRESH_TOKEN_FIXTURE
       });
     });
 
     it('refreshes credentials and adopts current backend roles', async () => {
       useAuthStore.setState({
         user: { id: 'person-1', name: 'Consumer', email: 'consumer@example.com', roles: ['CONSUMER'] },
-        accessToken: 'old-access-token',
-        refreshToken: 'old-refresh-token',
+        accessToken: OLD_ACCESS_TOKEN_FIXTURE,
+        refreshToken: OLD_REFRESH_TOKEN_FIXTURE,
         isAuthenticated: true,
       });
       mockRefreshToken.mockResolvedValueOnce({
-        tokens: { accessToken: 'new-access-token', refreshToken: 'new-refresh-token' },
+        tokens: { accessToken: NEW_ACCESS_TOKEN_FIXTURE, refreshToken: NEW_REFRESH_TOKEN_FIXTURE },
       });
       mockGetMe.mockResolvedValueOnce({
         person: {
@@ -258,14 +288,14 @@ describe('useAuthStore', () => {
 
       expect(mockGetMe).toHaveBeenCalledOnce();
       expect(useAuthStore.getState().user?.roles).toEqual(['CONSUMER', 'VENDOR']);
-      expect(useAuthStore.getState().accessToken).toBe('new-access-token');
+      expect(useAuthStore.getState().accessToken).toBe(NEW_ACCESS_TOKEN_FIXTURE);
       expect(localStorage.getItem('user')).toContain('"VENDOR"');
     });
 
     it('should logout on refresh token failure', async () => {
       useAuthStore.setState({
-        refreshToken: 'expired-refresh-token',
-        accessToken: 'old-access-token',
+        refreshToken: EXPIRED_REFRESH_TOKEN_FIXTURE,
+        accessToken: OLD_ACCESS_TOKEN_FIXTURE,
         isAuthenticated: true,
         user: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] }
       });
@@ -289,15 +319,15 @@ describe('useAuthStore', () => {
   describe('initializeAuth', () => {
     it('should restore auth from localStorage on init', async () => {
       const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
-      localStorage.setItem('accessToken', 'stored-access-token');
-      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('accessToken', STORED_ACCESS_TOKEN_FIXTURE);
+      localStorage.setItem('refreshToken', STORED_REFRESH_TOKEN_FIXTURE);
       localStorage.setItem('user', JSON.stringify(mockUser));
 
       await useAuthStore.getState().initializeAuth();
 
       const state = useAuthStore.getState();
-      expect(state.accessToken).toBe('stored-access-token');
-      expect(state.refreshToken).toBe('stored-refresh-token');
+      expect(state.accessToken).toBe(STORED_ACCESS_TOKEN_FIXTURE);
+      expect(state.refreshToken).toBe(STORED_REFRESH_TOKEN_FIXTURE);
       expect(state.user).toEqual(mockUser);
       expect(state.isAuthenticated).toBe(true);
     });
@@ -339,7 +369,7 @@ describe('useAuthStore', () => {
     it('should merge guest cart on successful login', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       // Set guest cart ID in localStorage before login
@@ -348,7 +378,7 @@ describe('useAuthStore', () => {
       mockLogin.mockResolvedValueOnce(mockResponse);
       mockMergeGuestCart.mockResolvedValueOnce({ cart: { id: '1', items: [], version: 1, updatedAt: new Date().toISOString() } });
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       expect(mockMergeGuestCart).toHaveBeenCalledWith({ guestCartId: 'guest:12345678-1234-4123-8123-123456789abc' });
       expect(mockClearGuestCartId).toHaveBeenCalled();
@@ -357,7 +387,7 @@ describe('useAuthStore', () => {
     it('should not fail login if mergeGuestCart fails', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       // Set guest cart ID in localStorage before login
@@ -366,7 +396,7 @@ describe('useAuthStore', () => {
       mockLogin.mockResolvedValueOnce(mockResponse);
       mockMergeGuestCart.mockRejectedValueOnce(new Error('MERGE_FAILED'));
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(true);
@@ -377,13 +407,13 @@ describe('useAuthStore', () => {
     it('should not call mergeGuestCart when no guest cart ID in localStorage', async () => {
       const mockResponse = {
         person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-        tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
+        tokens: { accessToken: ACCESS_TOKEN_FIXTURE, refreshToken: REFRESH_TOKEN_FIXTURE }
       };
 
       mockLogin.mockResolvedValueOnce(mockResponse);
       // No guestCartId in localStorage
 
-      await useAuthStore.getState().login('john@example.com', 'password123');
+      await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
 
       expect(mockMergeGuestCart).not.toHaveBeenCalled();
       expect(mockClearGuestCartId).not.toHaveBeenCalled();
@@ -391,8 +421,8 @@ describe('useAuthStore', () => {
 
     it('should merge guest cart on initializeAuth when authenticated', async () => {
       const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
-      localStorage.setItem('accessToken', 'stored-access-token');
-      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('accessToken', STORED_ACCESS_TOKEN_FIXTURE);
+      localStorage.setItem('refreshToken', STORED_REFRESH_TOKEN_FIXTURE);
       localStorage.setItem('user', JSON.stringify(mockUser));
       localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
 
@@ -406,8 +436,8 @@ describe('useAuthStore', () => {
 
     it('should not call mergeGuestCart on initializeAuth when no guest cart ID', async () => {
       const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
-      localStorage.setItem('accessToken', 'stored-access-token');
-      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('accessToken', STORED_ACCESS_TOKEN_FIXTURE);
+      localStorage.setItem('refreshToken', STORED_REFRESH_TOKEN_FIXTURE);
       localStorage.setItem('user', JSON.stringify(mockUser));
       // No guestCartId in localStorage
 
@@ -419,8 +449,8 @@ describe('useAuthStore', () => {
 
     it('should not fail initializeAuth if mergeGuestCart fails', async () => {
       const mockUser = { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] };
-      localStorage.setItem('accessToken', 'stored-access-token');
-      localStorage.setItem('refreshToken', 'stored-refresh-token');
+      localStorage.setItem('accessToken', STORED_ACCESS_TOKEN_FIXTURE);
+      localStorage.setItem('refreshToken', STORED_REFRESH_TOKEN_FIXTURE);
       localStorage.setItem('user', JSON.stringify(mockUser));
       localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
 

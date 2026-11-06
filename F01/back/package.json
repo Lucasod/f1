@@ -18,6 +18,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1163.0",
+    "@aws-sdk/s3-request-presigner": "^3.1163.0",
     "@types/pdfkit": "^0.17.7",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",

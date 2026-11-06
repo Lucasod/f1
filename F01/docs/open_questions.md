@@ -208,19 +208,6 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 
 ---
 
-## Q-016: Coupon Inclusion/Exclusion & Stacking Rules
-**What:** Inclusion/exclusion lists targeting products/categories; category descendant behavior; exclusion precedence; mixed-cart discount calculation; coupon stacking and priority  
-**Why:** Stage 7 (coupons), Order_Vendor_Group has single Coupon ref  
-**Dependencies:** CD-026, CD-027, CD-050  
-**Alternatives:**  
-- One coupon per vendor group (current diagram)  
-- Multiple with stacking rules (category first, then cart total)  
-- Platform-wide + vendor-specific, non-stacking  
-**Resolution:** Coupon application algorithm with precedence rules approved  
-**State:** **PARTIALLY_RESOLVED** — Inclusion/exclusion rules confirmed (CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions). **Coupon stacking and priority rules resolved (CD-050/MP-07E): no stacking (max one coupon per vendor per purchase); no automatic priority; consumer selects eligible coupon per vendor.** Mixed-cart discount calculation remains PENDING.
-
----
-
 ## Q-017: Review Moderation & Display
 **What:** Pre-moderation vs post-moderation? Vendor response? Verified purchase badge? Rating aggregation method? Review eligibility state? Review images?  
 **Why:** Stage 7 (reviews), Product rating display, trust signals  

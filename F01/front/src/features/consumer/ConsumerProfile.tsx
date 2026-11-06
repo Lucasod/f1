@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { personApi, Person, ContactInfo, Address, PersonApiException } from '@/shared/api/person';
+import { useAuthStore } from '@/app/providers/authStore';
 import { authApi } from '@/shared/api/auth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -89,6 +90,8 @@ const BRAZILIAN_STATES = [
 export function ConsumerProfile() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const user = useAuthStore(state => state.user);
+  const personQueryKey = ['person', 'me', user?.id ?? 'anonymous'] as const;
 
   // Fetch person profile
   const {
@@ -97,7 +100,7 @@ export function ConsumerProfile() {
     error,
     refetch,
   } = useQuery<{ person: Person }, Error>({
-    queryKey: ['person', 'me'],
+    queryKey: personQueryKey,
     queryFn: () => personApi.getMe(),
     staleTime: 5 * 60 * 1000,
   });
@@ -108,28 +111,28 @@ export function ConsumerProfile() {
   const updateNameMutation = useMutation({
     mutationFn: (name: string) => personApi.updateName(name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 
   const updateContactsMutation = useMutation({
     mutationFn: (contacts: ContactInfo[]) => personApi.updateContacts(contacts),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 
   const updateAddressesMutation = useMutation({
     mutationFn: (addresses: Address[]) => personApi.updateAddresses(addresses),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 
   const addAddressMutation = useMutation({
     mutationFn: (address: Omit<Address, 'id'>) => personApi.addAddress(address),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
       setShowAddAddressForm(false);
       setNewAddressForm({
         street: '',
@@ -145,14 +148,14 @@ export function ConsumerProfile() {
   const removeAddressMutation = useMutation({
     mutationFn: (addressId: string) => personApi.removeAddress(addressId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 
   const addContactMutation = useMutation({
     mutationFn: (contact: Omit<ContactInfo, 'id'>) => personApi.addContact(contact),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
       setShowAddContactForm(false);
       setNewContactForm({ type: 'email', value: '', isPrimary: false });
     },
@@ -161,7 +164,7 @@ export function ConsumerProfile() {
   const removeContactMutation = useMutation({
     mutationFn: (contactId: string) => personApi.removeContact(contactId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['person', 'me'] });
+      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 

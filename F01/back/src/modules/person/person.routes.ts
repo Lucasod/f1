@@ -84,12 +84,18 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
         return res.status(400).json({ error: PersonError.EMAIL_REQUIRED, message: 'At least one email contact is required' });
       }
 
-      // Validate email formats
-      for (const contact of contacts) {
-        if (contact.type === 'email' && !validateEmail(contact.value)) {
-          return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
-        }
-      }
+       // Validate email formats
+       for (const contact of contacts) {
+         if (contact.type === 'email' && !validateEmail(contact.value)) {
+           return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
+         }
+         if (contact.type === 'phone' && !validatePhone(contact.value)) {
+           return res.status(400).json({ error: 'INVALID_PHONE_FORMAT', message: 'Invalid phone format' });
+         }
+         if (contact.type === 'whatsapp' && !validateWhatsapp(contact.value)) {
+           return res.status(400).json({ error: 'INVALID_WHATSAPP_FORMAT', message: 'Invalid whatsapp format' });
+         }
+       }
 
       const personId = req.user.sub;
       const person = await personService.getPersonById(personId);
@@ -129,9 +135,17 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
         return res.status(400).json({ error: 'INVALID_CONTACT_TYPE', message: 'Invalid contact type' });
       }
 
-      if (type === 'email' && !validateEmail(value)) {
-        return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
-      }
+       if (type === 'email' && !validateEmail(value)) {
+         return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
+       }
+
+       if (type === 'phone' && !validatePhone(value)) {
+         return res.status(400).json({ error: 'INVALID_PHONE_FORMAT', message: 'Invalid phone format' });
+       }
+
+       if (type === 'whatsapp' && !validateWhatsapp(value)) {
+         return res.status(400).json({ error: 'INVALID_WHATSAPP_FORMAT', message: 'Invalid whatsapp format' });
+       }
 
       const personId = req.user.sub;
       const person = await personService.getPersonById(personId);
@@ -209,10 +223,18 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
       // Don't allow changing the ID
       const { id, ...safeUpdates } = updates;
 
-      // Validate email format if updating email
-      if (safeUpdates.type === 'email' && safeUpdates.value && !validateEmail(safeUpdates.value)) {
-        return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
-      }
+       // Validate email format if updating email
+       if (safeUpdates.type === 'email' && safeUpdates.value && !validateEmail(safeUpdates.value)) {
+         return res.status(400).json({ error: PersonError.INVALID_EMAIL_FORMAT, message: 'Invalid email format' });
+       }
+
+       if (safeUpdates.type === 'phone' && safeUpdates.value && !validatePhone(safeUpdates.value)) {
+         return res.status(400).json({ error: 'INVALID_PHONE_FORMAT', message: 'Invalid phone format' });
+       }
+
+       if (safeUpdates.type === 'whatsapp' && safeUpdates.value && !validateWhatsapp(safeUpdates.value)) {
+         return res.status(400).json({ error: 'INVALID_WHATSAPP_FORMAT', message: 'Invalid whatsapp format' });
+       }
 
       const personId = req.user.sub;
       const person = await personService.getPersonById(personId);
@@ -386,6 +408,16 @@ export function createPersonRoutes({ authService, personService, personRepo }: P
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validatePhone(value: string): boolean {
+  if (typeof value !== 'string') return false;
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 15 && /^[\d\s+()\-]+$/.test(value);
+}
+
+function validateWhatsapp(value: string): boolean {
+  return validatePhone(value);
 }
 
 function maskTaxId(taxIdValue: string): string {

@@ -84,6 +84,10 @@ export const config = {
   commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
   frontendUrl: process.env.FRONTEND_URL?.trim() || 'http://localhost:5173',
   stripePaymentMethodConfiguration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || '',
+  awsRegion: process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim() || '',
+  awsS3Bucket: process.env.AWS_S3_BUCKET?.trim() || '',
+  awsS3PublicUrlBase: process.env.AWS_S3_PUBLIC_URL_BASE?.trim() || '/api/v1/uploads',
+  awsS3StorageClass: process.env.AWS_S3_STORAGE_CLASS?.trim() || 'STANDARD',
   get storageRoot() { return getStorageRoot(); },
   get storagePublicUrlBase() { return getPublicUrlBase(); },
 };

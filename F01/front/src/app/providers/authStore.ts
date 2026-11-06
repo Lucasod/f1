@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { queryClient } from './queryClient';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authApi } from '@/shared/api/auth';
 import { cartApi } from '@/shared/api/cart';
@@ -44,8 +45,8 @@ interface AuthState {
 }
 
 const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'accessToken',
-  REFRESH_TOKEN: 'refreshToken',
+  ACCESS_TOKEN: `accessToken`,
+  REFRESH_TOKEN: `refreshToken`,
   USER: 'user'
 };
 
@@ -136,7 +137,10 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
         localStorage.removeItem(STORAGE_KEYS.USER);
-        
+
+        // Clear sensitive React Query cached data to prevent cross-account leakage
+        queryClient.clear();
+
         set({
           user: null,
           accessToken: null,

@@ -38,4 +38,4 @@ The development seed CLI writes through MongoDB repositories. Application startu
 - Elasticsearch indexing/search adapter and mapping-dependent search APIs
 - Coupon, invoice, and wallet modules
 - Stripe SDK/Connect adapter, webhook processing, provider transfers and refunds
-- S3 adapter, presigned/multipart uploads, and CloudFront delivery
+- S3 adapter implemented (wiring + presigned URLs); CloudFront CDN delivery pending

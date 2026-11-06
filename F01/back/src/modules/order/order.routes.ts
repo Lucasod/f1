@@ -59,7 +59,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       });
 
       return res.json({
-        orders: result.orders.map(orderToResponse),
+        orders: result.orders.map(order => orderToResponse(order, vendorId)),
         total: result.total,
         page: result.page,
         limit: result.limit
@@ -83,7 +83,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       return res.json({
         summary: {
           ...summary,
-          recentOrders: summary.recentOrders.map(orderToResponse),
+          recentOrders: summary.recentOrders.map(order => orderToResponse(order)),
         },
       });
     } catch (error) {
@@ -346,7 +346,13 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         all === true
       );
 
-      return res.json({ order: orderToResponse(order) });
+      const response = orderToResponse(order, role === 'vendor' ? vendorId : undefined);
+      if (role === 'vendor') {
+        const { status: _status, financialStatus: _financialStatus, ...vendorResponse } = response;
+        vendorResponse.totalAmount = vendorResponse.vendorGroups.reduce((sum, group) => sum + group.subtotal, 0);
+        return res.json({ order: vendorResponse });
+      }
+      return res.json({ order: response });
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {

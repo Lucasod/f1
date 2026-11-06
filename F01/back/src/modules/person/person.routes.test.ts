@@ -173,4 +173,20 @@ describe('Person profile routes', () => {
     const person = await personRepo.findByEmail('consumer@example.com');
     expect(person?.contactInfos.map(contact => contact.value)).toEqual(['consumer@example.com']);
   });
+
+  it('rejects invalid phone and whatsapp contact formats', async () => {
+    const phoneResponse = await request(app)
+      .post('/api/v1/person/me/contacts')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ type: 'phone', value: 'not-a-phone' })
+      .expect(400);
+    expect(phoneResponse.body.error).toBe('INVALID_PHONE_FORMAT');
+
+    const whatsappResponse = await request(app)
+      .post('/api/v1/person/me/contacts')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ type: 'whatsapp', value: '123' })
+      .expect(400);
+    expect(whatsappResponse.body.error).toBe('INVALID_WHATSAPP_FORMAT');
+  });
 });

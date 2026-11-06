@@ -43,6 +43,7 @@ import { InMemoryPayoutRepository, PayoutRepository } from './modules/payout/pay
 import { InMemoryInvoiceRepository, InvoiceRepository } from './modules/invoice/invoice.domain';
 import { ReviewService } from './modules/review/review.service';
 import { LocalStorageAdapter } from './shared/storage/local.adapter';
+import { createStorageAdapter } from './shared/storage/storage.factory';
 import { runDevelopmentSeed as seedDevelopmentData } from './scripts/seed.js';
 import { SeedRepositories } from './shared/seed.types';
 
@@ -101,7 +102,7 @@ let financialService!: FinancialService;
 let transferService!: TransferService;
 
 // Initialize storage adapter
-const storageAdapter = new LocalStorageAdapter();
+const storageAdapter = createStorageAdapter();
 
 // Initialize cart repository (Redis)
 cartRepo = new RedisCartRepository();
@@ -173,8 +174,12 @@ async function runStartupCleanup() {
     }
     referencedUrls.push(...await reviewService.getReviewImageUrls());
 
-    const result = await storageAdapter.cleanupOrphanedFiles(referencedUrls);
-    console.log(`Startup cleanup: removed ${result.deletedCount} orphaned files`);
+    const result = await storageAdapter.cleanupOrphanedFiles?.(referencedUrls);
+    if (result) {
+      console.log(`Startup cleanup: removed ${result.deletedCount} orphaned files`);
+    } else {
+      console.log('Startup cleanup: adapter does not support cleanupOrphanedFiles');
+    }
   } catch (error) {
     console.error('Startup cleanup failed:', error);
   }

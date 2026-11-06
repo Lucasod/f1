@@ -28,9 +28,9 @@
 
 ## Phase 1: Conceptual Model Completion (P1)
 
-**Status after MP-07 (Stage A):** 65 conceptual decisions confirmed (CD-001..CD-065). 28 questions reclassified: 12 RESOLVED (Q-005, Q-006, Q-007, Q-008, Q-010, Q-013, Q-015, Q-019, Q-020, Q-021, Q-027, Q-028), 6 PARTIALLY_RESOLVED (Q-003, Q-004, Q-009, Q-011, Q-012, Q-016), 5 PENDING (Q-001, Q-002, Q-014, Q-017, Q-018), 3 TECHNICAL_FUTURE (Q-001, Q-022, Q-023, Q-024), 1 OUT_OF_SCOPE (Q-025). Q-029 is PARTIALLY_RESOLVED.
+**Historical status after MP-07 (Stage A):** 65 conceptual decisions confirmed (CD-001..CD-065). The question classifications at that time have since changed; consult `open_questions.md` and `decisions.md` for current state. In particular, Q-016 is decided in CD-050; implementation remains pending.
 
-**Remaining P1 work:** Technical implementation of resolved decisions (MongoDB schemas T-301, ES mappings T-302, Redis schemas T-303, S3 naming T-304). Business decisions complete. Q-018 Glacier/WORM/trigger pending human decision.
+**Remaining P1 work:** Implementation of the covered technical designs remains separate from their decision status (T-301..T-304). Q-018 concerns receipt retention and deferred automation, not product-image storage.
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
@@ -50,8 +50,8 @@
 | T-113 | **COVERED** Refund policy and financial adjustments | CD-048 confirmed: partial/full refunds by item/quantity; provider-mediated customer refunds; no internal customer wallet; negative vendor balance tracking; idempotency keys; commission recalculation; receipt preservation | T-007 | — | ✅ covered_by_decision |
 | T-114 | **COVERED** Cart conceptual model | CD-018, CD-019 confirmed: cart not conceptual entity; multi-vendor; Redis/session. Redis details = TECHNICAL_FUTURE (T-303) | T-007 | — | ✅ covered_by_decision |
 | T-115 | Resolve Q-015 Elasticsearch strategy | CD-049: ES confirmed as search engine; MongoDB source of truth; indexes rebuildable; Atlas Search prohibited. **Conceptual scope resolved (MP-07):** Single `products` index, `category_path` for descendant filtering, Portuguese stemmer analyzer, dual-write + periodic reindex sync. Mapping/analyzers/sync details = TECHNICAL_FUTURE (T-302, T-801, T-802). See `F01/docs/analysis/analysis_es_strategy.md`. | T-106b, T-108 | Conceptual scope approved; technical details deferred | ✅ covered_by_decision |
-| T-116 | **COVERED** Coupon targeting and stacking rules | CD-050 confirmed: Inclusion/exclusion rules (category descendants, exclusions override). Stacking prohibited (max 1 coupon/vendor/purchase); no priority; consumer selects coupon per vendor. Mixed-cart discount = PENDING (T-902) | T-007 | — | ✅ covered_by_decision |
-| T-117 | **COVERED** Resolve Q-017 Review moderation/display | CD-017 confirmed verified purchase. **All seven decisions resolved (MP-08):** moderation policy → post-moderation (CD-067), vendor response → not permitted (CD-068), verified purchase badge → not displayed (CD-069), rating scale → 1-5 stars (CD-070), aggregation → simple mean (CD-070), verified purchase state → DELIVERED (CD-072), review images → owned images permitted (CD-071). Mixed-cart discount = PENDING (T-902). See `F01/docs/analysis/analysis_review_moderation.md`. | T-107 | Moderation policy + display rules approved | ✅ covered_by_decision |
+| T-116 | **COVERED** Coupon targeting and stacking rules | CD-050 confirmed: Inclusion/exclusion rules (category descendants, exclusions override). Stacking prohibited (max 1 coupon/vendor/purchase); no priority; consumer selects coupon per vendor. Mixed-cart decision resolved in CD-050/Q-016; implementation remains in T-1102. | T-007 | — | ✅ covered_by_decision |
+| T-117 | **COVERED** Resolve Q-017 Review moderation/display | CD-017 confirmed verified purchase. **All seven decisions resolved (MP-08):** moderation policy → post-moderation (CD-067), vendor response → not permitted (CD-068), verified purchase badge → not displayed (CD-069), rating scale → 1-5 stars (CD-070), aggregation → simple mean (CD-070), verified purchase state → DELIVERED (CD-072), review images → owned images permitted (CD-071). See `F01/docs/analysis/analysis_review_moderation.md`. | T-107 | Moderation policy + display rules approved | ✅ covered_by_decision |
 | T-118 | **COVERED** Invoice scope | CD-035..CD-038 confirmed: commercial receipt (not NF-e), historical values, no rewrite on refund, minimal attributes. Generation/storage = TECHNICAL_FUTURE (T-304, T-1103) | T-007 | — | ✅ covered_by_decision |
 | T-119 | **COVERED** Vendor dashboard metrics | CD-051 confirmed: Vendor-scoped only (order count, gross sales pre-commission, pending/completed orders, best-selling products); cross-vendor access prohibited; gross sales labeled pre-commission | T-007 | — | ✅ covered_by_decision |
 | T-120 | **COVERED** Marketplace scope | Single marketplace confirmed (Q-020); multi-tenancy out of scope | T-007 | — | ✅ covered_by_decision |
@@ -84,7 +84,7 @@
 | T-301 | Design MongoDB collections | Map concepts → collections, embedding vs refs (CD-005: deferred from conceptual) | CD-005 | Collection schemas with indexes | ✅ covered_by_decision |
 | T-302 | Design Elasticsearch mappings | Index settings, analyzers, mappings | CD-049, T-301 | ES index definitions | ✅ covered_by_decision |
 | T-303 | Design Redis schemas | Cart, session, cache keys, TTLs (Q-014 TECHNICAL_FUTURE) | CD-018, Q-014 | Redis key patterns + data structures | ✅ covered_by_decision |
-| T-304 | Define S3 object naming | Product images, invoices, uploads (Q-018 TECHNICAL_FUTURE) | Q-018 | Naming convention + folder structure | ✅ covered_by_decision |
+| T-304 | Define S3 object naming | Product images, invoices, uploads; Q-018 concerns invoice retention and automation | CD-035 for invoices | Naming convention + folder structure | ✅ covered_by_decision |
 | T-305 | Data integrity rules | Unique constraints, referential integrity, validation | T-301 | Rules documented per collection | ✅ covered_by_decision |
 | T-306 | Migration/seed strategy | Initial data, versioning approach | T-301 | Migration plan documented | ✅ covered_by_decision |
 
@@ -140,9 +140,9 @@
 | T-701 | Backend: Vendor onboarding API | Registration, approval workflow (T-105) | T-105, T-602 | API + status machine works | ✅ completed |
 | T-702 | Backend: Product CRUD API | Create, read, update, delete, list (CD-013: Quantity; T-106b: variants) | T-106b, T-107, T-602 | API + validation works | ✅ completed |
 | T-703a | Backend: Image upload (local storage) | Multipart upload, validation (10MB, JPEG/PNG/WebP), StorageAdapter pattern, Docker volume f01_uploads | T-304, T-602 | Upload works, served locally | ✅ completed |
-| T-703b | Backend: Image upload to S3 | S3 adapter, presigned/multipart upload, validation, CloudFront CDN (T-304) | T-304, T-602, T-703a, AWS credentials | S3 upload and retrieval verified; CDN configured | 🔴 blocked: AWS account validated (us-east-2); S3 integration (wiring + presigned URLs + CloudFront CDN) still pending. |
+| T-703b | Backend: Image upload to S3 | S3 adapter, presigned/multipart upload, validation, CloudFront CDN (T-304) | T-304, T-602, T-703a, AWS credentials | S3 adapter wired via createStorageAdapter; presigned GET implemented; CloudFront CDN pending | 🟡 partial: S3 adapter wiring + presigned URLs implemented (local fallback remains); CloudFront CDN still pending. |
 
-> **T-703b boundary:** The local storage adapter, validation, and local upload/retrieval work are covered by T-703a. Q-018 Glacier, Object Lock/WORM, and invoice-trigger decisions do not govern product images and do not block this task. Do not claim S3 presigning, multipart upload, or CloudFront as implemented.
+> **T-703b boundary:** The local storage adapter, validation, and local upload/retrieval work are covered by T-703a. S3 adapter wiring and presigned GET retrieval are implemented (local fallback remains). Multipart upload and CloudFront CDN are still pending. Q-018 Glacier, Object Lock/WORM, and invoice-trigger decisions do not govern product images and do not block this task.
 
 > **Note on T-703a (completed):** All 5 limitations from the audit report (`F01/docs/analysis/analysis_s3_naming.md`) have been addressed:
 > 1. ✅ Docker volume persistence validated across container restarts
@@ -186,9 +186,9 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
-| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
-| T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | 🔴 blocked: Blocked by T-302 (ES mappings) = TECHNICAL_FUTURE |
+| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | pending: T-302 is covered by decision; mapping and sync implementation require task-level assessment and verification. |
+| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | pending: T-302 is covered by decision; technical details and implementation require task-level assessment and verification. |
+| T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | 🔴 blocked: depends on T-802; T-302's decision status is not itself a blocker. |
 
 ---
 
@@ -201,7 +201,7 @@
 > Addendum (2026-11-02): Independent review final: PASS (no blockers) after rigorous fixes; 33 service tests + 26 route tests; tsc clean.
 | T-903 | Backend: Order lifecycle API | Status transitions, vendor group management and ownership (T-109) | T-109, T-602 | State machine and consumer/vendor ownership enforced by route tests | ✅ completed: Lifecycle transition/ownership coverage added in order.lifecycle.test.ts (vendor own/other/admin/invalid transition, admin order status, non-admin 403, vendor scoping); npm test 34 files/764 tests passed |
 | T-904 | Frontend: Cart page | Quantity edit, remove, summary, guest persistence and login merge | T-502, T-901 | Cart UX uses real API for guests and authenticated consumers | ✅ completed |
-| T-905 | Frontend: Checkout flow | Address, shipping, and payment selection | T-502, T-902 | Authenticated checkout uses real profile/order APIs and provider-confirmed payment | ✅ completed: Checkout UI uses real preview/checkout APIs; duplicate submit guarded; preview-gated totals; coupons disabled pending Q-016; payment provider not integrated; tests 24 passed; build passed; independent review PASS (orch-mp23-2026-11-02) |
+| T-905 | Frontend: Checkout flow | Address, shipping, and payment selection | T-502, T-902 | Authenticated checkout uses real profile/order APIs and provider-confirmed payment | ✅ completed: Checkout UI uses real preview/checkout APIs; duplicate submit guarded; preview-gated totals; historical report said coupons disabled pending Q-016 and payment provider not integrated; tests 24 passed; build passed; independent review PASS (orch-mp23-2026-11-02). Q-016 is now decided in CD-050; implementation and current coupon state require verification. |
 > Addendum (2026-11-02): T-905 completed. Checkout UI wired to real preview/checkout APIs; duplicate submit guarded; preview-gated totals; coupons disabled pending Q-016; payment provider not integrated. Tests: 24 passed; build passed; full frontend suite 565 passed. Independent review PASS (orch-mp23-2026-11-02).
 | T-906 | Frontend: Order history, Consumer dashboard and tracking | Consumer and Vendor order views; Consumer dashboard uses actual order summary | T-502, T-903 | Consumer sees own history, status, recent orders and details; Vendor access and cached order data remain identity-scoped | ✅ completed: API ownership tests and frontend cache-isolation regression tests pass |
 | T-907 | Consumer profile and account | View/update permitted personal data, contacts, addresses, and change password using existing APIs | T-601, T-602 | Real authenticated profile flows; validation and ownership tests cover permitted updates and errors | ✅ completed: Consumer profile UI and authenticated profile/contact/address/password APIs are verified; tests cover validation, duplicate-email conflicts, authentication, and ownership isolation |
@@ -228,13 +228,13 @@
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
 | T-1101 | Backend: Review API | Create (verified purchase CD-017, eligibility DELIVERED CD-072), moderate, list and owned images | T-117, T-903 | Review eligibility, moderation, ownership and listing enforced | ✅ completed (internal): MongoDB-backed API, delivered-order eligibility, one-review-per-item, public listing, Admin moderation, owner-only local image upload/retrieval; image upload status gating fixed (PUBLISHED only); MongoReviewRepository durability verified (10 mongo tests pass); dead `images` input removed from CreateReviewInput. Note: local image storage is temporary (S3 blocked) and dev-only InMemory orders remain. |
-| T-1102 | Backend: Coupon API | CRUD, validation, and per-vendor application (T-116) | T-116, T-902 | Coupon rules enforced; mixed-cart calculation follows approved decision | ✅ completed: CRUD + eligibility per confirmed rules (CD-050); mixed-cart discount deferred to Q-016 per task spec, not implemented.>
+| T-1102 | Backend: Coupon API | CRUD, validation, and per-vendor application (T-116) | T-116, T-902 | Coupon rules enforced; mixed-cart calculation follows approved decision | 🔄 partially completed: CRUD + eligibility reported per CD-050; Q-016 decision resolved, mixed-cart calculation was previously reported unimplemented and requires current inspection, implementation as needed, tests and review. |
 > Addendum (2026-11-02): T-1102 completed with CRUD + eligibility validation (inclusion/exclusion lists, stacking=no, vendor-per-vendor, no priority, consumer selects coupon per vendor). Mixed-cart discount PENDING Q-016: not implemented as it requires business decision outside this scope. 11 domain tests + 14 service tests + 9 route tests pass.>
 | T-1103 | Backend: PDF invoice generation | On-demand commercial PDF receipt, S3 Standard-IA storage and Order link (CD-035..CD-038, T-304) | T-118, T-304 | On-demand invoice generated and retrievable; retention decisions are explicit | ✅ completed — PDFKit local generation, on-demand PDF, download, and markGenerated flow all implemented. All 43 invoice tests pass. |
-| T-1104 | Backend: Admin dashboard API | Admin-scoped aggregations and metrics | T-602 | Metrics follow an approved Admin dashboard scope | 🔴 blocked: Q-003 Admin metrics are not defined; T-119 covers Vendor metrics only |
+| T-1104 | Backend: Admin dashboard API | Admin-scoped aggregations and metrics | T-602 | Metrics follow an approved Admin dashboard scope | pending: research requirements and existing evidence for Admin metrics and Q-003 permissions; T-119 covers Vendor metrics only. Escalate only a genuinely unresolved decision. |
 | T-1105 | Frontend: Review UI | Write, read, rate, photos | T-502, T-1101 | Review UI uses actual review APIs and moderation status | ✅ completed: Frontend review UI uses actual review APIs; rating 1-5, comment, image upload; ReviewSection and CreateReviewForm tested; ReviewStatus lowercase aligned with backend/OpenAPI. |
-| T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon UI follows approved discount rules | ✅ completed — Coupon UI enabled with approved discount rules from CD-050/MP-07E: no stacking (max one coupon per vendor per purchase), no automatic priority, consumer selects eligible coupon per vendor, inclusion/exclusion rules. Mixed-cart discount calculation pending Q-016 noted as separate decision. |
-| T-1107 | Frontend: Admin dashboard | Admin workspace and operational views | T-502, T-1104 | Admin UI uses actual APIs and enforces Admin-only access | ✅ completed (independent scope): Recent orders + review moderation with loading/empty/error states, role separation, real backend data. Note: metrics/user listing blocked by Q-003. |
+| T-1106 | Frontend: Coupon UI | Apply at checkout, vendor create | T-502, T-1102 | Coupon UI follows approved discount rules | 🔄 partially completed — existing coupon UI and eligibility rules are reported complete; mixed-cart calculation is decided in CD-050/Q-016 but implementation and end-to-end behavior remain unverified. |
+| T-1107 | Frontend: Admin dashboard | Admin workspace and operational views | T-502, T-1104 | Admin UI uses actual APIs and enforces Admin-only access | ✅ completed (independent scope): Recent orders + review moderation with loading/empty/error states, role separation, real backend data. Metrics and user-listing scope and dependencies require separate assessment. |
 | T-1108 | Backend: Order Comment API | Consumer can add comment to order when status is `delivered`. Distinct from product review. | T-903, T-117 | Comment added to delivered order; ownership enforced (consumer only own orders); one comment per order (immutable after submission) | ✅ completed: Backend Order Comment API implemented, tests pass. |
 | T-1109 | Frontend: Order Comment UI | Consumer sees comment input in Order Details when order is `delivered`. | T-1108, T-906 | Comment form visible only for delivered orders; submission uses real API; loading/error states | ✅ completed: Frontend Order Comment UI implemented, tests pass. |
 | T-1110 | Frontend: Product Review Submission via Orders | Remove direct review submission from product page. Reviews submitted via eligible orders after `delivered`. Maintain distinction between order comment and product review. | T-1101, T-1105, T-903, T-906 | Review form removed from product page; review submission available in order flow for delivered items; existing review APIs reused | ✅ completed: Product Review via Orders implemented (backend + frontend), tests pass. |
@@ -264,13 +264,13 @@
 ```
 P0–P3 prerequisites → P4 implementation (authorized through phase 4)
                          ├── P4b: vendor/product/images (implemented; S3 adapter awaits AWS configuration)
-                         ├── P4c: Elasticsearch (mapping-dependent work awaits T-302)
+                          ├── P4c: Elasticsearch (T-302 covered by decision; implementation details require assessment)
                          ├── P4d: cart → checkout → orders (cart API/UI implemented; checkout/payment boundary remains)
                          ├── P4e: payments (internal lifecycle can proceed; Stripe/Connect integration remains)
                          └── P4f: independent work may proceed by dependency:
                                   reviews and the Admin recent-order view can proceed after their own prerequisites;
-                                  Admin metrics remain blocked by Q-003;
-                                  coupon application depends on checkout and Q-016;
+                                  Admin metrics and Q-003 permissions require task-specific research;
+                                  coupon application depends on checkout and implementing the approved CD-050/Q-016 mixed-cart rule;
                                   invoice retention/automation decisions remain Q-018
 P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 ```
@@ -279,7 +279,9 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 
 ### Corrected classifications and next actions
 
-- **T-703b:** Only S3 image integration is blocked by AWS credentials/configuration. Q-018 is invoice-specific. T-703a local storage remains complete.
+**2026-11-06 — backlog-codex-reconciliation:** Current classifications above supersede conflicting historical status statements, without asserting implementation or provider validation. Sources: CD-050 and CD-075 in [decisions](decisions.md), Q-003/Q-011/Q-018 in [open questions](open_questions.md), [Elasticsearch analysis](analysis/analysis_es_strategy.md), and [Stripe validation analysis](analysis/analysis_stripe_validation.md). Independent documentary review is pending.
+
+- **T-703b:** AWS account validated; S3 adapter wired with presigned GET retrieval and local fallback; CloudFront CDN and multipart upload remain pending. Q-018 is invoice-specific. T-703a local storage remains complete.
 - **T-901 / T-904:** Completed for Redis-backed guest/authenticated cart behavior, stock validation, persistence, isolation, merge, and frontend API use. The configured 30-day TTL remains a proposal, not an approved policy.
 - **T-902 / T-903 / T-905:** Continue independently where possible. Do not mark checkout/payment complete while atomic stock/order handling and real provider confirmation remain unverified.
 - **T-906:** Consumer dashboard, order history and detail surfaces use authenticated order APIs; API tests verify Consumer ownership isolation.
@@ -287,18 +289,18 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 - **T-608:** Development seed CLI uses MongoDB; startup reconciles the demo Admin and Consumer even when products already exist. Verified with the backend test suite and an isolated local MongoDB run.
 - **T-1001..T-1006:** Keep provider-dependent Stripe/Connect work distinct from internal payment lifecycle and commission logic. Do not report real Stripe integration from internal tests.
 - **T-1101:** Eligible independent P4 work after its listed prerequisites; Q-017 is resolved.
-- **T-1104:** Admin metrics remain blocked by the undefined scope in Q-003; Q-018 is unrelated.
-- **T-1102:** Coupon CRUD and eligibility can proceed, but mixed-cart discount behavior remains pending Q-016.
+- **T-1104:** Research the Admin metrics scope and Q-003 permission requirements against existing evidence; T-119 covers Vendor metrics only and Q-018 is unrelated. Do not treat Q-003 as a global blocker.
+- **T-1102:** Coupon CRUD and eligibility are reported complete. Q-016 is resolved in CD-050; mixed-cart discount calculation remains implementation and verification work, not a pending business decision.
 - **T-1103:** On-demand invoice generation is specified; real S3 storage and pending retention/automation decisions remain separate boundaries. MP-31 resolved invoice domain status/PDF URL bugs (markGenerated/regeneratePdf PENDING→GENERATED) and 1 invoice routes test failure.
 - **T-1108/T-1109:** Completed in MP-AFIRDD-CYCLE-EXEC-02 — Backend Order Comment API and Frontend Order Comment UI implemented and tests pass. One comment per order, immutable after submission; moderation deferred to future decision.
 - **T-1110:** Completed in MP-AFIRDD-CYCLE-EXEC-02 — Product Review Submission via Orders implemented (backend + frontend), tests pass. Reviews submitted via eligible delivered orders; eligibility: delivered-order review submission only.
 - **Item-Level Delivery and Delivery Disputes:** Deferred — complex new features, not implemented in this cycle.
 - **PDFKit implementation:** Installed and used for on-demand PDF generation via StorageAdapter (local).
-- **P5:** All P5 tasks remain blocked by `MAX_AUTHORIZED_PHASE = 4`; no phase authorization was changed.
+- **P5:** All P5 tasks remain blocked by `MAX_AUTHORIZED_PHASE = 4`; no phase authorization was changed. Safe task-focused tests supporting authorized P4 work are distinct from the P5 test-suite and deployment tasks.
 - **MP-31 Verification (2026-11-05):** 
   - Backend: 33 payment service test failures fixed (payment.service.ts), 1 invoice domain test fixed (invoice.domain.ts status/PDF URL), 1 invoice routes test fixed (invoice.routes.pdfUrl via generateInvoiceKey). Total: 990/996 backend passing (3 pre-existing SKIPped, 3 skipped).
   - Frontend: 8 of 15 original TestingLibraryElementError failures resolved by updating text query patterns to match actual rendered DOM. Total: 577/584 frontend passing (7 failed — 3 files with Portuguese text query mismatches).
-  - Stripe Connect Transfer Lifecycle: NOT implemented — gap remains requiring external Stripe API credentials, connected account setup, and SDK integration for `stripe.transfers.create()`. Core payment functionality (Checkout Sessions, webhooks, payment state management) is implemented and tested.
+  - Stripe Connect Transfer Lifecycle: historical report says not implemented. Claims about Checkout Sessions and webhooks here are not evidence of an end-to-end provider integration; Q-011 and `analysis/analysis_stripe_validation.md` retain test-mode execution as pending. Reconcile implementation claims through a separate task-specific inspection; no provider validation is claimed.
   - Phase authorization: `MAX_AUTHORIZED_PHASE = 4` preserved unchanged. No phase advancement.
 
 The timeline assessment and MP sequence in older execution records are historical snapshots. Use this task list, `open_questions.md`, and the latest run record for current execution status.

@@ -405,12 +405,15 @@
 **Consequences:** ES sync mechanism required; Atlas Search prohibited; mapping/analyzer decisions deferred
 
 ### CD-050: Coupon Inclusion/Exclusion Rules
-**Status:** Confirmed (MP-02, MP-07E)  
+**Status:** Confirmed (MP-02, MP-07E, MP-36 final transition)
+
 **Subject:** Coupon targeting semantics  
-**Decision:** Inclusion lists can target products and categories. Including a category includes its descendants. Exclusion lists can target products and categories. Excluding a category excludes its descendants. Exclusions override inclusions. The discount calculation for mixed eligible/ineligible cart contents remains unresolved. **Coupon stacking and priority rules are resolved: no stacking of coupons from the same vendor (maximum one coupon per vendor per purchase); no automatic priority between eligible coupons; the consumer chooses which eligible coupon to apply for each vendor.**  
+**Decision:** Inclusion lists can target products and categories. Including a category includes its descendants. Exclusion lists can target products and categories. Excluding a category excludes its descendants. Exclusions override inclusions. For mixed eligible/ineligible carts, calculate the coupon discount on the eligible subtotal only. Round deterministically to the operational currency's minor unit; any allocation must be deterministic, preserve the exact rounded total, allocate nothing to ineligible items, and produce stable results when repeated. Preserve the currency abstraction. The precise allocation and rounding algorithm is a future implementation task and is not prescribed by this decision. **Coupon stacking and priority rules are resolved: no stacking of coupons from the same vendor (maximum one coupon per vendor per purchase); no automatic priority between eligible coupons; the consumer chooses which eligible coupon to apply for each vendor.**
+
 **Justification:** Clear targeting semantics; hierarchy awareness; exclusion precedence; consumer choice for coupon selection  
-**Source:** MP-02 confirmed decisions (Q-016); MP-07E formalization of rules 5 and 6  
-**Consequences:** Category descendant inclusion/exclusion implemented; mixed-cart discount calculation open; stacking prohibited; priority not applicable (single coupon per vendor); consumer selects coupon per vendor
+**Source:** MP-02 confirmed decisions (Q-016); MP-07E formalization of rules 5 and 6; user approval in MP-36 final transition, 2026-11-06 (Q-016 mixed-cart calculation).
+
+**Consequences:** Category descendant inclusion/exclusion implemented; mixed-cart calculation and deterministic minor-unit allocation require implementation and independent verification; stacking prohibited; priority not applicable (single coupon per vendor); consumer selects coupon per vendor.
 
 ### CD-051: Vendor Dashboard Scope
 **Status:** Confirmed (MP-02)  
@@ -874,7 +877,7 @@ These conditions are evaluated in precedence order (1 → 2 → 3), guaranteeing
 | D-025 | Checkout address snapshots | **Resolved (CD-061)** | CD-061: Snapshot semantics confirmed; uses CD-040 fields; immutable copy at Order creation |
 | D-026 | Product inactivation state | Technical / Future | CD-042: Inactive state confirmed; hard-delete referential check needed |
 | D-027 | Category cycle prevention | Technical / Future | CD-043: Hierarchy rules confirmed; cycle detection implementation required |
-| D-028 | Coupon mixed-cart discount calculation | Technical / Future | CD-050: Inclusion/exclusion rules confirmed; mixed-cart discount open; stacking/priority open |
+| D-028 | Coupon mixed-cart discount calculation | Decision resolved; implementation technical / future | CD-050/Q-016: eligible subtotal and deterministic minor-unit allocation approved; implementation algorithm and verification remain. Stacking/priority resolved by CD-050. |
 | D-029 | Vendor dashboard metrics implementation | Technical / Future | CD-051: Metrics scope confirmed; gross sales pre-commission labeling; cross-vendor access prohibited |
 | D-030 | Transaction currency | **Resolved (CD-054/Q-026)** | CD-054: BRL confirmed; FX service prohibited without decision. |
 | D-031 | Notification infrastructure | Technical / Future | CD-055: Manual refresh MVP; WebSocket/event bus deferred |

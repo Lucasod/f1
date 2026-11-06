@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { useAuthStore } from '@/app/providers/authStore';
 import { payoutApi, Payout, PayoutStatus } from '@/shared/api/payout';
 import { PayoutPage } from './PayoutPage';
 
@@ -36,15 +37,15 @@ const mockPayout: Payout = {
   updatedAt: '2024-01-15T10:00:00Z',
 };
 
-const createWrapper = () => {
-  const queryClient = new QueryClient({
+const createWrapper = (queryClient?: QueryClient) => {
+  const client = queryClient ?? new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
       mutations: { retry: false },
     },
   });
   const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={client}>
       <MemoryRouter>
         {children}
       </MemoryRouter>
@@ -56,9 +57,21 @@ const createWrapper = () => {
 describe('PayoutPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAuthStore.setState({
+      user: { id: 'vendor-1', name: 'Vendor One', email: 'vendor@example.com', roles: ['VENDOR'] },
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
     mockList.mockResolvedValue({ payouts: [mockPayout] });
     mockCreate.mockResolvedValue({ payout: mockPayout });
     mockCancel.mockResolvedValue({ payout: { ...mockPayout, status: PayoutStatus.CANCELLED } });
+  });
+
+  afterEach(() => {
+    useAuthStore.setState({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: null });
   });
 
   it('renders payout list', async () => {
@@ -125,5 +138,62 @@ describe('PayoutPage', () => {
     fireEvent.click(cancelButton);
 
     await waitFor(() => expect(mockCancel).toHaveBeenCalledWith('payout-1'));
+  });
+
+  it('AC2: uses identity-scoped payouts query key and not the old identity-free key', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+    });
+    render(<PayoutPage />, { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => expect(screen.getByText('payout-1')).toBeInTheDocument());
+
+    expect(queryClient.getQueryData(['payouts', 'vendor-1'])).toEqual({ payouts: [mockPayout] });
+    expect(queryClient.getQueryData(['payouts'])).toBeUndefined();
+  });
+
+  it('L-001: isolates payouts cache when authenticated identity switches', async () => {
+    const payoutsA = { payouts: [{ ...mockPayout, id: 'payout-a', vendorId: 'vendor-a' }] };
+    const payoutsB = { payouts: [{ ...mockPayout, id: 'payout-b', vendorId: 'vendor-b' }] };
+    let resolvePayoutsB: ((response: { payouts: Payout[] }) => void) | undefined;
+    const pendingPayoutsB = new Promise<{ payouts: Payout[] }>((resolve) => {
+      resolvePayoutsB = resolve;
+    });
+    mockList.mockResolvedValueOnce(payoutsA).mockReturnValueOnce(pendingPayoutsB);
+
+    useAuthStore.setState({
+      user: { id: 'vendor-a', name: 'Vendor A', email: 'a@example.com', roles: ['VENDOR'] },
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 60_000 }, mutations: { retry: false } },
+    });
+    render(<PayoutPage />, { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => expect(screen.getByText('payout-a')).toBeInTheDocument());
+    expect(queryClient.getQueryData(['payouts', 'vendor-a'])).toEqual(payoutsA);
+
+    act(() => {
+      useAuthStore.setState((state) => ({
+        ...state,
+        user: { id: 'vendor-b', name: 'Vendor B', email: 'b@example.com', roles: ['VENDOR'] },
+      }));
+    });
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
+    expect(queryClient.getQueryData(['payouts', 'vendor-a'])).toEqual(payoutsA);
+
+    await act(async () => {
+      resolvePayoutsB?.(payoutsB);
+      await pendingPayoutsB;
+    });
+
+    await waitFor(() => expect(screen.getByText('payout-b')).toBeInTheDocument());
+    expect(queryClient.getQueryData(['payouts', 'vendor-b'])).toEqual(payoutsB);
   });
 });
