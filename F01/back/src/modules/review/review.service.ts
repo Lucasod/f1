@@ -193,7 +193,7 @@ export class ReviewService {
     const { url } = await this.storageAdapter.save(buffer, imageKey, contentType);
     review.addImage(url);
     // A failed update may have committed; deleting could break a persisted reference.
-    return this.reviewRepo.update(review);
+    return this.reviewRepo.update(review, { consumerId, status: ReviewStatus.PUBLISHED });
   }
 
   async getReviewImageUrls(): Promise<string[]> {

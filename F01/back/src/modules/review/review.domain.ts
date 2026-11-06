@@ -16,6 +16,7 @@ export enum ReviewError {
   INVALID_REVIEW_IMAGE = 'INVALID_REVIEW_IMAGE',
   REVIEW_IMAGE_LIMIT_REACHED = 'REVIEW_IMAGE_LIMIT_REACHED',
   REVIEW_OWNERSHIP_VIOLATION = 'REVIEW_OWNERSHIP_VIOLATION',
+  REVIEW_CONFLICT = 'REVIEW_CONFLICT',
   INVALID_PAGINATION = 'INVALID_PAGINATION',
 }
 
@@ -31,6 +32,7 @@ export interface ReviewData {
   status: ReviewStatus;
   createdAt: Date;
   updatedAt: Date;
+  revision?: number;
 }
 
 function generateId(): string {
@@ -38,6 +40,7 @@ function generateId(): string {
 }
 
 export class Review {
+  private readonly revisionValue: number;
   public readonly id: string;
   public readonly productId: string;
   public readonly consumerId: string;
@@ -51,6 +54,7 @@ export class Review {
   public updatedAt: Date;
 
   private constructor(data: ReviewData) {
+    this.revisionValue = data.revision ?? 0;
     this.id = data.id;
     this.productId = data.productId;
     this.consumerId = data.consumerId;
@@ -60,8 +64,8 @@ export class Review {
     this.comment = data.comment;
     this.images = [...data.images];
     this.status = data.status;
-    this.createdAt = data.createdAt;
-    this.updatedAt = data.updatedAt;
+    this.createdAt = new Date(data.createdAt);
+    this.updatedAt = new Date(data.updatedAt);
   }
 
   static create(data: {
@@ -123,6 +127,14 @@ export class Review {
     });
   }
 
+  get revision(): number {
+    return this.revisionValue;
+  }
+
+  snapshot(revision = this.revision): Review {
+    return Review.reconstruct({ ...this.toJSON(), revision });
+  }
+
   moderate(status: ReviewStatus): void {
     if (!Object.values(ReviewStatus).includes(status)) {
       throw new Error(ReviewError.INVALID_REVIEW_STATUS);
@@ -153,10 +165,15 @@ export class Review {
       comment: this.comment,
       images: [...this.images],
       status: this.status,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt,
+      createdAt: new Date(this.createdAt),
+      updatedAt: new Date(this.updatedAt),
     };
   }
+}
+
+export interface ReviewUpdateCondition {
+  consumerId: string;
+  status: ReviewStatus;
 }
 
 export interface ReviewRepository {
@@ -166,7 +183,7 @@ export interface ReviewRepository {
   findByOrderId(orderId: string): Promise<Review[]>;
   findByProductId(productId: string): Promise<Review[]>;
   findAll(): Promise<Review[]>;
-  update(review: Review): Promise<Review>;
+  update(review: Review, condition?: ReviewUpdateCondition): Promise<Review>;
 }
 
 export class InMemoryReviewRepository implements ReviewRepository {
@@ -174,40 +191,44 @@ export class InMemoryReviewRepository implements ReviewRepository {
 
   async save(review: Review): Promise<Review> {
     if ([...this.reviews.values()].some(existing =>
-      (review.orderId !== undefined && existing.orderId === review.orderId)
+      existing.id === review.id
+      || (review.orderId !== undefined && existing.orderId === review.orderId)
       || (review.orderItemId !== undefined && existing.orderItemId === review.orderItemId)
     )) {
       throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
     }
-    this.reviews.set(review.id, review);
-    return review;
+    this.reviews.set(review.id, review.snapshot());
+    return review.snapshot();
   }
 
   async findById(id: string): Promise<Review | null> {
-    return this.reviews.get(id) ?? null;
+    return this.reviews.get(id)?.snapshot() ?? null;
   }
 
   async findByOrderItemId(orderItemId: string): Promise<Review | null> {
-    return [...this.reviews.values()].find(review => review.orderItemId === orderItemId) ?? null;
+    return [...this.reviews.values()].find(review => review.orderItemId === orderItemId)?.snapshot() ?? null;
   }
 
   async findByOrderId(orderId: string): Promise<Review[]> {
-    return [...this.reviews.values()].filter(review => review.orderId === orderId);
+    return [...this.reviews.values()].filter(review => review.orderId === orderId).map(review => review.snapshot());
   }
 
   async findByProductId(productId: string): Promise<Review[]> {
-    return [...this.reviews.values()].filter(review => review.productId === productId);
+    return [...this.reviews.values()].filter(review => review.productId === productId).map(review => review.snapshot());
   }
 
   async findAll(): Promise<Review[]> {
-    return [...this.reviews.values()];
+    return [...this.reviews.values()].map(review => review.snapshot());
   }
 
-  async update(review: Review): Promise<Review> {
-    if (!this.reviews.has(review.id)) {
-      throw new Error(ReviewError.REVIEW_NOT_FOUND);
+  async update(review: Review, condition?: ReviewUpdateCondition): Promise<Review> {
+    const current = this.reviews.get(review.id);
+    if (!current || current.revision !== review.revision || (condition &&
+      (current.consumerId !== condition.consumerId || current.status !== condition.status))) {
+      throw new Error(ReviewError.REVIEW_CONFLICT);
     }
-    this.reviews.set(review.id, review);
-    return review;
+    const updated = review.snapshot(review.revision + 1);
+    this.reviews.set(review.id, updated);
+    return updated.snapshot();
   }
 }

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 import sharp from 'sharp';
 import { InMemoryPersonRepository, Person } from '../person/person.domain';
 import { InMemoryProductRepository, InMemoryCategoryRepository, ProductStatus } from './product.domain';
@@ -46,16 +47,25 @@ describe('Product Routes', () => {
   let vendor2PersonId: string;
   let categoryId: string;
   let productId: string;
-  const storageRoot = path.join(process.cwd(), 'test-storage', 'uploads');
+  let storageRoot: string;
+  let ownedTempDir: string | undefined;
+  let previousStorageRoot: string | undefined;
+
+  afterEach(async () => {
+    if (previousStorageRoot === undefined) delete process.env.STORAGE_ROOT;
+    else process.env.STORAGE_ROOT = previousStorageRoot;
+    if (ownedTempDir) {
+      const dir = ownedTempDir;
+      ownedTempDir = undefined;
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
 
   beforeEach(async () => {
-    // Set storage root for serve endpoint
+    previousStorageRoot = process.env.STORAGE_ROOT;
+    ownedTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fs01-product-routes-'));
+    storageRoot = path.join(ownedTempDir, 'uploads');
     process.env.STORAGE_ROOT = storageRoot;
-    
-    // Clean up test storage directory
-    try {
-      await fs.rm(storageRoot, { recursive: true, force: true });
-    } catch {}
     
     personRepo = new InMemoryPersonRepository();
     vendorRepo = new InMemoryVendorRepository();
@@ -1920,46 +1930,45 @@ describe('Product Routes', () => {
       imageUrl = uploadResponse.body.image.url;
     });
 
-    it('should allow vendor to delete own product image (204)', async () => {
+    it('returns 503 for an owner while image deletion is unavailable', async () => {
       const response = await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
         .set('Authorization', `Bearer ${vendorToken}`);
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('IMAGE_DELETE_UNAVAILABLE');
     });
 
-    it('should remove image from product.images[]', async () => {
+    it('preserves the image reference after a rejected deletion', async () => {
       // Verify image exists before deletion
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
       expect(productResponse.body.product.images).toContain(imageUrl);
 
-      // Delete the image
+      // The request must fail explicitly without changing references.
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
-        .set('Authorization', `Bearer ${vendorToken}`);
+        .set('Authorization', `Bearer ${vendorToken}`).expect(503);
 
-      // Verify image removed
+      // Verify the reference is intact.
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).not.toContain(imageUrl);
-      expect(productResponse.body.product.images.length).toBe(0);
+      expect(productResponse.body.product.images).toEqual([imageUrl]);
     });
 
-    it('should delete image file from storage', async () => {
+    it('preserves the image file after a rejected deletion', async () => {
       // Verify file exists before deletion
       const filePath = path.join(storageRoot, imageKey);
       let fileExists = await fs.access(filePath).then(() => true).catch(() => false);
       expect(fileExists).toBe(true);
 
-      // Delete the image
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
-        .set('Authorization', `Bearer ${vendorToken}`);
+        .set('Authorization', `Bearer ${vendorToken}`).expect(503);
 
-      // Verify file deleted
+      // Verify file remains.
       fileExists = await fs.access(filePath).then(() => true).catch(() => false);
-      expect(fileExists).toBe(false);
+      expect(fileExists).toBe(true);
     });
 
     it('should return 403 for consumer role', async () => {
@@ -1971,12 +1980,13 @@ describe('Product Routes', () => {
       expect(response.body.error).toBe('FORBIDDEN');
     });
 
-    it('should allow admin to delete (204)', async () => {
+    it('returns 503 for admin while image deletion is unavailable', async () => {
       const response = await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${imageKey}`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('IMAGE_DELETE_UNAVAILABLE');
     });
 
     it('should return 401 for unauthenticated request', async () => {
@@ -2278,15 +2288,16 @@ describe('Product Routes', () => {
       galleryImageUrl = uploadResponse.body.images[1].url;
     });
 
-    it('should allow vendor to delete gallery image (204)', async () => {
+    it('returns 503 for gallery image deletion', async () => {
       const response = await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${galleryImageKey}`)
         .set('Authorization', `Bearer ${vendorToken}`);
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('IMAGE_DELETE_UNAVAILABLE');
     });
 
-    it('should remove gallery image from product.images[]', async () => {
+    it('preserves all product references after rejected gallery deletion', async () => {
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
       expect(productResponse.body.product.images).toContain(galleryImageUrl);
@@ -2294,50 +2305,47 @@ describe('Product Routes', () => {
 
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${galleryImageKey}`)
-        .set('Authorization', `Bearer ${vendorToken}`);
+        .set('Authorization', `Bearer ${vendorToken}`).expect(503);
 
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).not.toContain(galleryImageUrl);
-      expect(productResponse.body.product.images.length).toBe(1);
-      expect(productResponse.body.product.images[0]).toBe(mainImageUrl);
+      expect(productResponse.body.product.images).toEqual([mainImageUrl, galleryImageUrl]);
     });
 
-    it('should delete gallery image file from storage', async () => {
+    it('preserves the gallery file after rejected deletion', async () => {
       const filePath = path.join(storageRoot, galleryImageKey);
       let fileExists = await fs.access(filePath).then(() => true).catch(() => false);
       expect(fileExists).toBe(true);
 
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${galleryImageKey}`)
-        .set('Authorization', `Bearer ${vendorToken}`);
+        .set('Authorization', `Bearer ${vendorToken}`).expect(503);
 
       fileExists = await fs.access(filePath).then(() => true).catch(() => false);
-      expect(fileExists).toBe(false);
+      expect(fileExists).toBe(true);
     });
 
-    it('should allow vendor to delete main image (204)', async () => {
+    it('returns 503 for main image deletion', async () => {
       const response = await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${mainImageKey}`)
         .set('Authorization', `Bearer ${vendorToken}`);
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('IMAGE_DELETE_UNAVAILABLE');
     });
 
-    it('should remove main image from product.images[]', async () => {
+    it('preserves all product references after rejected main image deletion', async () => {
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
       expect(productResponse.body.product.images).toContain(mainImageUrl);
 
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${mainImageKey}`)
-        .set('Authorization', `Bearer ${vendorToken}`);
+        .set('Authorization', `Bearer ${vendorToken}`).expect(503);
 
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).not.toContain(mainImageUrl);
-      expect(productResponse.body.product.images.length).toBe(1);
-      expect(productResponse.body.product.images[0]).toBe(galleryImageUrl);
+      expect(productResponse.body.product.images).toEqual([mainImageUrl, galleryImageUrl]);
     });
   });
 });

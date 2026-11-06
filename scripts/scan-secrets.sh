@@ -7,7 +7,7 @@
 set -u
 
 # Prerequisite tools: fail closed if unavailable.
-for tool in grep sed; do
+for tool in grep sed tr wc; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     printf 'ERROR: required tool not available: %s. Scan cannot run; commit blocked.\n' "$tool" >&2
     exit 2
@@ -71,45 +71,13 @@ is_markdown_file() {
   return 1
 }
 
-# We avoid consuming stdin twice by detecting via file/pipe differently.
-# For staged files we use git show piped; for regular files we check the file.
-
 is_binary_file() {
   f="$1"
-  [ -f "$f" ] || return 1
-  [ -s "$f" ] || return 1  # empty file not binary
-  if LC_ALL=C grep -qI '' "$f" 2>/dev/null; then
-    return 1  # text
-  else
-    return 0  # binary
-  fi
-}
-
-is_binary_staged() {
-  # file path arg (staged name). Read index content via git show.
-  # Use git show; detect via grep -I on pipe.
-  if git show ":$1" 2>/dev/null | LC_ALL=C grep -qI '' 2>/dev/null; then
-    # Need distinguish empty: git show output empty -> grep exit 1. Check size.
-    content_size=$(git show ":$1" 2>/dev/null | wc -c)
-    if [ "$content_size" -eq 0 ]; then
-      return 1  # empty, treat as text
-    fi
-    return 1  # text
-  else
-    content_size=$(git show ":$1" 2>/dev/null | wc -c)
-    if [ "$content_size" -eq 0 ]; then
-      return 1
-    fi
-    return 0  # binary
-  fi
-}
-
-# Safe-line filter: returns 0 if line should be ignored (not a real secret).
-is_safe_line() {
-  line="$1"
-  case "$line" in
-    *process.env*|*os.environ*|*getenv*|*env\[*|*System.getenv*|*os.Getenv*) return 0 ;;
-  esac
+  [ -f "$f" ] || return 2
+  original_bytes=$(LC_ALL=C wc -c < "$f" 2>/dev/null) || return 2
+  text_bytes=$(set -o pipefail; LC_ALL=C tr -d '\000' < "$f" 2>/dev/null | LC_ALL=C wc -c 2>/dev/null) || return 2
+  [[ "$original_bytes" =~ ^[[:space:]]*[0-9]+[[:space:]]*$ && "$text_bytes" =~ ^[[:space:]]*[0-9]+[[:space:]]*$ ]] || return 2
+  if [ "$original_bytes" -ne "$text_bytes" ]; then return 0; fi
   return 1
 }
 
@@ -117,24 +85,18 @@ is_safe_line() {
 FOUND_LABELS=""
 
 scan_text_content() {
-  # $1 = content command type: "staged" or "file"
-  # $2 = file path
-  # content is read from stdin? We'll pass via function using git show/cat.
-  f="$2"
+  # $1 = file containing the snapshot; $2 = original name for format detection.
+  scan_path="$1"
+  scan_name="$2"
   FOUND_LABELS=""
-  # get content lines
-  if [ "$1" = "staged" ]; then
-    content=$(git show ":$f" 2>/dev/null) || content=""
-  else
-    content=$(cat "$f" 2>/dev/null) || content=""
-  fi
+  content=$(cat "$scan_path" 2>/dev/null) || return 1
 
   # Strip inline code spans (backtick-quoted content) to avoid
   # false positives from documentation examples. This is a general
   # heuristic applied ONLY to markdown files; non-markdown files are
   # scanned in full to avoid under-detection in template literals.
-  if is_markdown_file "$f"; then
-    content_stripped=$(printf '%s\n' "$content" | sed 's/`[^`]*`//g')
+  if is_markdown_file "$scan_name"; then
+    content_stripped=$(printf '%s\n' "$content" | sed 's/`[^`]*`//g' 2>/dev/null) || return 1
   else
     content_stripped="$content"
   fi
@@ -144,33 +106,35 @@ scan_text_content() {
     rest="${entry#*$'\t'}"
     label="${rest%%$'\t'*}"
     regex="${rest#*$'\t'}"
-    # find matching lines
-    matched_lines=$(printf '%s\n' "$content_stripped" | grep -iEn -- "$regex" 2>/dev/null || true)
-    if [ -z "$matched_lines" ]; then
-      continue
-    fi
-    # filter safe lines
-    real=""
-    while IFS= read -r ln; do
-      [ -z "$ln" ] && continue
-      # strip line number prefix for safety check
-      line_text="${ln#*:}"
-      if is_safe_line "$line_text"; then
-        continue
-      fi
-      real="$real$ln"$'\n'
-    done <<< "$matched_lines"
-    if [ -n "$real" ]; then
+    printf '%s\n' "$content_stripped" | grep -iE -- "$regex" >/dev/null 2>&1
+    match_status=$?
+    if [ "$match_status" -eq 0 ]; then
       if [ -z "$FOUND_LABELS" ]; then
         FOUND_LABELS="[$category] $label"
       else
         FOUND_LABELS="$FOUND_LABELS"$'\n'"[$category] $label"
       fi
+    elif [ "$match_status" -ne 1 ]; then
+      return 1
     fi
   done
+  return 0
 }
 
 found=0
+
+cleanup_temp() {
+  if ! rm -f -- "$temp_pending" 2>/dev/null; then
+    printf 'ERROR: temporary file cleanup failed; scan blocked.\n' >&2
+    return 1
+  fi
+}
+
+cleanup_on_exit() {
+  exit_status=$?
+  cleanup_temp || exit_status=2
+  exit "$exit_status"
+}
 
 # Determine mode
 mode="staged"
@@ -201,10 +165,11 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
     printf 'ERROR: cannot create temp file for staged scan.\n' >&2
     exit 2
   }
+  temp_pending="$staged_tmp"
+  trap cleanup_on_exit EXIT
   git diff --cached --name-only -z --diff-filter=ACMR >"$staged_tmp" 2>/dev/null
   git_rc=$?
   if [ "$git_rc" -ne 0 ]; then
-    rm -f "$staged_tmp"
     printf 'ERROR: git diff --cached failed (exit %d); staged scan cannot run.\n' "$git_rc" >&2
     exit 2
   fi
@@ -212,7 +177,8 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
   while IFS= read -r -d '' f; do
     staged_files+=("$f")
   done < "$staged_tmp"
-  rm -f "$staged_tmp"
+  cleanup_temp || exit 2
+  trap - EXIT
   if [ ${#staged_files[@]} -eq 0 ]; then
     # nothing staged; clean
     exit 0
@@ -224,16 +190,39 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
       found=1
       continue
     fi
-    if is_binary_staged "$f"; then
-      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$f" >&2
+    staged_name="$f"
+    staged_content=$(mktemp 2>/dev/null) || {
+      printf 'ERROR: cannot create temp file for staged content.\n' >&2
+      exit 2
+    }
+    temp_pending="$staged_content"
+    trap cleanup_on_exit EXIT
+    if ! git show ":$staged_name" >"$staged_content" 2>/dev/null; then
+      printf 'ERROR: cannot read staged content: %s\n' "$staged_name" >&2
+      exit 2
+    fi
+    is_binary_file "$staged_content"
+    binary_status=$?
+    if [ "$binary_status" -eq 0 ]; then
+      cleanup_temp || exit 2
+      trap - EXIT
+      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$staged_name" >&2
       found=1
       continue
+    elif [ "$binary_status" -ne 1 ]; then
+      printf 'ERROR: cannot inspect staged content: %s\n' "$staged_name" >&2
+      exit 2
     fi
-    scan_text_content "staged" "$f"
+    if ! scan_text_content "$staged_content" "$staged_name"; then
+      printf 'ERROR: cannot scan staged snapshot: %s\n' "$staged_name" >&2
+      exit 2
+    fi
+    cleanup_temp || exit 2
+    trap - EXIT
     if [ -n "$FOUND_LABELS" ]; then
       while IFS= read -r lbl; do
         [ -z "$lbl" ] && continue
-        printf 'BLOCKED: %s: %s\n' "$lbl" "$f" >&2
+        printf 'BLOCKED: %s: %s\n' "$lbl" "$staged_name" >&2
       done <<< "$FOUND_LABELS"
       found=1
     fi
@@ -256,12 +245,20 @@ else
       found=1
       continue
     fi
-    if is_binary_file "$f"; then
+    is_binary_file "$f"
+    binary_status=$?
+    if [ "$binary_status" -eq 0 ]; then
       printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$f" >&2
       found=1
       continue
+    elif [ "$binary_status" -ne 1 ]; then
+      printf 'ERROR: cannot inspect file: %s\n' "$f" >&2
+      exit 2
     fi
-    scan_text_content "file" "$f"
+    if ! scan_text_content "$f" "$f"; then
+      printf 'ERROR: cannot scan file: %s\n' "$f" >&2
+      exit 2
+    fi
     if [ -n "$FOUND_LABELS" ]; then
       while IFS= read -r lbl; do
         [ -z "$lbl" ] && continue

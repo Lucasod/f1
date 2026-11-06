@@ -1,5 +1,5 @@
 import { Collection, Db, MongoServerError, ObjectId } from 'mongodb';
-import { Review, ReviewData, ReviewError, ReviewRepository } from './review.domain';
+import { Review, ReviewData, ReviewError, ReviewRepository, ReviewUpdateCondition } from './review.domain';
 
 type ReviewDocument = ReviewData & { _id?: ObjectId };
 
@@ -12,7 +12,7 @@ export class MongoReviewRepository implements ReviewRepository {
 
   async save(review: Review): Promise<Review> {
     try {
-      await this.collection.insertOne(review.toJSON());
+      await this.collection.insertOne({ ...review.toJSON(), revision: review.revision });
     } catch (error) {
       if (error instanceof MongoServerError && error.code === 11000) {
         throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
@@ -47,12 +47,18 @@ export class MongoReviewRepository implements ReviewRepository {
     return documents.map(document => Review.reconstruct(this.toReviewData(document)));
   }
 
-  async update(review: Review): Promise<Review> {
-    const result = await this.collection.replaceOne({ id: review.id }, review.toJSON());
+  async update(review: Review, condition?: ReviewUpdateCondition): Promise<Review> {
+    const revisionFilter = review.revision === 0
+      ? { $or: [{ revision: 0 }, { revision: { $exists: false } }] }
+      : { revision: review.revision };
+    const result = await this.collection.replaceOne(
+      { id: review.id, ...revisionFilter, ...condition },
+      { ...review.toJSON(), revision: review.revision + 1 },
+    );
     if (result.matchedCount === 0) {
-      throw new Error(ReviewError.REVIEW_NOT_FOUND);
+      throw new Error(ReviewError.REVIEW_CONFLICT);
     }
-    return review;
+    return review.snapshot(review.revision + 1);
   }
 
   private toReviewData(document: ReviewDocument): ReviewData {

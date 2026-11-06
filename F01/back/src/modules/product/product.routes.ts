@@ -616,14 +616,8 @@ export function createProductRoutes({ authService, productService, personRepo, v
         return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found for this product' });
       }
 
-      // Delete from storage
-      await storageAdapter.delete(imageKey);
-
-      // Remove from product
-      product.removeImage(imageUrl);
-      await productService.updateProduct(productId, vendorId, { images: product.images }, isAdmin);
-
-      return res.status(204).send();
+      // A snapshot cannot prove the object is unreferenced across concurrent writers.
+      return res.status(503).json({ error: 'IMAGE_DELETE_UNAVAILABLE', message: 'Image deletion is temporarily unavailable' });
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === ProductError.PRODUCT_NOT_FOUND) {

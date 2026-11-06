@@ -169,6 +169,8 @@ function handleReviewError(error: unknown, res: Response, next: NextFunction) {
         return res.status(400).json({ error: error.message, message: error.message });
       case ReviewError.REVIEW_ALREADY_EXISTS:
         return res.status(409).json({ error: error.message, message: 'This order item already has a review' });
+      case ReviewError.REVIEW_CONFLICT:
+        return res.status(409).json({ error: error.message, message: error.message });
       case ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE:
         return res.status(403).json({ error: error.message, message: 'A delivered order item for this product is required' });
       case ReviewError.REVIEW_OWNERSHIP_VIOLATION:

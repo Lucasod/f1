@@ -220,81 +220,8 @@ export class LocalStorageAdapter implements StorageAdapter {
     }
   }
 
-  /**
-   * Scan storage directory for files not referenced by products or reviews
-   * and remove orphaned files.
-   * 
-   * @param referencedUrls - URLs currently referenced by products and reviews
-   * @returns Object with count of deleted files and list of deleted file keys
-   */
-  async cleanupOrphanedFiles(referencedUrls: string[]): Promise<CleanupResult> {
-    const deletedFiles: string[] = [];
-
-    // Convert referenced URLs to keys for comparison
-    const referencedKeys = new Set<string>();
-    for (const url of referencedUrls) {
-      // Extract key from URL (remove publicUrlBase prefix)
-      const prefix = `${this.publicUrlBase}/`;
-      if (url.startsWith(prefix)) {
-        const key = url.slice(prefix.length);
-        referencedKeys.add(key);
-      }
-    }
-
-    // Recursively scan storage directory
-    try {
-      await this.scanAndCleanup(this.storageRoot, referencedKeys, deletedFiles);
-    } catch (error) {
-      console.error('Cleanup error:', { 
-        dirPath: this.storageRoot, 
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      });
-    }
-
-    return {
-      deletedCount: deletedFiles.length,
-      deletedFiles
-    };
-  }
-
-  private async scanAndCleanup(dirPath: string, referencedKeys: Set<string>, deletedFiles: string[]): Promise<void> {
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        const relativePath = path.relative(this.storageRoot, fullPath);
-        
-        if (entry.isDirectory()) {
-          // Recursively scan subdirectories
-          await this.scanAndCleanup(fullPath, referencedKeys, deletedFiles);
-          
-          // Clean up empty directories after scanning
-          try {
-            const remainingEntries = await fs.readdir(fullPath);
-            if (remainingEntries.length === 0) {
-              await fs.rmdir(fullPath);
-            }
-          } catch {
-            // Ignore errors
-          }
-        } else if (entry.isFile()) {
-          // Check if file is referenced
-          if (!referencedKeys.has(relativePath)) {
-            // Orphaned file - delete it
-            await fs.unlink(fullPath);
-            deletedFiles.push(relativePath);
-          }
-        }
-      }
-    } catch (error) {
-      // Add structured logging for cleanup errors
-      console.error('Cleanup error:', { 
-        dirPath, 
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      });
-    }
+  async cleanupOrphanedFiles(_referencedUrls: string[]): Promise<CleanupResult> {
+    // A URL snapshot cannot prove that a file is unreferenced or not in flight.
+    throw new Error('Local orphan cleanup is unsafe without coordinated references');
   }
 }
