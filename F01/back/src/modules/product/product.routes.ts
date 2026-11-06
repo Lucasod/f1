@@ -6,11 +6,14 @@ import { PersonRepository } from '../person/person.domain';
 import { VendorRepository, VendorStatus } from '../vendor/vendor.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
-import { ProductStatus, VALID_STATUSES, ProductError } from './product.domain';
+import { ProductStatus, VALID_STATUSES, ProductError, ProductRepository } from './product.domain';
+import { ReviewService } from '../review/review.service';
+import { ReviewStatus } from '../review/review.domain';
 import { StorageAdapter } from '../../shared/storage/storage.interface';
 import { config } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 // Extend AuthenticatedRequest to include multer's file property
 interface MulterAuthenticatedRequest extends AuthenticatedRequest {
@@ -531,39 +534,27 @@ export function createProductRoutes({ authService, productService, personRepo, v
       const uploadedImages: Array<{ key: string; url: string }> = [];
       const newImageUrls: string[] = [];
 
-      for (let i = 0; i < filesToProcess.length; i++) {
-        const file = filesToProcess[i];
-        
-        // Generate logical key following S3 naming convention
-        const ext = file.mimetype === 'image/jpeg' ? 'jpg' : 
-                    file.mimetype === 'image/png' ? 'png' : 'webp';
-        
-        let imageKey: string;
-        if (i === 0) {
-          // First image is main
-          imageKey = `products/${vendorId}/${productId}/main.${ext}`;
-        } else {
-          // Subsequent images are gallery with sequence 01-10
-          const sequence = String(i).padStart(2, '0');
-          imageKey = `products/${vendorId}/${productId}/gallery/${sequence}.${ext}`;
+      try {
+        for (const file of filesToProcess) {
+          const ext = file.mimetype === 'image/jpeg' ? 'jpg' :
+                      file.mimetype === 'image/png' ? 'png' : 'webp';
+          const imageKey = `products/${product.vendorId}/${productId}/${randomUUID()}.${ext}`;
+          const { url, key } = await storageAdapter.save(file.buffer, imageKey, file.mimetype);
+          uploadedImages.push({ key, url });
+          newImageUrls.push(url);
         }
-
-        // Save via storage adapter
-        const { url, key } = await storageAdapter.save(file.buffer, imageKey, file.mimetype);
-        uploadedImages.push({ key, url });
-        newImageUrls.push(url);
+      } catch (uploadError) {
+        const failures = await Promise.allSettled(uploadedImages.map(image => storageAdapter.delete(image.key)));
+        if (failures.some(result => result.status === 'rejected')) {
+          throw new AggregateError([uploadError], 'Image upload and compensation failed');
+        }
+        throw uploadError;
       }
 
-       // Add images to product (maintain order: main first, then gallery)
-       const allImages = [...newImageUrls, ...product.images];
-       try {
-         await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
-       } catch (updateErr) {
-         for (const uploaded of uploadedImages) {
-           try { await storageAdapter.delete(uploaded.key); } catch { /* ignore */ }
-         }
-         throw updateErr;
-       }
+      // Add images to product (maintain order: main first, then gallery)
+      const allImages = [...newImageUrls, ...product.images];
+      // A failed persistence call can have committed; deleting here could destroy referenced images.
+      await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
 
       // Return array for multiple, single object for backward compatibility with single upload
       if (files && files.length > 0) {
@@ -669,7 +660,11 @@ export function createProductRoutes({ authService, productService, personRepo, v
   return router;
 }
 
-export function createUploadRoutes({ storageAdapter }: { storageAdapter: StorageAdapter }): Router {
+export function createUploadRoutes({ storageAdapter, productRepo, reviewService }: {
+  storageAdapter: StorageAdapter;
+  productRepo?: Pick<ProductRepository, 'findById'>;
+  reviewService?: Pick<ReviewService, 'findReviewById'>;
+}): Router {
   const router = Router();
 
   // GET /api/v1/uploads/:key(*) - Serve uploaded image (public)
@@ -684,11 +679,33 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
         return res.status(400).json({ error: 'INVALID_KEY', message: 'Invalid image key' });
       }
 
+      // Never turn a malformed key into a different, potentially authorized key.
+      const segments = safeKey.split('/');
+      let visible = false;
+      if (safeKey === key && /\.(?:jpg|jpeg|png|webp)$/.test(safeKey) && productRepo) {
+        if (segments[0] === 'products' && segments.length >= 4 && segments.every(Boolean)) {
+          const product = await productRepo.findById(segments[2]);
+          visible = !!product && product.vendorId === segments[1]
+            && (product.status === ProductStatus.ACTIVE || product.status === ProductStatus.OUT_OF_STOCK)
+            && product.images.includes(storageAdapter.getUrl(safeKey));
+        } else if (segments[0] === 'reviews' && segments.length === 4 && segments.every(Boolean) && reviewService) {
+          const review = await reviewService.findReviewById(segments[2]);
+          const product = await productRepo.findById(segments[1]);
+          visible = !!review && review.productId === segments[1] && review.status === ReviewStatus.PUBLISHED
+            && !!product && (product.status === ProductStatus.ACTIVE || product.status === ProductStatus.OUT_OF_STOCK)
+            && review.images.includes(storageAdapter.getUrl(safeKey));
+        }
+      }
+      if (!visible) {
+        return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found' });
+      }
+
        const filePath = path.join(config.storageRoot, safeKey);
 
        // Remote (S3) adapter: redirect to a presigned URL instead of streaming local file
        if (storageAdapter.isRemote && typeof storageAdapter.getSignedUrl === 'function') {
-         const signed = await storageAdapter.getSignedUrl(safeKey);
+          const signed = await storageAdapter.getSignedUrl(safeKey, 60);
+          res.setHeader('Cache-Control', 'no-store');
          return res.redirect(302, signed);
        }
       
@@ -724,7 +741,7 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
         return res.status(304).set({
           'ETag': etag,
           'Last-Modified': lastModified,
-          'Cache-Control': 'public, max-age=31536000',
+          'Cache-Control': 'no-store',
         }).end();
       }
 
@@ -735,7 +752,7 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
           return res.status(304).set({
             'ETag': etag,
             'Last-Modified': lastModified,
-            'Cache-Control': 'public, max-age=31536000',
+          'Cache-Control': 'no-store',
           }).end();
         }
       }
@@ -743,7 +760,7 @@ export function createUploadRoutes({ storageAdapter }: { storageAdapter: Storage
       res.setHeader('Content-Type', contentType);
       res.setHeader('ETag', etag);
       res.setHeader('Last-Modified', lastModified);
-      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
+      res.setHeader('Cache-Control', 'no-store');
 
       const fileStream = fs.createReadStream(filePath);
       

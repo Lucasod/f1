@@ -81,7 +81,7 @@ describe('Product Routes', () => {
       vendorRepo,
       storageAdapter
     }));
-    app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+    app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter, productRepo }));
     app.use('/api/v1/categories', createCategoryRoutes({ 
       authService, 
       productService,
@@ -1629,6 +1629,35 @@ describe('Product Routes', () => {
       testProductId = productResponse.body.product.id;
     });
 
+    it('allows an admin to upload under the product owner and retrieve it without granting another vendor access', async () => {
+      const image = await createJpegBuffer(1024);
+      const denied = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .attach('image', image, 'other.jpg');
+      expect(denied.status).toBe(403);
+
+      const uploaded = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('image', image, 'admin.jpg');
+      expect(uploaded.status).toBe(201);
+      expect(uploaded.body.image.key).toMatch(new RegExp(`^products/${vendorId}/${testProductId}/`));
+      expect((await productRepo.findById(testProductId))?.images).toContain(uploaded.body.image.url);
+      expect((await request(app).get(uploaded.body.image.url)).status).toBe(200);
+      expect((await request(app).get(`/api/v1/uploads/${uploaded.body.image.key.replace(`products/${vendorId}/`, `products/${vendor2Id}/`)}`)).status).toBe(404);
+
+      const otherVendor = await vendorRepo.findByPersonId(vendor2PersonId);
+      vi.spyOn(vendorRepo, 'findByPersonId').mockResolvedValueOnce(otherVendor);
+      const adminWithVendor = await request(app)
+        .post(`/api/v1/products/${testProductId}/images`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('image', image, 'admin-again.jpg');
+      expect(adminWithVendor.status).toBe(201);
+      expect(adminWithVendor.body.image.key).toMatch(new RegExp(`^products/${vendorId}/${testProductId}/`));
+      expect((await request(app).get(adminWithVendor.body.image.url)).status).toBe(200);
+    });
+
     it('should allow vendor to upload valid JPEG image (201)', async () => {
       const jpegBuffer = await createJpegBuffer(1024);
       
@@ -1639,8 +1668,8 @@ describe('Product Routes', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.image).toBeDefined();
-      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.jpg$/);
-      expect(response.body.image.url).toMatch(/^\/api\/v1\/uploads\/products\/[^/]+\/[^/]+\/main\.jpg$/);
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.jpg$/);
+      expect(response.body.image.url).toBe(`/api/v1/uploads/${response.body.image.key}`);
     });
 
     it('should allow vendor to upload valid PNG image (201)', async () => {
@@ -1652,8 +1681,8 @@ describe('Product Routes', () => {
         .attach('image', pngBuffer, 'test.png');
 
       expect(response.status).toBe(201);
-      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.png$/);
-      expect(response.body.image.url).toMatch(/^\/api\/v1\/uploads\/products\/[^/]+\/[^/]+\/main\.png$/);
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.png$/);
+      expect(response.body.image.url).toBe(`/api/v1/uploads/${response.body.image.key}`);
     });
 
     it('should allow vendor to upload valid WebP image (201)', async () => {
@@ -1665,7 +1694,7 @@ describe('Product Routes', () => {
         .attach('image', webpBuffer, 'test.webp');
 
       expect(response.status).toBe(201);
-      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/main\.webp$/);
+      expect(response.body.image.key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.webp$/);
     });
 
     it('should add image reference to product.images[]', async () => {
@@ -2058,7 +2087,7 @@ describe('Product Routes', () => {
         .get(`/api/v1/uploads/${imageKey}`);
 
       expect(response.status).toBe(200);
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('should return 404 for non-existent key', async () => {
@@ -2114,12 +2143,11 @@ describe('Product Routes', () => {
       expect(Array.isArray(response.body.images)).toBe(true);
       expect(response.body.images.length).toBe(3);
 
-      // First image should be main
-      expect(response.body.images[0].key).toMatch(/^products\/[^/]+\/[^/]+\/main\.jpg$/);
-      
-      // Gallery images should have sequence numbers
-      expect(response.body.images[1].key).toMatch(/^products\/[^/]+\/[^/]+\/gallery\/01\.png$/);
-      expect(response.body.images[2].key).toMatch(/^products\/[^/]+\/[^/]+\/gallery\/02\.webp$/);
+      // Position defines main/gallery; unique object keys avoid overwriting existing images.
+      expect(response.body.images[0].key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.jpg$/);
+      expect(response.body.images[1].key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.png$/);
+      expect(response.body.images[2].key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.webp$/);
+      expect(new Set(response.body.images.map((image: { key: string }) => image.key)).size).toBe(3);
     });
 
     it('should add all images to product.images[] in correct order', async () => {
@@ -2162,13 +2190,10 @@ describe('Product Routes', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.images.length).toBe(11);
-      // First is main
-      expect(response.body.images[0].key).toMatch(/\/main\.jpg$/);
-      // Rest are gallery 01-10
-      for (let i = 1; i < 11; i++) {
-        const expectedSeq = String(i).padStart(2, '0');
-        expect(response.body.images[i].key).toMatch(new RegExp(`/gallery/${expectedSeq}\\.jpg$`));
+      for (const image of response.body.images) {
+        expect(image.key).toMatch(/^products\/[^/]+\/[^/]+\/[0-9a-f-]{36}\.jpg$/);
       }
+      expect(new Set(response.body.images.map((image: { key: string }) => image.key)).size).toBe(11);
     });
 
     it('should reject upload with more than 11 images (1 main + 10 gallery)', async () => {

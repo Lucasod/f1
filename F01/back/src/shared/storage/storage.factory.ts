@@ -6,6 +6,9 @@ import { AwsS3Client } from './aws-s3.client';
 export function createStorageAdapter(): StorageAdapter {
   const bucket = (process.env.AWS_S3_BUCKET || '').trim();
   const region = (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || '').trim();
+  if (!!bucket !== !!region) {
+    throw new Error('Incomplete S3 configuration: bucket and region are both required');
+  }
   if (bucket && region) {
     const client = new AwsS3Client(region);
     return new S3StorageAdapter({

@@ -245,71 +245,8 @@ export class S3StorageAdapter implements StorageAdapter {
     return await result;
   }
 
-  async cleanupOrphanedFiles(referencedUrls: string[]): Promise<{ deletedCount: number; deletedFiles: string[] }> {
-    const deletedFiles: string[] = [];
-    let deletedCount = 0;
-    try {
-      const referencedKeys = new Set<string>();
-      const prefix = `${this.publicUrlBase}/`;
-      for (const url of referencedUrls) {
-        if (typeof url === 'string' && url.startsWith(prefix)) {
-          referencedKeys.add(url.slice(prefix.length));
-        }
-      }
-
-      if (typeof this.client.listObjectsV2 !== 'function') {
-        return { deletedCount: 0, deletedFiles: [] };
-      }
-
-      const allKeys: string[] = [];
-      const scanPrefixes = ['products/', 'reviews/'];
-      for (const scanPrefix of scanPrefixes) {
-        let continuationToken: string | undefined;
-        do {
-          const res = await this.client.listObjectsV2({
-            Bucket: this.bucket,
-            Prefix: scanPrefix,
-            ContinuationToken: continuationToken,
-            MaxKeys: 1000,
-          });
-          const contents = (res && Array.isArray(res.Contents)) ? res.Contents : [];
-          for (const item of contents) {
-            if (item && typeof item.Key === 'string') {
-              allKeys.push(item.Key);
-            }
-          }
-          continuationToken = res && res.IsTruncated ? res.NextContinuationToken : undefined;
-        } while (continuationToken);
-      }
-
-      const unreferenced = allKeys.filter((key) => !referencedKeys.has(key));
-
-      if (unreferenced.length === 0) {
-        return { deletedCount: deletedFiles.length, deletedFiles };
-      }
-
-      if (typeof this.client.deleteObjects === 'function') {
-        const batchSize = 1000;
-        for (let i = 0; i < unreferenced.length; i += batchSize) {
-          const batch = unreferenced.slice(i, i + batchSize);
-          await this.client.deleteObjects({
-            Bucket: this.bucket,
-            Delete: { Objects: batch.map((key) => ({ Key: key })) },
-          });
-          deletedFiles.push(...batch);
-          deletedCount = deletedFiles.length;
-        }
-      } else {
-        for (const key of unreferenced) {
-          await this.client.deleteObject({ Bucket: this.bucket, Key: key });
-          deletedFiles.push(key);
-          deletedCount = deletedFiles.length;
-        }
-      }
-    } catch (error) {
-      console.error('S3 cleanup error:', error instanceof Error ? error.message : String(error));
-    }
-
-    return { deletedCount, deletedFiles };
+  async cleanupOrphanedFiles(_referencedUrls: string[]): Promise<{ deletedCount: number; deletedFiles: string[] }> {
+    // A URL snapshot cannot protect in-flight uploads or identify every historical URL base.
+    throw new Error('S3 orphan cleanup is unsafe without coordinated references');
   }
 }

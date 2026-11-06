@@ -93,6 +93,16 @@ describe('S3StorageAdapter', () => {
     });
   });
 
+  it('fails closed rather than deleting objects from an uncoordinated reference snapshot', async () => {
+    client.listObjectsV2 = vi.fn().mockResolvedValue({ Contents: [{ Key: 'products/v1/p1/new.jpg' }] });
+    client.deleteObjects = vi.fn().mockResolvedValue({});
+    await expect(adapter.cleanupOrphanedFiles(['https://old.example.com/products/v1/p1/new.jpg']))
+      .rejects.toThrow('S3 orphan cleanup is unsafe');
+    expect(client.listObjectsV2).not.toHaveBeenCalled();
+    expect(client.deleteObjects).not.toHaveBeenCalled();
+    expect(client.deleteObject).not.toHaveBeenCalled();
+  });
+
   it('constructor accepts client first then config', () => {
     const a = new S3StorageAdapter(client, config);
     expect(a.getUrl('k')).toBe('https://cdn.example.com/k');

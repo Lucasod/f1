@@ -131,7 +131,7 @@ describe('Review routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1', createReviewRoutes({ authService, reviewService }));
-    app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+    app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter, productRepo: productRepository, reviewService }));
   });
 
   afterEach(async () => {

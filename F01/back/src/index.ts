@@ -265,7 +265,7 @@ financialRepo = new MongoFinancialAllocationRepository(db);
       app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
 
       // Upload routes (public)
-      app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+      app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter, productRepo, reviewService }));
 
       // Cart routes
       app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
@@ -350,7 +350,7 @@ financialRepo = new InMemoryFinancialAllocationRepository();
         app.use('/api/v1/categories', createCategoryRoutes({ authService, productService, personRepo, vendorRepo, storageAdapter }));
 
         // Upload routes (public)
-        app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter }));
+        app.use('/api/v1/uploads', createUploadRoutes({ storageAdapter, productRepo, reviewService }));
 
         // Cart routes
         app.use('/api/v1/cart', createCartRoutes({ authService, cartService, personRepo }));
