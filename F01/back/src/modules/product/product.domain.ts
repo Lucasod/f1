@@ -10,6 +10,7 @@ export const VALID_STATUSES: ProductStatus[] = Object.values(ProductStatus);
 export enum ProductError {
   // Product errors
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
+  PRODUCT_CONFLICT = 'PRODUCT_CONFLICT',
   PRODUCT_NAME_REQUIRED = 'PRODUCT_NAME_REQUIRED',
   PRODUCT_DESCRIPTION_REQUIRED = 'PRODUCT_DESCRIPTION_REQUIRED',
   PRODUCT_PRICE_INVALID = 'PRODUCT_PRICE_INVALID',
@@ -403,6 +404,9 @@ export class InMemoryProductRepository implements ProductRepository {
   private categoryIndex: Map<string, Set<string>> = new Map();
 
   async save(product: Product): Promise<Product> {
+    if (this.products.has(product.id)) {
+      throw new Error(ProductError.PRODUCT_CONFLICT);
+    }
     this.products.set(product.id, product);
 
     const vendorProducts = this.vendorIndex.get(product.vendorId) || new Set();

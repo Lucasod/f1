@@ -30,26 +30,35 @@ export class MongoProductRepository implements ProductRepository {
     const productId = product.id;
     const now = new Date();
 
-    await this.productsCollection.updateOne(
-      { _id: productId },
-      {
-        $set: {
-          vendorId: product.vendorId,
-          categoryId: product.categoryId,
-          name: product.name,
-          description: product.description,
-          price: product.price,
-          quantity: product.quantity,
-          status: product.status,
-          images: product.images,
-          updatedAt: now
+    let result;
+    try {
+      result = await this.productsCollection.updateOne(
+        { _id: productId },
+        {
+          $setOnInsert: {
+            vendorId: product.vendorId,
+            categoryId: product.categoryId,
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            quantity: product.quantity,
+            status: product.status,
+            images: product.images,
+            updatedAt: now,
+            createdAt: product.createdAt
+          }
         },
-        $setOnInsert: {
-          createdAt: product.createdAt
-        }
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
+        throw new Error(ProductError.PRODUCT_CONFLICT);
+      }
+      throw error;
+    }
+    if (result.upsertedCount !== 1) {
+      throw new Error(ProductError.PRODUCT_CONFLICT);
+    }
 
     return Product.reconstruct({
       ...product,

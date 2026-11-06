@@ -407,6 +407,11 @@ async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
   }
 }
 
+export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepository, 'save'>, product: Product): Promise<void> {
+  // Existing order-based IDs cannot establish seed-entry identity on conflict.
+  await productRepo.save(product);
+}
+
 export async function runDevelopmentSeed(repositories: SeedRepositories): Promise<void> {
   const existingProducts = await repositories.productRepo.findAll();
   if (existingProducts.length > 0) {
@@ -568,8 +573,8 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
     // Set deterministic ID for idempotency
     (product as any).id = prodData.id;
 
-    await productRepo.save(product);
-    console.log(`  ✅ Created product: ${product.name} (${category.name} - ${prodData.vendorSlug})`);
+    await saveSeedProductIfAbsent(productRepo, product);
+    console.log(`  Created product: ${product.name} (${category.name} - ${prodData.vendorSlug})`);
   }
 
   console.log(`✅ Created ${PRODUCTS.length} products`);

@@ -40,6 +40,17 @@ describe('Seed Integration', () => {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin-secret';
 
   describe('runSeed', () => {
+    it('fails explicitly on an unverified existing seed product without overwriting it', async () => {
+      await runSeed(repositories);
+      const products = await productRepo.findAll();
+      const preserved = products[0];
+      preserved.images = ['/retained'];
+      await productRepo.delete(products[1].id);
+      await expect(runSeed(repositories)).rejects.toThrow('PRODUCT_CONFLICT');
+      expect((await productRepo.findById(preserved.id))?.images).toEqual(['/retained']);
+      expect(await productRepo.findById(products[1].id)).toBeNull();
+      expect(await productRepo.findAll()).toHaveLength(products.length - 1);
+    });
     it('requires deployment-managed passwords for every production seed account before seeding', () => {
       expect(() => validateSeedEnvironment({
         NODE_ENV: 'production',

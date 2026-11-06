@@ -130,6 +130,8 @@ export function createProductRoutes({ authService, productService, personRepo, v
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case ProductError.PRODUCT_CONFLICT:
+            return res.status(409).json({ error: ProductError.PRODUCT_CONFLICT, message: 'Product creation conflict' });
           case ProductError.PRODUCT_VENDOR_REQUIRED:
             return res.status(404).json({ error: ProductError.PRODUCT_VENDOR_REQUIRED, message: 'Vendor profile not found for this user' });
           case ProductError.PRODUCT_CATEGORY_NOT_FOUND:
