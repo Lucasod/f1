@@ -7,6 +7,15 @@ function product(images: string[]) {
 }
 
 describe('product creation conflicts', () => {
+  it('atomically rejects concurrent in-memory saves with the same seed identity and different IDs', async () => {
+    const repo = new InMemoryProductRepository();
+    const first = Product.reconstruct({ ...product(['/first']), id: 'one', seedIdentity: 'seed:a' });
+    const second = Product.reconstruct({ ...product(['/second']), id: 'two', seedIdentity: 'seed:a' });
+    const outcomes = await Promise.allSettled([repo.save(first), repo.save(second)]);
+    expect(outcomes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter(result => result.status === 'rejected').map(result => (result as PromiseRejectedResult).reason.message)).toEqual(['PRODUCT_CONFLICT']);
+    expect(await repo.findAll()).toHaveLength(1);
+  });
   it('does not let repeated in-memory saves replace existing images', async () => {
     const repo = new InMemoryProductRepository();
     await repo.save(product(['/first']));

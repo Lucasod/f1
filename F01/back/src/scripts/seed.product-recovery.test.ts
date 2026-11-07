@@ -8,6 +8,15 @@ const makeProduct = (id: string, vendorId = 'vendor') => Product.reconstruct({
 });
 
 describe('seed product conflict recovery', () => {
+  it('rejects ambiguous duplicate identity records and a colliding target ID', async () => {
+    const candidate = Product.reconstruct({ ...makeProduct('target'), seedIdentity: 'seed-product:entry-a' } as any);
+    const existing = Product.reconstruct({ ...makeProduct('other'), seedIdentity: 'seed-product:entry-a' } as any);
+    const duplicate = Product.reconstruct({ ...makeProduct('another'), seedIdentity: 'seed-product:entry-a' } as any);
+    const repo = { save: vi.fn(), findAll: vi.fn().mockResolvedValueOnce([existing, duplicate]).mockResolvedValueOnce([existing]), findById: vi.fn().mockResolvedValue(makeProduct('target')) };
+    await expect(saveSeedProductIfAbsent(repo as any, candidate)).rejects.toThrow(ProductError.PRODUCT_CONFLICT);
+    await expect(saveSeedProductIfAbsent(repo as any, candidate)).rejects.toThrow(ProductError.PRODUCT_CONFLICT);
+    expect(repo.save).not.toHaveBeenCalled();
+  });
   it('does not duplicate one seed identity when positional IDs differ', async () => {
     const stored = new Map<string, Product>();
     const repo = {
@@ -17,6 +26,7 @@ describe('seed product conflict recovery', () => {
         return value;
       }),
       findById: vi.fn(async (id: string) => stored.get(id) ?? null),
+      findAll: vi.fn(async () => Array.from(stored.values())),
     };
     const first = Product.reconstruct({ ...makeProduct('position-1'), seedIdentity: 'seed-product:entry-a' } as any);
     const reordered = Product.reconstruct({ ...makeProduct('position-2'), seedIdentity: 'seed-product:entry-a' } as any);
@@ -28,7 +38,7 @@ describe('seed product conflict recovery', () => {
     const existing = Product.reconstruct({ ...makeProduct('first'), seedIdentity: 'seed-product:entry-a' } as any);
     existing.name = 'edited name';
     const candidate = Product.reconstruct({ ...makeProduct('first'), seedIdentity: 'seed-product:entry-a' } as any);
-    const repo = { save: vi.fn().mockRejectedValue(new Error(ProductError.PRODUCT_CONFLICT)), findById: vi.fn().mockResolvedValue(existing) };
+    const repo = { save: vi.fn().mockRejectedValue(new Error(ProductError.PRODUCT_CONFLICT)), findById: vi.fn().mockResolvedValue(existing), findAll: vi.fn().mockResolvedValue([existing]) };
     await expect(saveSeedProductIfAbsent(repo as any, candidate)).resolves.toBeUndefined();
     expect(existing.name).toBe('edited name');
   });
@@ -42,6 +52,7 @@ describe('seed product conflict recovery', () => {
         return value;
       }),
       findById: vi.fn(async (id: string) => stored.get(id) ?? null),
+      findAll: vi.fn(async () => Array.from(stored.values())),
     };
     const entry = () => Product.reconstruct({ ...makeProduct('first'), seedIdentity: 'seed-product:entry-a' } as any);
     const outcomes = await Promise.allSettled([saveSeedProductIfAbsent(repo as any, entry()), saveSeedProductIfAbsent(repo as any, entry())]);
@@ -57,7 +68,7 @@ describe('seed product conflict recovery', () => {
       makeProduct('first'),
     ];
     for (const existing of records) {
-      const repo = { save: vi.fn().mockRejectedValue(new Error(ProductError.PRODUCT_CONFLICT)), findById: vi.fn().mockResolvedValue(existing) };
+      const repo = { save: vi.fn().mockRejectedValue(new Error(ProductError.PRODUCT_CONFLICT)), findById: vi.fn().mockResolvedValue(existing), findAll: vi.fn().mockResolvedValue([existing]) };
       await expect(saveSeedProductIfAbsent(repo as any, candidate)).rejects.toThrow(ProductError.PRODUCT_CONFLICT);
     }
   });
@@ -81,10 +92,10 @@ describe('seed product conflict recovery', () => {
   });
 
   it('propagates uncertain write outcomes even when an identity might exist', async () => {
-    const repo = { save: vi.fn().mockRejectedValue(new Error('ambiguous write')), findById: vi.fn() };
+    const repo = { save: vi.fn().mockRejectedValue(new Error('ambiguous write')), findById: vi.fn().mockResolvedValue(null), findAll: vi.fn().mockResolvedValue([]) };
     const candidate = Product.reconstruct({ ...makeProduct('first'), seedIdentity: 'seed-product:entry-a' } as any);
     await expect(saveSeedProductIfAbsent(repo as any, candidate)).rejects.toThrow('ambiguous write');
-    expect(repo.findById).not.toHaveBeenCalled();
+    expect(repo.findById).toHaveBeenCalledTimes(1);
   });
 
   it('reports an ambiguous first write and permits a later verified retry without overwriting', async () => {
@@ -96,12 +107,13 @@ describe('seed product conflict recovery', () => {
         throw new Error('ambiguous write');
       }),
       findById: vi.fn(async () => stored ?? null),
+      findAll: vi.fn(async () => stored ? [stored] : []),
     };
     const candidate = Product.reconstruct({ ...makeProduct('first'), seedIdentity: 'seed-product:entry-a' } as any);
     await expect(saveSeedProductIfAbsent(repo as any, candidate)).rejects.toThrow('ambiguous write');
     await expect(saveSeedProductIfAbsent(repo as any, candidate)).resolves.toBeUndefined();
     expect(stored).toBe(candidate);
-    expect(repo.save).toHaveBeenCalledTimes(2);
+    expect(repo.save).toHaveBeenCalledTimes(1);
   });
   it('fails closed for the same ID and vendor when seed identity cannot be established', async () => {
     const existing = makeProduct('first');

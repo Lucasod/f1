@@ -40,23 +40,55 @@ describe('Seed Integration', () => {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin-secret';
 
   describe('runSeed', () => {
+    it('fails before writes when partial catalog recovery lacks its prerequisite', async () => {
+      await runSeed(repositories);
+      const products = await productRepo.findAll();
+      await productRepo.delete(products[1].id);
+      vi.spyOn(productRepo, 'assertSeedIdentityReady').mockRejectedValue(new Error('PRODUCT_SEED_INDEX_UNAVAILABLE'));
+      const productSave = vi.spyOn(productRepo, 'save');
+      const personSave = vi.spyOn(personRepo, 'save');
+      const personUpdate = vi.spyOn(personRepo, 'update');
+      const vendorSave = vi.spyOn(vendorRepo, 'save');
+      const categorySave = vi.spyOn(categoryRepo, 'save');
+      await expect(runDevelopmentSeed(repositories)).rejects.toThrow('PRODUCT_SEED_INDEX_UNAVAILABLE');
+      expect(productSave).not.toHaveBeenCalled();
+      expect(personSave).not.toHaveBeenCalled();
+      expect(personUpdate).not.toHaveBeenCalled();
+      expect(vendorSave).not.toHaveBeenCalled();
+      expect(categorySave).not.toHaveBeenCalled();
+    });
+
+    it('does not require a seed index when a complete catalog only needs demo accounts', async () => {
+      await runSeed(repositories);
+      const preflight = vi.spyOn(productRepo, 'assertSeedIdentityReady').mockRejectedValue(new Error('unexpected preflight'));
+      await expect(runDevelopmentSeed(repositories)).resolves.toBeUndefined();
+      expect(preflight).not.toHaveBeenCalled();
+    });
     it('resumes the missing catalog entry through runDevelopmentSeed without changing other products', async () => {
       await runSeed(repositories);
       const products = await productRepo.findAll();
       const preserved = products[0];
       preserved.images = ['/retained'];
       await productRepo.delete(products[1].id);
+      const personSave = vi.spyOn(personRepo, 'save');
+      const personUpdate = vi.spyOn(personRepo, 'update');
+      const vendorSave = vi.spyOn(vendorRepo, 'save');
+      const categorySave = vi.spyOn(categoryRepo, 'save');
       await runDevelopmentSeed(repositories);
       expect(await productRepo.findById(products[1].id)).not.toBeNull();
       expect((await productRepo.findById(preserved.id))?.images).toEqual(['/retained']);
+      expect(personSave).not.toHaveBeenCalled();
+      expect(personUpdate).not.toHaveBeenCalled();
+      expect(vendorSave).not.toHaveBeenCalled();
+      expect(categorySave).not.toHaveBeenCalled();
     });
-    it('does not resume a partial catalog through runDevelopmentSeed', async () => {
+    it('restores the missing item in a partial catalog through runDevelopmentSeed', async () => {
       await runSeed(repositories);
       const products = await productRepo.findAll();
       await productRepo.delete(products[1].id);
       await runDevelopmentSeed(repositories);
-      expect(await productRepo.findById(products[1].id)).toBeNull();
-      expect(await productRepo.findAll()).toHaveLength(products.length - 1);
+      expect(await productRepo.findById(products[1].id)).not.toBeNull();
+      expect(await productRepo.findAll()).toHaveLength(products.length);
     });
 
     it('resumes verified seed products without overwriting them', async () => {

@@ -27,28 +27,30 @@ export class MongoProductRepository implements ProductRepository {
     this.productsCollection = db.collection<ProductDoc>('products');
   }
 
+  async assertSeedIdentityReady(): Promise<void> {
+    let indexes;
+    try {
+      indexes = await this.productsCollection.listIndexes().toArray();
+    } catch {
+      throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
+    }
+    const safeIndex = indexes.some(index => {
+      const key = index.key;
+      const partial = index.partialFilterExpression;
+      return index.unique === true && !!key && Object.keys(key).length === 1 && key.seedIdentity === 1
+        && !!partial && Object.keys(partial).length === 1
+        && !!partial.seedIdentity && Object.keys(partial.seedIdentity).length === 1
+        && partial.seedIdentity.$type === 'string'
+        && (!index.collation || index.collation.locale === 'simple');
+    });
+    if (!safeIndex) throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
+  }
+
   async save(product: Product): Promise<Product> {
     const productId = product.id;
     const now = new Date();
 
-    if (product.seedIdentity) {
-      let indexes;
-      try {
-        indexes = await this.productsCollection.listIndexes().toArray();
-      } catch {
-        throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
-      }
-      const safeIndex = indexes.some(index => {
-        const key = index.key;
-        const partial = index.partialFilterExpression;
-        return index.unique === true && !!key && Object.keys(key).length === 1 && key.seedIdentity === 1
-          && !!partial && Object.keys(partial).length === 1
-          && !!partial.seedIdentity && Object.keys(partial.seedIdentity).length === 1
-          && partial.seedIdentity.$type === 'string'
-          && (!index.collation || index.collation.locale === 'simple');
-      });
-      if (!safeIndex) throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
-    }
+    if (product.seedIdentity) await this.assertSeedIdentityReady();
 
     let result;
     try {

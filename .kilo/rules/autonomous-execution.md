@@ -15,6 +15,7 @@
 - The Reviewer is independent and read-only. It reports findings and ends. Code verifies each finding, fixes confirmed in-scope defects, reruns relevant checks, and requests a new review after material changes. Do not claim review approval when delegation failed, was skipped, or was inconclusive.
 - Use orchestration outcomes `PASS`, `CORRECTIONS_NEEDED`, `INCONCLUSIVE`, or `BLOCKED`. `PASS` means only that the completed review found no corrective finding in the examined scope.
 - Stop retrying the same finding after three attempts without demonstrable progress. Record exact errors and continue with independent eligible tasks when safe.
+- For unresolved REDs, name each failing behavior and link it to its acceptance criterion, evidence, dependency, and current state in the run record. A peripheral mitigation is not completion of the RED or its criterion. After two consecutive rounds without demonstrated progress on the RED, stop that line of work, record the evidence and reassess its dependencies and state; select independent eligible work only when authorized and safe. This earlier convergence stop does not extend or replace the existing per-finding attempt limit.
 
 ## Persistence and reports
 

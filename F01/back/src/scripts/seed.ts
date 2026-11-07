@@ -420,7 +420,19 @@ async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
   }
 }
 
-export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepository, 'save' | 'findById'>, product: Product): Promise<void> {
+export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepository, 'save' | 'findById' | 'findAll'>, product: Product): Promise<void> {
+  if (product.seedIdentity) {
+    const matching = (await productRepo.findAll()).filter(item => item.seedIdentity === product.seedIdentity);
+    if (matching.length > 1) throw new Error(ProductError.PRODUCT_CONFLICT);
+    if (matching.length === 1) {
+      const existing = matching[0];
+      if (existing.vendorId !== product.vendorId) throw new Error(ProductError.PRODUCT_CONFLICT);
+      const occupied = await productRepo.findById(product.id);
+      if (occupied && occupied.id !== existing.id) throw new Error(ProductError.PRODUCT_CONFLICT);
+      return;
+    }
+    if (await productRepo.findById(product.id)) throw new Error(ProductError.PRODUCT_CONFLICT);
+  }
   try {
     await productRepo.save(product);
   } catch (error) {
@@ -433,6 +445,27 @@ export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepositor
 export async function runDevelopmentSeed(repositories: SeedRepositories): Promise<void> {
   const existingProducts = await repositories.productRepo.findAll();
   if (existingProducts.length > 0) {
+    const hasSeedProducts = existingProducts.some(product => PRODUCTS.some(entry => entry.seedIdentity === product.seedIdentity));
+    const catalogIncomplete = PRODUCTS.some(entry => !existingProducts.some(product => product.seedIdentity === entry.seedIdentity));
+    if (hasSeedProducts && catalogIncomplete) {
+      await repositories.productRepo.assertSeedIdentityReady();
+      const categories = new Map<string, Category>();
+      const vendors = new Map<string, string>();
+      for (const entry of PRODUCTS) {
+        if (!categories.has(entry.categorySlug)) {
+          const category = await repositories.categoryRepo.findBySlug(entry.categorySlug);
+          if (!category) throw new Error('SEED_CATEGORY_NOT_FOUND');
+          categories.set(entry.categorySlug, category);
+        }
+        if (!vendors.has(entry.vendorSlug)) {
+          const vendor = await repositories.vendorRepo.findBySlug(entry.vendorSlug);
+          if (!vendor) throw new Error('SEED_VENDOR_NOT_FOUND');
+          vendors.set(entry.vendorSlug, vendor.id);
+        }
+      }
+      await seedProducts(repositories.productRepo, categories, vendors);
+      return;
+    }
     console.log('Product repository not empty, ensuring demo accounts without reseeding catalog');
     await seedDemoAccounts(repositories.personRepo);
     return;
@@ -447,6 +480,7 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
   // 1. Validate environment
   console.log('📋 Validating environment...');
   validateSeedEnvironment();
+  await repositories.productRepo.assertSeedIdentityReady();
   console.log('✅ Environment validation passed');
 
   const { personRepo, vendorRepo, categoryRepo, productRepo } = repositories;
@@ -567,6 +601,20 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
   // 6. Create products
   console.log('📦 Creating products...');
 
+  await seedProducts(productRepo, categoryMap, vendorSlugToId);
+
+  console.log(`✅ Created ${PRODUCTS.length} products`);
+
+  // 7. Summary
+  console.log('\n📊 Seed Summary:');
+  console.log(`  Categories: ${CATEGORIES.length}`);
+  console.log(`  Vendors: ${VENDORS.length}`);
+  console.log(`  Demo accounts: ${ACCOUNTS.length}`);
+  console.log(`  Products: ${PRODUCTS.length}`);
+  console.log('\n✨ Seed completed successfully!');
+}
+
+async function seedProducts(productRepo: ProductRepository, categoryMap: Map<string, Category>, vendorSlugToId: Map<string, string>): Promise<void> {
   for (const prodData of PRODUCTS) {
     const vendorId = vendorSlugToId.get(prodData.vendorSlug);
     if (!vendorId) {
@@ -596,15 +644,6 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
     console.log(`  Created product: ${product.name} (${category.name} - ${prodData.vendorSlug})`);
   }
 
-  console.log(`✅ Created ${PRODUCTS.length} products`);
-
-  // 7. Summary
-  console.log('\n📊 Seed Summary:');
-  console.log(`  Categories: ${CATEGORIES.length}`);
-  console.log(`  Vendors: ${VENDORS.length}`);
-  console.log(`  Demo accounts: ${ACCOUNTS.length}`);
-  console.log(`  Products: ${PRODUCTS.length}`);
-  console.log('\n✨ Seed completed successfully!');
 }
 
 export {

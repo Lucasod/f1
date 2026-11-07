@@ -390,6 +390,7 @@ export class Category {
 }
 
 export interface ProductRepository {
+  assertSeedIdentityReady(): Promise<void>;
   save(product: Product): Promise<Product>;
   findById(id: string): Promise<Product | null>;
   findByVendorId(vendorId: string): Promise<Product[]>;
@@ -406,8 +407,10 @@ export class InMemoryProductRepository implements ProductRepository {
   private vendorIndex: Map<string, Set<string>> = new Map();
   private categoryIndex: Map<string, Set<string>> = new Map();
 
+  async assertSeedIdentityReady(): Promise<void> {}
+
   async save(product: Product): Promise<Product> {
-    if (this.products.has(product.id)) {
+    if (this.products.has(product.id) || (product.seedIdentity && Array.from(this.products.values()).some(existing => existing.seedIdentity === product.seedIdentity))) {
       throw new Error(ProductError.PRODUCT_CONFLICT);
     }
     this.products.set(product.id, product);
