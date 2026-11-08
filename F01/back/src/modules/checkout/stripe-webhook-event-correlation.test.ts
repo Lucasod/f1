@@ -50,8 +50,8 @@ describe('Stripe webhook event correlation', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPaymentWithEventId as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment } as unknown as PaymentService,
-      { clearCart: vi.fn() } as any
+      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { clearCart: vi.fn(), removeItem: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -101,8 +101,8 @@ describe('Stripe webhook event correlation', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPaymentNew as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment } as unknown as PaymentService,
-      { clearCart: vi.fn() } as any
+      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { clearCart: vi.fn(), removeItem: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;

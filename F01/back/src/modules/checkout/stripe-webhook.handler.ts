@@ -2,6 +2,7 @@ import { RequestHandler } from 'express';
 import Stripe from 'stripe';
 import { PaymentService, PaymentError } from '../order/payment.service';
 import { CartService } from '../cart/cart.service';
+import { CartError } from '../cart/cart.domain';
 import { TransferService } from '../transfer/transfer.service';
 import { Transfer } from '../transfer/transfer.domain';
 import { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
@@ -128,9 +129,26 @@ export function createStripeWebhookHandler(
         } catch {
           /* Best-effort; do not fail the webhook delivery if saving fails. */
         }
-        // Clear cart only after effective payment confirmation (CAPTURED)
-        // Await the (async) clearCart so failures are observed and handled (CD-059 / cart consistency).
-        await cartService.clearCart(payment.personId);
+        // Remove only the items effectively purchased from the cart,
+        // preserving non-purchased items. The webhook event correlation check
+        // above (lines 76-96) provides idempotency against duplicate deliveries.
+        const order = await paymentService['orderRepo'].findById(payment.orderId);
+        if (order) {
+          const purchasedProductIds = new Set(
+            order.vendorGroups.flatMap(vg => vg.items.map(item => item.productId))
+          );
+          for (const productId of purchasedProductIds) {
+            try {
+              await cartService.removeItem(payment.personId, productId);
+            } catch (err) {
+              // Item may already be removed or not in cart; ignore for idempotency
+              if (!(err instanceof Error) ||
+                  !['CART_ITEM_NOT_FOUND', 'CART_NOT_FOUND', 'CART_CONFLICT'].includes(err.message)) {
+                throw err;
+              }
+            }
+          }
+        }
         // After successful payment capture, create the transfer for each vendor group
         // Note: transfer creation is triggered separately; this is just the payment confirmation
       } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
