@@ -69,8 +69,9 @@ function fixture(real = false) {
   const orderRepo = { findById: async () => stored, update: async order => { writes++; return order; } };
   const vendorRepo = { findByPersonId: async () => ({ id: 'vendor-a' }) };
   let principal;
+  const service = new OrderService(orderRepo, {}, {}, vendorRepo, {});
   createOrderRoutes({
-    orderService: new OrderService(orderRepo, {}, {}, vendorRepo, {}), personRepo: {}, vendorRepo,
+    orderService: service, personRepo: {}, vendorRepo,
     authService: { verifyToken: () => principal },
   });
   const route = registered.find(entry => entry.method === 'patch' && entry.route === '/orders/:orderId/items/delivery');
@@ -88,7 +89,7 @@ function fixture(real = false) {
     }
     return { status, body: response };
   }
-  return { roles, stored, request, writes: () => writes };
+  return { roles, stored, service, request, writes: () => writes };
 }
 
 test('vendor delivery response excludes other vendor data and total', async () => {
@@ -177,4 +178,36 @@ test('consumer owner and admin retain whole-order delivery responses', async () 
     assert.equal(result.body.order.financialStatus, 'partially_refunded');
     assert.equal(f.stored.vendorGroups[1].items[0].deliveredBy, actor.sub);
   }
+});
+
+test('dual-role owner uses consumer access while non-owner is vendor-scoped', async () => {
+  const owner = fixture();
+  const ownerResult = await owner.request({ sub: 'consumer', roles: ['CONSUMER', 'VENDOR'] }, { itemIds: ['item-vendor-b'] });
+  assert.equal(ownerResult.status, 200);
+  assert.deepEqual(ownerResult.body.order.vendorGroups.map(group => group.vendorId), ['vendor-a', 'vendor-b']);
+  assert.equal(owner.stored.vendorGroups[1].items[0].deliveredBy, 'consumer');
+
+  const vendor = fixture();
+  const foreignBefore = JSON.stringify(vendor.stored.vendorGroups[1]);
+  const ownResult = await vendor.request({ sub: 'vendor-person', roles: ['CONSUMER', 'VENDOR'] }, { itemIds: ['item-vendor-a'] });
+  assert.equal(ownResult.status, 200);
+  assert.deepEqual(ownResult.body.order.vendorGroups.map(group => group.vendorId), ['vendor-a']);
+  assert.equal(JSON.stringify(vendor.stored.vendorGroups[1]), foreignBefore);
+
+  const foreign = fixture();
+  const before = JSON.stringify(foreign.stored);
+  const foreignResult = await foreign.request({ sub: 'vendor-person', roles: ['CONSUMER', 'VENDOR'] }, { itemIds: ['item-vendor-b'] });
+  const missingResult = await foreign.request({ sub: 'vendor-person', roles: ['CONSUMER', 'VENDOR'] }, { itemIds: ['missing-item'] });
+  assert.equal(foreignResult.status, 404);
+  assert.deepEqual(foreignResult, missingResult);
+  assert.equal(JSON.stringify(foreign.stored), before);
+  assert.equal(foreign.writes(), 0);
+});
+
+test('service independently rejects consumer without order ownership', async () => {
+  const f = fixture();
+  const before = JSON.stringify(f.stored);
+  await assert.rejects(f.service.markItemsDelivered('order-1', 'other-consumer', 'consumer', undefined, undefined, true), { message: 'FORBIDDEN' });
+  assert.equal(JSON.stringify(f.stored), before);
+  assert.equal(f.writes(), 0);
 });

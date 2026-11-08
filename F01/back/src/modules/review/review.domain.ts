@@ -192,7 +192,6 @@ export class InMemoryReviewRepository implements ReviewRepository {
   async save(review: Review): Promise<Review> {
     if ([...this.reviews.values()].some(existing =>
       existing.id === review.id
-      || (review.orderId !== undefined && existing.orderId === review.orderId)
       || (review.orderItemId !== undefined && existing.orderItemId === review.orderItemId)
     )) {
       throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);

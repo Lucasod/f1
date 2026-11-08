@@ -343,6 +343,16 @@ describe('Checkout Routes', () => {
     });
 
     describe('Error cases', () => {
+      it('returns a conflict when a pending cart is retried with a different delivery address', async () => {
+        await addToCart(consumerId, productId, 2);
+        const first = await request(app).post('/api/v1/checkout')
+          .set('Authorization', `Bearer ${consumerToken}`).send({ shippingAddressId: addressId });
+        expect(first.status).toBe(201);
+        const second = await request(app).post('/api/v1/checkout')
+          .set('Authorization', `Bearer ${consumerToken}`).send({ shippingAddressId: addressId2 });
+        expect(second.status).toBe(409);
+        expect(second.body.error).toBe('PENDING_ORDER_ADDRESS_CONFLICT');
+      });
       it('should return 400 for empty cart', async () => {
         // Cart doesn't exist or is empty
         const response = await request(app)

@@ -385,6 +385,46 @@ describe('Review routes', () => {
       });
   });
 
+  it('accepts reviews for different delivered items in one order and rejects duplicate or unauthorized items', async () => {
+    const secondProduct = Product.create({
+      vendorId: 'second-vendor', categoryId: 'review-category', name: 'Second product',
+      description: 'Second vendor item', price: 12, quantity: 1,
+    });
+    await productRepository.save(secondProduct);
+    const order = Order.create({
+      personId: consumerPersonId,
+      vendorGroups: [product, secondProduct].map(item => ({
+        vendorId: item.vendorId,
+        items: [{ productId: item.id, productName: item.name, vendorId: item.vendorId, quantity: 1, unitPrice: item.price }],
+        commissionPct: 10,
+      })),
+      shippingAddress: {
+        id: 'multi-address', street: 'Main Street', number: '1', neighborhood: 'Centro',
+        city: 'São Paulo', state: 'SP', isPrimary: true,
+      },
+    });
+    order.markPaymentAuthorized();
+    for (const vendorId of ['review-vendor', 'second-vendor']) {
+      for (const status of [OrderVendorGroupStatus.CONFIRMED, OrderVendorGroupStatus.PREPARING, OrderVendorGroupStatus.SHIPPED, OrderVendorGroupStatus.DELIVERED]) {
+        order.updateVendorGroupStatus(vendorId, status);
+      }
+    }
+    expect(order.status).toBe(OrderStatus.DELIVERED);
+    await orderRepository.save(order);
+    const [firstItem, secondItem] = order.vendorGroups.map(group => group.items[0]);
+
+    await request(app).post(`/api/v1/products/${secondProduct.id}/reviews`)
+      .set('Authorization', `Bearer ${otherConsumerToken}`).send({ orderId: order.id, rating: 5 }).expect(403);
+    await request(app).post(`/api/v1/products/${product.id}/reviews`)
+      .set('Authorization', `Bearer ${consumerToken}`).send({ orderId: order.id, orderItemId: secondItem.id, rating: 5 }).expect(403);
+    await request(app).post(`/api/v1/products/${product.id}/reviews`)
+      .set('Authorization', `Bearer ${consumerToken}`).send({ orderId: order.id, rating: 5 }).expect(201);
+    await request(app).post(`/api/v1/products/${secondProduct.id}/reviews`)
+      .set('Authorization', `Bearer ${consumerToken}`).send({ orderItemId: secondItem.id, rating: 4 }).expect(201);
+    await request(app).post(`/api/v1/products/${product.id}/reviews`)
+      .set('Authorization', `Bearer ${consumerToken}`).send({ orderItemId: firstItem.id, rating: 5 }).expect(409);
+  });
+
   it('orderId flow: non-owner consumer → 403', async () => {
     await request(app)
       .post(`/api/v1/products/${product.id}/reviews`)
@@ -423,6 +463,36 @@ describe('Review routes', () => {
       .set('Authorization', `Bearer ${consumerToken}`)
       .send({ orderId: pendingOrder.id, rating: 4 })
       .expect(403);
+  });
+
+  it('rejects a delivered item until its entire order is delivered in both submission flows', async () => {
+    const order = Order.create({
+      personId: consumerPersonId,
+      vendorGroups: ['review-vendor', 'other-vendor'].map(vendorId => ({
+        vendorId,
+        items: [{ productId: vendorId === 'review-vendor' ? product.id : 'other-product', productName: product.name, vendorId, quantity: 1, unitPrice: product.price }],
+        commissionPct: 10,
+      })),
+      shippingAddress: {
+        id: 'partial-address', street: 'Main Street', number: '1', neighborhood: 'Centro',
+        city: 'São Paulo', state: 'SP', isPrimary: true,
+      },
+    });
+    order.markPaymentAuthorized();
+    for (const status of [OrderVendorGroupStatus.CONFIRMED, OrderVendorGroupStatus.PREPARING, OrderVendorGroupStatus.SHIPPED, OrderVendorGroupStatus.DELIVERED]) {
+      order.updateVendorGroupStatus('review-vendor', status);
+    }
+    expect(order.status).not.toBe(OrderStatus.DELIVERED);
+    expect(order.vendorGroups[0].items[0].isDelivered).toBe(true);
+    await orderRepository.save(order);
+
+    for (const reference of [{ orderId: order.id }, { orderItemId: order.vendorGroups[0].items[0].id }]) {
+      await request(app)
+        .post(`/api/v1/products/${product.id}/reviews`)
+        .set('Authorization', `Bearer ${consumerToken}`)
+        .send({ ...reference, rating: 4 })
+        .expect(403);
+    }
   });
 
   it('orderId flow: product not in order → 403', async () => {

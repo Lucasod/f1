@@ -2,10 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { InMemoryReviewRepository, Review, ReviewStatus } from './review.domain';
 import { MongoReviewRepository } from './review.mongo.repository';
 import { ReviewService } from './review.service';
+import { MongoServerError } from 'mongodb';
 
 const makeReview = () => Review.create({ productId: 'p', consumerId: 'c', orderId: 'o', rating: 5 });
 
 describe('review concurrent writers', () => {
+  it('accepts distinct order items but admits only one concurrent save per item', async () => {
+    const repo = new InMemoryReviewRepository();
+    const makeItemReview = (orderItemId: string) => Review.create({ productId: 'p', consumerId: 'c', orderId: 'o', orderItemId, rating: 5 });
+    const results = await Promise.allSettled([repo.save(makeItemReview('item-1')), repo.save(makeItemReview('item-1')), repo.save(makeItemReview('item-2'))]);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(2);
+    expect(results.filter(result => result.status === 'rejected').map(result => (result as PromiseRejectedResult).reason.message)).toEqual(['REVIEW_ALREADY_EXISTS']);
+  });
+
+  it('maps Mongo duplicate-key insertion conflicts to the same review error', async () => {
+    const insertOne = vi.fn().mockRejectedValue(new MongoServerError({ message: 'duplicate', code: 11000 }));
+    const repo = new MongoReviewRepository({ collection: () => ({ insertOne }) } as any);
+    await expect(repo.save(Review.create({ productId: 'p', consumerId: 'c', orderId: 'o', orderItemId: 'item-1', rating: 5 }))).rejects.toThrow('REVIEW_ALREADY_EXISTS');
+  });
   it('isolates snapshots and rejects a stale image or moderation write', async () => {
     const repo = new InMemoryReviewRepository();
     const initial = makeReview();

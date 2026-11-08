@@ -279,6 +279,20 @@ describe('OnboardingForm', () => {
       );
     });
 
+    it('preserves spaces typed in store names and trims the submitted fields', async () => {
+      renderForm();
+      const storeName = await screen.findByLabelText(/store name/i);
+      const slug = screen.getByLabelText(/store slug/i);
+      await userEvent.type(storeName, '  My Awesome Store  ');
+      await userEvent.type(slug, '  my-store  ');
+      expect(storeName).toHaveValue('  My Awesome Store  ');
+      await userEvent.click(screen.getByRole('button', { name: /create store/i }));
+      await waitFor(() => expect(mockedVendorApi.onboard).toHaveBeenCalledWith({
+        storeName: 'My Awesome Store',
+        slug: 'my-store',
+      }));
+    });
+
     it('should call vendorApi.onboard with correct payload on valid submission', async () => {
       renderForm();
 

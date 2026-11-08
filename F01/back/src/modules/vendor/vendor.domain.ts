@@ -132,6 +132,10 @@ export class InMemoryVendorRepository implements VendorRepository {
   private slugIndex: Map<string, string> = new Map();
   private personIndex: Map<string, string> = new Map();
 
+  async countAll(): Promise<number> {
+    return this.vendors.size;
+  }
+
   async save(vendor: Vendor): Promise<Vendor> {
     const existingSlugId = this.slugIndex.get(vendor.slug.toLowerCase());
     if (existingSlugId && existingSlugId !== vendor.id) {

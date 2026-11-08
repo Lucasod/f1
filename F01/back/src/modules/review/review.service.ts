@@ -51,12 +51,16 @@ export class ReviewService {
 
     if (resolvedOrderId) {
       const order = await this.orderRepo.findById(resolvedOrderId);
-      if (!order || order.personId !== input.consumerId) {
+      if (!order || order.personId !== input.consumerId || order.status !== OrderStatus.DELIVERED) {
         throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
       }
-      const matchingItem = order.vendorGroups
+      const matchingItems = order.vendorGroups
         .flatMap(group => group.items)
-        .find(item => item.productId === input.productId);
+        .filter(item => item.productId === input.productId && (!resolvedOrderItemId || item.id === resolvedOrderItemId));
+      if (!resolvedOrderItemId && matchingItems.length > 1) {
+        throw new Error(ReviewError.REVIEW_CONFLICT);
+      }
+      const matchingItem = matchingItems[0];
       if (!matchingItem || !matchingItem.isDelivered) {
         throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
       }
@@ -66,15 +70,9 @@ export class ReviewService {
       if (!resolvedOrderItemId) {
         resolvedOrderItemId = matchingItem.id;
       }
-      const duplicate = (await this.reviewRepo.findAll()).some(existing =>
-        existing.orderId === resolvedOrderId && existing.productId === input.productId
-      );
-      if (duplicate) {
-        throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
-      }
     } else if (resolvedOrderItemId) {
       const orders = await this.orderRepo.findByPersonId(input.consumerId);
-      const eligibleOrder = orders.find(order =>
+      const eligibleOrder = orders.find(order => order.personId === input.consumerId && order.status === OrderStatus.DELIVERED &&
         order.vendorGroups.some(group =>
           group.items.some(item =>
             item.id === resolvedOrderItemId && item.productId === input.productId && item.isDelivered
@@ -85,9 +83,17 @@ export class ReviewService {
         throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
       }
       resolvedOrderId = eligibleOrder.id;
-      if (await this.reviewRepo.findByOrderItemId(resolvedOrderItemId)) {
-        throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
-      }
+    }
+
+    if (!resolvedOrderId || !resolvedOrderItemId) {
+      throw new Error(ReviewError.REVIEW_PURCHASE_NOT_ELIGIBLE);
+    }
+    if (await this.reviewRepo.findByOrderItemId(resolvedOrderItemId)) {
+      throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
+    }
+    const orderReviews = await this.reviewRepo.findByOrderId(resolvedOrderId);
+    if (orderReviews.some(review => !review.orderItemId && review.productId === input.productId)) {
+      throw new Error(ReviewError.REVIEW_ALREADY_EXISTS);
     }
 
     return this.reviewRepo.save(Review.create({

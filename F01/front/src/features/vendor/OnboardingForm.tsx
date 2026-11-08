@@ -59,8 +59,7 @@ export function OnboardingForm() {
   };
 
   const handleChange = (field: keyof VendorOnboardInput, value: string) => {
-    const trimmedValue = value.trim();
-    setFormData(prev => ({ ...prev, [field]: trimmedValue }));
+    setFormData(prev => ({ ...prev, [field]: value }));
     if (validationErrors[field]) {
       setValidationErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -126,7 +125,7 @@ export function OnboardingForm() {
     setError(null);
 
     try {
-      await vendorApi.onboard(formData);
+      await vendorApi.onboard({ storeName: formData.storeName.trim(), slug: formData.slug.trim() });
       try {
         await refreshUserProfile();
       } catch (sessionError) {

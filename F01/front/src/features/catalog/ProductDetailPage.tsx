@@ -85,11 +85,12 @@ function ProductDetailContent() {
 
   const product = data?.product;
   const isOutOfStock = !product || product.quantity === 0 || product.status === 'out_of_stock';
+  const isUnavailable = !product || product.status !== 'active' || isOutOfStock;
   const statusVariant = product ? getStatusVariant(product.status, product.quantity) : 'neutral';
   const statusLabel = product ? getStatusLabel(product.status, product.quantity) : 'Unknown';
 
   // Reset quantity when product changes - use useEffect to avoid render-time setState
-  const maxQuantity = isOutOfStock ? 0 : (product?.quantity ?? 1);
+  const maxQuantity = isUnavailable ? 0 : (product?.quantity ?? 1);
   useEffect(() => {
     if (quantity > maxQuantity) {
       setQuantity(Math.max(1, maxQuantity));
@@ -123,7 +124,7 @@ function ProductDetailContent() {
   }, [maxQuantity]);
 
   const handleAddToCart = useCallback(async () => {
-    if (!product || isOutOfStock) return;
+    if (!product || isUnavailable) return;
 
     // Clear previous error and added message at start
     setCartError(null);
@@ -167,7 +168,7 @@ function ProductDetailContent() {
         setCartError(err instanceof Error ? err.message : 'Failed to add to cart');
       }
     }
-  }, [product, quantity, isOutOfStock, addItemMutation, addedTimeoutId]);
+  }, [product, quantity, isUnavailable, addItemMutation, addedTimeoutId]);
 
   const handleBrowseProducts = useCallback(() => {
     navigate('/products');
@@ -337,7 +338,7 @@ function ProductDetailContent() {
                     <button
                       type="button"
                       onClick={handleDecrement}
-                      disabled={quantity <= 1 || isOutOfStock}
+                      disabled={quantity <= 1 || isUnavailable}
                       className="px-4 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                       aria-label="Decrease quantity"
                     >
@@ -355,14 +356,14 @@ function ProductDetailContent() {
                       }}
                       min={1}
                       max={maxQuantity}
-                      disabled={isOutOfStock}
+                      disabled={isUnavailable}
                       className="w-16 text-center border-x border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       aria-label="Quantity"
                     />
                     <button
                       type="button"
                       onClick={handleIncrement}
-                      disabled={quantity >= maxQuantity || isOutOfStock}
+                      disabled={quantity >= maxQuantity || isUnavailable}
                       className="px-4 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                       aria-label="Increase quantity"
                     >
@@ -378,7 +379,7 @@ function ProductDetailContent() {
 
                 {/* Add to Cart Button */}
                 <div className="w-full sm:w-auto">
-                  {isOutOfStock ? (
+                  {isUnavailable ? (
                     <Button
                       variant="secondary"
                       size="lg"
@@ -386,7 +387,7 @@ function ProductDetailContent() {
                       disabled={true}
                       className="w-full sm:w-auto"
                     >
-                      Out of Stock
+                      {product.status === 'inactive' || product.status === 'discontinued' ? 'Unavailable' : 'Out of Stock'}
                     </Button>
                   ) : (
                     <>

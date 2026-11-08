@@ -170,6 +170,20 @@ describe('ProductDetailPage', () => {
     expect(screen.getByText('Discontinued')).toBeInTheDocument();
   });
 
+  it.each(['inactive', 'discontinued'] as const)(
+    'does not offer cart actions for a %s product with stock',
+    async (status) => {
+      vi.mocked(productApi.getById).mockResolvedValue({ product: { ...mockProduct, status } });
+      render(<ProductDetailPage />, { wrapper: createWrapper() });
+
+      const button = await screen.findByRole('button', { name: /unavailable/i });
+      expect(button).toBeDisabled();
+      expect(screen.getByRole('spinbutton', { name: 'Quantity' })).toBeDisabled();
+      fireEvent.click(button);
+      expect(cartApi.addItem).not.toHaveBeenCalled();
+    },
+  );
+
   it('displays product image with correct src', async () => {
     const wrapper = createWrapper();
     render(<ProductDetailPage />, { wrapper });

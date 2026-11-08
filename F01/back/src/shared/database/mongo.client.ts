@@ -83,6 +83,10 @@ export async function initializeCollections(): Promise<void> {
     // Products indexes
     productsCollection.createIndex({ vendorId: 1 }),
     productsCollection.createIndex({ categoryId: 1 }),
+    productsCollection.createIndex(
+      { seedIdentity: 1 },
+      { unique: true, partialFilterExpression: { seedIdentity: { $type: 'string' } } }
+    ),
 
     // Review indexes
     reviewsCollection.createIndex({ productId: 1, status: 1, createdAt: -1 }),

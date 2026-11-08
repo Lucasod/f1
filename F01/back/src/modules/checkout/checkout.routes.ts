@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { AuthService } from '../auth/auth.service';
-import { CheckoutService, CheckoutPreviewResponse } from './checkout.service';
+import { CheckoutService, CheckoutPreviewResponse, PENDING_ORDER_ADDRESS_CONFLICT } from './checkout.service';
 import { PersonRepository } from '../person/person.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
@@ -92,6 +92,8 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
             return res.status(400).json({ error: OrderError.CART_EMPTY, message: 'Cart is empty' });
           case OrderError.INVALID_SHIPPING_ADDRESS:
             return res.status(404).json({ error: OrderError.INVALID_SHIPPING_ADDRESS, message: 'Invalid shipping address' });
+          case PENDING_ORDER_ADDRESS_CONFLICT:
+            return res.status(409).json({ error: PENDING_ORDER_ADDRESS_CONFLICT, message: 'A pending order for this cart has a different or unverifiable delivery address' });
           case OrderError.PRODUCT_NOT_FOUND:
             return res.status(404).json({ error: OrderError.PRODUCT_NOT_FOUND, message: 'Product not found' });
           case OrderError.INSUFFICIENT_STOCK:

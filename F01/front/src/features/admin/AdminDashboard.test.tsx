@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Order, orderApi } from '@/shared/api/order';
 import { Review, ReviewStatus, reviewApi } from '@/shared/api/review';
 import { AdminDashboard } from './AdminDashboard';
+import { adminApi } from '@/shared/api/admin';
+
+vi.mock('@/shared/api/admin', () => ({ adminApi: { getMetrics: vi.fn() } }));
 
 vi.mock('@/shared/api/order', async importOriginal => {
   const original = await importOriginal<typeof import('@/shared/api/order')>();
@@ -87,6 +90,28 @@ describe('AdminDashboard', () => {
     mockListOrders.mockResolvedValue({ orders: [], total: 0, page: 1, limit: 10 });
     mockListAdminReviews.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
     mockModerateReview.mockResolvedValue({ review });
+    vi.mocked(adminApi.getMetrics).mockResolvedValue({ orders: 137, vendors: 42, products: 205 });
+  });
+
+  it('shows registered record totals returned by the metrics API', async () => {
+    renderDashboard();
+    expect(await screen.findByText('137')).toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
+    expect(screen.getByText('205')).toBeInTheDocument();
+    expect(screen.getByText('Registered orders')).toBeInTheDocument();
+  });
+
+  it('explains that registered totals are read separately, not as a single snapshot', async () => {
+    renderDashboard();
+    const totals = screen.getByRole('region', { name: 'Registered totals' });
+    await within(totals).findByText('137');
+    expect(within(totals).getByText('Totals are counted separately and may reflect different moments, not a single snapshot.')).toBeVisible();
+  });
+
+  it('reports metric retrieval errors rather than showing zero totals', async () => {
+    vi.mocked(adminApi.getMetrics).mockRejectedValue(new Error('unavailable'));
+    renderDashboard();
+    expect(await screen.findByText(/unable to load registered totals/i)).toBeInTheDocument();
   });
 
   it('shows recent orders returned by the Admin order API', async () => {

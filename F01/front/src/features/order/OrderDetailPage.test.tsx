@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { orderApi, Order, OrderVendorGroup, OrderItem, OrderStatus, Address } from '@/shared/api/order';
 import { vendorApi } from '@/shared/api/vendor';
 import { AuthProvider } from '@/app/providers/AuthProvider';
+import { useAuthStore } from '@/app/providers/authStore';
 import React from 'react';
 
 // Mock useAuth before importing OrderDetailPage
@@ -248,6 +249,39 @@ describe('OrderDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: /PREPARING/i })).toBeInTheDocument());
+  });
+
+  it('does not restore vendor actions when a previous identity profile resolves late', async () => {
+    setMockAuthRole('VENDOR', 'vendor-person-1');
+    useAuthStore.setState({ user: { ...mockUseAuth.user, roles: ['VENDOR'] } });
+    let resolveOld!: (value: Awaited<ReturnType<typeof vendorApi.getMe>>) => void;
+    const oldProfile = new Promise<Awaited<ReturnType<typeof vendorApi.getMe>>>(resolve => { resolveOld = resolve; });
+    vi.mocked(vendorApi.getMe).mockReset()
+      .mockReturnValueOnce(oldProfile)
+      .mockRejectedValueOnce(new Error('Profile unavailable'));
+    vi.mocked(orderApi.getById)
+      .mockResolvedValueOnce({ order: { ...mockOrder, vendorGroups: [mockVendorGroup1] } })
+      .mockResolvedValueOnce({ order: { ...mockOrder, vendorGroups: [mockVendorGroup2] } });
+    const { rerender } = renderWithNav(<OrderDetailPage />);
+    await waitFor(() => expect(vendorApi.getMe).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Produto Teste 1')).toBeInTheDocument();
+
+    setMockAuthRole('VENDOR', 'vendor-person-2');
+    act(() => {
+      useAuthStore.setState({ user: { ...mockUseAuth.user, roles: ['VENDOR'] } });
+      rerender(<OrderDetailPage />);
+    });
+    await waitFor(() => expect(screen.getByText(/could not load vendor profile/i)).toBeInTheDocument());
+    expect(await screen.findByText('Produto Teste 2')).toBeInTheDocument();
+    expect(screen.queryByText('Produto Teste 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /PREPARING/i })).not.toBeInTheDocument();
+
+    await act(async () => resolveOld({ vendor: { id: 'vendor-1', personId: 'vendor-person-1', storeName: 'Store', slug: 'store', status: 'active', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' } }));
+    expect(screen.getByText(/could not load vendor profile/i)).toBeInTheDocument();
+    expect(screen.queryByText('Produto Teste 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /PREPARING/i })).not.toBeInTheDocument();
+    expect(orderApi.updateVendorGroupStatus).not.toHaveBeenCalled();
+    act(() => useAuthStore.setState({ user: null }));
   });
 
   it('shows error state when fetch fails with retry button', async () => {

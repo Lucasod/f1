@@ -166,16 +166,9 @@ export class MongoOrderRepository implements OrderRepository {
       }
     }
 
-    if (isPaidTransition && result.modifiedCount === 0) {
-      const existing = await this.ordersCollection.findOne({ _id: orderId });
-      if (existing && existing.status === OrderStatus.PAID) {
-        // idempotent success: already PAID, do not overwrite
-        return Order.reconstruct({
-          ...order.toJSON(),
-          status: OrderStatus.PAID,
-          updatedAt: existing.updatedAt
-        } as any);
-      }
+    if (isPaidTransition && result.matchedCount === 0) {
+      // The stored PAID status does not prove that the caller's other changes
+      // were persisted. Let callers resolve a rejected transition explicitly.
       throw new Error(OrderError.INVALID_STATUS_TRANSITION);
     }
 

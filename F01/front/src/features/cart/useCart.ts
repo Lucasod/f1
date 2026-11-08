@@ -16,7 +16,7 @@ export function useCartMutations() {
   const queryClient = useQueryClient();
 
   const invalidateCart = () => {
-    queryClient.invalidateQueries({ queryKey: ['cart'] });
+    return queryClient.invalidateQueries({ queryKey: ['cart'] });
   };
 
   const useAddItem = () =>
@@ -28,13 +28,13 @@ export function useCartMutations() {
   const useUpdateQuantity = () =>
     useMutation<{ cart: Cart }, Error, { productId: string; quantity: number }>({
       mutationFn: ({ productId, quantity }) => cartApi.updateItemQuantity(productId, { quantity }),
-      onSuccess: invalidateCart,
+      retry: false,
     });
 
   const useRemoveItem = () =>
     useMutation<{ cart: Cart }, Error, string>({
       mutationFn: (productId) => cartApi.removeItem(productId),
-      onSuccess: invalidateCart,
+      retry: false,
     });
 
   const useMergeGuestCart = () =>

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useOrders } from '@/features/order/useOrder';
+import { getOrderQueryScope, useOrders } from '@/features/order/useOrder';
+import { useAuthStore } from '@/app/providers/authStore';
+import { adminApi } from '@/shared/api/admin';
 import { reviewApi, type Review } from '@/shared/api/review';
 import { Card } from '@/components/ui/Card';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
@@ -24,6 +26,11 @@ function formatDate(value: string): string {
 }
 
 export function AdminDashboard() {
+  const user = useAuthStore(state => state.user);
+  const metrics = useQuery({
+    queryKey: ['admin', 'metrics', getOrderQueryScope(user)],
+    queryFn: adminApi.getMetrics,
+  });
   const { data, isLoading, error, refetch } = useOrders({ page: 1, limit: 10 });
   const orders = data?.orders ?? [];
 
@@ -68,6 +75,21 @@ export function AdminDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="mt-1 text-gray-600">Recent marketplace orders</p>
         </header>
+
+        <section aria-label="Registered totals" className="mb-8">
+          {metrics.isLoading && <Spinner label="Loading registered totals" withStatusRole />}
+          {metrics.isError && <ErrorAlert title="Unable to load registered totals" message="Try again." variant="error" role="alert" action={{ label: 'Try again', onClick: () => metrics.refetch() }} />}
+          {!metrics.isError && metrics.data && (
+            <>
+              <p className="mb-3 text-sm text-gray-600">Totals are counted separately and may reflect different moments, not a single snapshot.</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card><p>Registered orders</p><p>{metrics.data.orders}</p></Card>
+                <Card><p>Registered vendors</p><p>{metrics.data.vendors}</p></Card>
+                <Card><p>Registered products</p><p>{metrics.data.products}</p></Card>
+              </div>
+            </>
+          )}
+        </section>
 
         <Card variant="bordered" padding="none">
           <div className="border-b border-gray-200 px-6 py-4">

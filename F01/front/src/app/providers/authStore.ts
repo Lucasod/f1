@@ -50,6 +50,10 @@ const STORAGE_KEYS = {
   USER: 'user'
 };
 
+let authEpoch = 0;
+let refreshEpoch = 0;
+let sessionEpoch = 0;
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -61,9 +65,11 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: async (email: string, password: string) => {
+        const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
         try {
           const response = await authApi.login({ email, password });
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           const { person, tokens } = response;
           
           const user = {
@@ -73,6 +79,11 @@ export const useAuthStore = create<AuthState>()(
             roles: person.roles as UserRole[]
           };
           
+          ++sessionEpoch;
+          queryClient.clear();
+          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
           set({
             user,
             accessToken: tokens.accessToken,
@@ -82,24 +93,23 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          // Also set individual localStorage keys for apiClient compatibility
-          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
-          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
-          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-          
           // Merge guest cart after successful login
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           await get().mergeGuestCartOnLogin();
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         } catch (error) {
           const message = error instanceof Error ? error.message : 'LOGIN_FAILED';
-          set({ isLoading: false, error: message, isAuthenticated: false });
+          if (epoch === authEpoch) set({ isLoading: false, error: message });
           throw error;
         }
       },
 
       register: async (input) => {
+        const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
         try {
           const response = await authApi.register(input);
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           const { person, tokens } = response;
           
           const user = {
@@ -109,6 +119,11 @@ export const useAuthStore = create<AuthState>()(
             roles: person.roles as UserRole[]
           };
           
+          ++sessionEpoch;
+          queryClient.clear();
+          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
           set({
             user,
             accessToken: tokens.accessToken,
@@ -118,21 +133,21 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          // Also set individual localStorage keys for apiClient compatibility
-          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
-          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
-          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-          
           // Merge guest cart after successful registration
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           await get().mergeGuestCartOnLogin();
+          if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         } catch (error) {
           const message = error instanceof Error ? error.message : 'REGISTRATION_FAILED';
-          set({ isLoading: false, error: message, isAuthenticated: false });
+          if (epoch === authEpoch) set({ isLoading: false, error: message });
           throw error;
         }
       },
 
       logout: () => {
+        ++authEpoch;
+        ++refreshEpoch;
+        ++sessionEpoch;
         // Clear individual localStorage keys for apiClient compatibility
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -146,11 +161,15 @@ export const useAuthStore = create<AuthState>()(
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
+          isLoading: false,
           error: null
         });
       },
 
       refreshAccessToken: async () => {
+        const epoch = authEpoch;
+        const session = sessionEpoch;
+        const refreshOperation = ++refreshEpoch;
         const { refreshToken } = get();
         if (!refreshToken) {
           get().logout();
@@ -159,23 +178,26 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const response = await authApi.refreshToken(refreshToken);
+          if (epoch !== authEpoch || session !== sessionEpoch || refreshOperation !== refreshEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
+          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, response.tokens.accessToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, response.tokens.refreshToken);
           set({
             accessToken: response.tokens.accessToken,
             refreshToken: response.tokens.refreshToken
           });
           
-          // Also update individual localStorage keys for apiClient compatibility
-          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, response.tokens.accessToken);
-          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, response.tokens.refreshToken);
         } catch (error) {
-          get().logout();
+          if (epoch === authEpoch && session === sessionEpoch && refreshOperation === refreshEpoch) get().logout();
           throw error;
         }
       },
 
       refreshUserProfile: async () => {
+        const epoch = authEpoch;
         await get().refreshAccessToken();
+        if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         const { person } = await personApi.getMe();
+        if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         const currentUser = get().user;
         if (!currentUser || currentUser.id !== person.id) {
           throw new Error('PERSON_MISMATCH');
@@ -235,11 +257,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       mergeGuestCartOnLogin: async () => {
+        const epoch = authEpoch;
         const guestCartId = localStorage.getItem('guestCartId');
         if (guestCartId) {
           try {
             await cartApi.mergeGuestCart({ guestCartId });
-            cartApi.clearGuestCartId();
+            if (epoch === authEpoch) cartApi.clearGuestCartId();
           } catch (error) {
             // Log error but don't fail login - guest cart merge is best effort
             console.error('Failed to merge guest cart:', error);

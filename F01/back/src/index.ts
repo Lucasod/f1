@@ -21,6 +21,7 @@ import { CheckoutService } from './modules/checkout/checkout.service';
 import { createStripeClientFromEnvironment, StripeCheckoutProvider } from './modules/checkout/stripe-checkout.provider';
 import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
 import { createOrderRoutes } from './modules/order/order.routes';
+import { createAdminMetricsRoutes, MongoAdminMetricsRepository } from './modules/admin/admin.metrics';
 import { OrderService } from './modules/order/order.service';
 import { PaymentService } from './modules/order/payment.service';
 import { createPersonRoutes } from './modules/person/person.routes';
@@ -252,6 +253,7 @@ financialRepo = new MongoFinancialAllocationRepository(db);
       console.log('✅ MongoDB repositories initialized');
 
       // Register routes after services are initialized
+      app.use('/api/v1/admin', createAdminMetricsRoutes({ authService, metrics: new MongoAdminMetricsRepository(db) }));
       // Auth routes
       app.use('/api/v1/auth', createAuthRoutes({ authService }));
 
@@ -320,7 +322,8 @@ financialRepo = new MongoFinancialAllocationRepository(db);
       if (config.nodeEnv === 'development') {
         console.log('🔄 Falling back to InMemory repositories for development...');
         personRepo = new InMemoryPersonRepository();
-        vendorRepo = new InMemoryVendorRepository();
+        const memoryVendorRepo = new InMemoryVendorRepository();
+        vendorRepo = memoryVendorRepo;
         categoryRepo = new InMemoryCategoryRepository();
         productRepo = new InMemoryProductRepository();
         cartRepo = new InMemoryCartRepository();
@@ -337,6 +340,14 @@ financialRepo = new InMemoryFinancialAllocationRepository();
         console.log('✅ InMemory repositories initialized (development fallback)');
 
         // Register routes after services are initialized (fallback path)
+        app.use('/api/v1/admin', createAdminMetricsRoutes({ authService, metrics: {
+          async getTotals() {
+            const [orders, vendors, products] = await Promise.all([
+              orderRepo.findAll(), memoryVendorRepo.countAll(), productRepo.findAll(),
+            ]);
+            return { orders: orders.length, vendors, products: products.length };
+          },
+        } }));
         // Auth routes
         app.use('/api/v1/auth', createAuthRoutes({ authService }));
 

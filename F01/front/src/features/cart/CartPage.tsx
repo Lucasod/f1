@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart, useCartMutations } from './useCart';
 import {
@@ -14,7 +14,7 @@ import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { ConfirmDialog } from '@/components/ui/Modal';
-import { CartItem } from '@/shared/api/cart';
+import { CartApiException, CartItem } from '@/shared/api/cart';
 import { Product } from '@/shared/api/product';
 import { productApi } from '@/shared/api/product';
 
@@ -29,76 +29,24 @@ function formatCurrency(value: number): string {
 }
 
 /**
- * Debounce hook for quantity changes
- */
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-/**
- * Hook to manage debounced quantities for multiple cart items.
- * Returns a record of debounced quantities keyed by productId.
- */
-function useDebouncedQuantities(
-  items: Array<{ productId: string; quantity: number }>,
-  delay: number
-): { debounced: Record<string, number>; setQuantity: (productId: string, quantity: number) => void } {
-  // Create a stable key for the items to avoid infinite loops
-  const itemsKey = useMemo(() => items.map((i) => `${i.productId}:${i.quantity}`).join(','), [items]);
-
-  // Create a map of productId -> quantity for initial values
-  const initialQuantities = useMemo(
-    () => Object.fromEntries(items.map((item) => [item.productId, item.quantity])),
-    [itemsKey]
-  );
-
-  // Use a single debounced object to avoid calling hooks in a loop
-  const [debouncedQuantities, setDebouncedQuantities] = useState<Record<string, number>>(initialQuantities);
-
-  // Update debounced quantities when items change (new items added/removed)
-  useEffect(() => {
-    setDebouncedQuantities((prev) => {
-      const next = { ...prev };
-      items.forEach((item) => {
-        if (next[item.productId] === undefined) {
-          next[item.productId] = item.quantity;
-        }
-      });
-      // Remove quantities for items that no longer exist
-      Object.keys(next).forEach((key) => {
-        if (!items.some((item) => item.productId === key)) {
-          delete next[key];
-        }
-      });
-      return next;
-    });
-  }, [itemsKey]);
-
-  // Debounce the quantities object
-  const debounced = useDebounce(debouncedQuantities, delay);
-
-  // Return a function to update a specific quantity
-  const setQuantity = useCallback((productId: string, quantity: number) => {
-    setDebouncedQuantities((prev) => ({ ...prev, [productId]: quantity }));
-  }, []);
-
-  return { debounced, setQuantity };
-}
-
-/**
  * Cart item with product details for display
  */
 interface CartItemWithProduct extends CartItem {
   product?: Product | null;
   productLoading: boolean;
   productError: string | null;
+}
+
+// These route/service rejections happen before calling the cart repository.
+// Repository-level errors are excluded: legacy recovery can write before rejection.
+function isPreWriteRejection(error: unknown, operation: 'update' | 'remove'): boolean {
+  if (!(error instanceof CartApiException)) return false;
+  if (error.status === 400 && (error.code === 'PRODUCT_ID_REQUIRED' || error.code === 'GUEST_CART_ID_INVALID')) return true;
+  return operation === 'update' && (
+    (error.status === 400 && error.code === 'INVALID_QUANTITY') ||
+    (error.status === 404 && error.code === 'PRODUCT_NOT_FOUND') ||
+    (error.status === 409 && error.code === 'PRODUCT_NOT_AVAILABLE')
+  );
 }
 
 /**
@@ -123,24 +71,26 @@ export function CartPage() {
   const [productsLoading, setProductsLoading] = useState(false);
   const [removeConfirm, setRemoveConfirm] = useState<{ productId: string; itemName: string } | null>(null);
   const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState('');
+  const [unconfirmed, setUnconfirmed] = useState<'write' | 'read' | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const busy = useRef(false);
 
   // Mutations
   const updateQuantityMutation = useUpdateQuantity();
   const removeItemMutation = useRemoveItem();
 
-  // Stable reference for items passed to debounced quantities hook
-  const debouncedItems = useMemo(
-    () => itemsWithProducts.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-    [itemsWithProducts]
-  );
-
-  // Debounced quantities for each item - using custom hook to avoid calling hooks in loop
-  const { debounced: debouncedQuantities, setQuantity: setDebouncedQuantity } = useDebouncedQuantities(
-    debouncedItems,
-    500
-  );
-
   // Fetch product details for cart items
+  useEffect(() => {
+    if (!cartData?.cart) return;
+    const ids = new Set(cartData.cart.items.map((item) => item.productId));
+    const retainCurrent = (entries: Record<string, string>) =>
+      Object.fromEntries(Object.entries(entries).filter(([id]) => ids.has(id)));
+    setDrafts(retainCurrent);
+    setQuantityErrors(retainCurrent);
+  }, [cartData?.cart?.items]);
+
   useEffect(() => {
     if (!cartData?.cart?.items?.length) {
       setItemsWithProducts([]);
@@ -164,7 +114,7 @@ export function CartPage() {
       setItemsWithProducts((prev) =>
         prev.map((i) =>
           i.productId === item.productId
-            ? { ...i, product, productLoading: false, productError: product ? null : 'Produto não encontrado' }
+            ? { ...i, product, productLoading: false, productError: product ? null : 'Product not found' }
             : i
         )
       );
@@ -173,45 +123,60 @@ export function CartPage() {
     setProductsLoading(false);
   }, [cartData?.cart?.items]);
 
-  // Handle quantity change with debounce
+  const reconcile = useCallback(async (uncertainWrite: boolean) => {
+    try {
+      await refetchCart({ throwOnError: true });
+      setUnconfirmed(uncertainWrite ? 'write' : null);
+    } catch {
+      setUnconfirmed(uncertainWrite ? 'write' : 'read');
+    }
+  }, [refetchCart]);
+
+  const retryRead = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setProcessing(true);
+    try { await reconcile(unconfirmed === 'write'); }
+    finally { busy.current = false; setProcessing(false); }
+  }, [reconcile, unconfirmed]);
+
   const handleQuantityChange = useCallback(
-    (productId: string, newQuantity: number) => {
-      // Validate minimum
-      if (newQuantity < 1) return;
-
-      // Find item to check max stock
+    async (productId: string, draft: string) => {
       const item = itemsWithProducts.find((i) => i.productId === productId);
+      if (!item) return;
+      const newQuantity = Number(draft);
       const maxStock = item?.product?.quantity;
-
-      if (maxStock !== undefined && newQuantity > maxStock) {
+      if (!Number.isSafeInteger(newQuantity) || newQuantity < 1 || (maxStock !== undefined && newQuantity > maxStock)) {
         setQuantityErrors((prev) => ({
           ...prev,
-          [productId]: `Maximum stock: ${maxStock}`,
+          [productId]: maxStock !== undefined ? `Enter a quantity between 1 and ${maxStock}.` : 'Enter a valid quantity.',
         }));
         return;
       }
-
-      // Clear error for this item
       setQuantityErrors((prev) => {
         const next = { ...prev };
         delete next[productId];
         return next;
       });
 
-      // Update debounced quantity locally for immediate UI feedback
-      setDebouncedQuantity(productId, newQuantity);
-
-      // Debounced mutation
-      updateQuantityMutation.mutate({ productId, quantity: newQuantity }, {
-        onError: (error) => {
-          setQuantityErrors((prev) => ({
-            ...prev,
-            [productId]: error.message || 'Erro ao atualizar quantidade',
-          }));
-        },
-      });
+      if (newQuantity !== item.quantity) {
+        if (busy.current) return;
+        busy.current = true;
+        setProcessing(true);
+        let uncertainWrite = false;
+        try {
+          await updateQuantityMutation.mutateAsync({ productId, quantity: newQuantity });
+          setNotice('');
+        } catch (error) {
+          uncertainWrite = !isPreWriteRejection(error, 'update');
+          setNotice(uncertainWrite ? 'Could not confirm the update.' : 'The update was rejected.');
+        }
+        try { await reconcile(uncertainWrite); }
+        finally { busy.current = false; setProcessing(false); }
+      }
+      setDrafts((prev) => { const next = { ...prev }; delete next[productId]; return next; });
     },
-    [itemsWithProducts, updateQuantityMutation, setDebouncedQuantity]
+    [itemsWithProducts, updateQuantityMutation, reconcile]
   );
 
   // Handle remove item
@@ -219,17 +184,25 @@ export function CartPage() {
     setRemoveConfirm({ productId, itemName });
   }, []);
 
-  const handleRemoveConfirm = useCallback(() => {
+  const handleRemoveConfirm = useCallback(async () => {
     if (removeConfirm) {
-      removeItemMutation.mutate(removeConfirm.productId, {
-        onError: (error) => {
-          // Could show toast/error alert
-          console.error('Failed to remove item:', error);
-        },
-      });
+      if (busy.current) return;
+      busy.current = true;
+      setProcessing(true);
+      const productId = removeConfirm.productId;
       setRemoveConfirm(null);
+      let uncertainWrite = false;
+      try {
+        await removeItemMutation.mutateAsync(productId);
+        setNotice('');
+      } catch (error) {
+        uncertainWrite = !isPreWriteRejection(error, 'remove');
+        setNotice(uncertainWrite ? 'Could not confirm the removal.' : 'The removal was rejected.');
+      }
+      try { await reconcile(uncertainWrite); }
+      finally { busy.current = false; setProcessing(false); }
     }
-  }, [removeConfirm, removeItemMutation]);
+  }, [removeConfirm, removeItemMutation, reconcile]);
 
   const handleRemoveCancel = useCallback(() => {
     setRemoveConfirm(null);
@@ -237,19 +210,18 @@ export function CartPage() {
 
   // Calculate totals
   const subtotal = itemsWithProducts.reduce((sum, item) => {
-    const quantity = debouncedQuantities[item.productId] ?? item.quantity;
-    return sum + quantity * item.unitPrice;
+    return sum + item.quantity * item.unitPrice;
   }, 0);
 
   const isCartEmpty = itemsWithProducts.length === 0;
 
   // Loading state
-  if (cartLoading || productsLoading) {
+  if (processing || cartLoading || productsLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" label="Carregando carrinho" withStatusRole />
+            <Spinner size="lg" label={processing ? 'Processing cart' : 'Loading cart'} withStatusRole />
           </div>
         </div>
       </div>
@@ -257,17 +229,17 @@ export function CartPage() {
   }
 
   // Error state
-  if (cartError) {
+  if (unconfirmed || (cartError && !cartData)) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
-            message="Could not load cart. Try again."
-            title="Erro ao carregar carrinho"
+            message={unconfirmed === 'write' ? `${notice} Cart unconfirmed. Another read cannot guarantee the operation has finished.` : unconfirmed ? 'Cart unconfirmed. Check again before continuing.' : 'Could not load cart. Try again.'}
+            title="Cart unavailable"
             variant="error"
             action={{
-              label: 'Tentar novamente',
-              onClick: () => refetchCart(),
+              label: 'Try again',
+              onClick: () => { void retryRead(); },
             }}
             role="alert"
           />
@@ -281,12 +253,13 @@ export function CartPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          {notice && <p role="alert">{notice}</p>}
           <EmptyState
             icon={EmptyStateIcons.cart}
             title="Your cart is empty"
             description="Add products to your cart to start shopping."
             action={{
-              label: 'Continuar comprando',
+              label: 'Continue shopping',
               onClick: () => navigate('/products'),
               variant: 'primary',
             }}
@@ -301,11 +274,12 @@ export function CartPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Carrinho de Compras</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Shopping cart</h1>
           <p className="mt-1 text-gray-600">
             {itemsWithProducts.length} item{itemsWithProducts.length !== 1 ? 's' : ''} in cart
           </p>
         </div>
+        {notice && <p role="alert">{notice}</p>}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Cart Items */}
@@ -314,7 +288,7 @@ export function CartPage() {
               <div className="divide-y divide-gray-200">
                 {itemsWithProducts.map((item) => {
                   const product = item.product;
-                  const quantity = debouncedQuantities[item.productId] ?? item.quantity;
+                  const quantity = item.quantity;
                   const lineTotal = quantity * item.unitPrice;
                   const quantityError = quantityErrors[item.productId];
                   const maxStock = product?.quantity;
@@ -365,10 +339,10 @@ export function CartPage() {
                           ) : (
                             <>
                               <h3 className="font-medium text-gray-900 truncate">
-                                {product?.name || `Produto ${item.productId.slice(0, 8)}...`}
+                                {product?.name || `Product ${item.productId.slice(0, 8)}...`}
                               </h3>
                               <p className="text-sm text-gray-500 mt-1">
-                                Vendido por: <span className="font-medium">{product?.vendorId || item.vendorId}</span>
+                                Sold by: <span className="font-medium">{product?.vendorId || item.vendorId}</span>
                               </p>
                               <p className="text-sm text-gray-500">
                                 {formatCurrency(item.unitPrice)} / un
@@ -384,19 +358,27 @@ export function CartPage() {
                             type="number"
                             min={1}
                             max={maxStock}
-                            value={quantity}
+                            value={drafts[item.productId] ?? quantity}
                             onChange={(e) => {
-                              const value = parseInt(e.target.value, 10) || 1;
-                              handleQuantityChange(item.productId, value);
+                              setDrafts((prev) => ({ ...prev, [item.productId]: e.target.value }));
+                            }}
+                            onBlur={(e) => { if (drafts[item.productId] !== undefined) void handleQuantityChange(item.productId, e.currentTarget.value); }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                              if (e.key === 'Escape') {
+                                setDrafts((prev) => { const next = { ...prev }; delete next[item.productId]; return next; });
+                                setQuantityErrors((prev) => { const next = { ...prev }; delete next[item.productId]; return next; });
+                              }
                             }}
                             error={quantityError}
-                            aria-label={`Quantidade de ${product?.name || 'produto'}`}
+                            aria-label={`Quantity of ${product?.name || 'product'}`}
                             className="text-center"
-                            disabled={updateQuantityMutation.isPending}
+                            disabled={updateQuantityMutation.isPending || removeItemMutation.isPending || processing}
                           />
+                          <p className="text-xs text-gray-500">Press Enter or leave the field to confirm. Escape cancels.</p>
                           {maxStock !== undefined && (
                             <p className="text-xs text-gray-500 mt-1 text-center">
-                              Estoque: {maxStock}
+                              Stock: {maxStock}
                             </p>
                           )}
                         </div>
@@ -413,9 +395,9 @@ export function CartPage() {
                           <Button
                             variant="danger"
                             size="sm"
-                            onClick={() => handleRemoveClick(item.productId, product?.name || 'este item')}
-                            disabled={removeItemMutation.isPending}
-                            aria-label={`Remover ${product?.name || 'item'} do carrinho`}
+                            onClick={() => handleRemoveClick(item.productId, product?.name || 'this item')}
+                            disabled={removeItemMutation.isPending || updateQuantityMutation.isPending || processing || Object.keys(drafts).length > 0}
+                            aria-label={`Remove ${product?.name || 'item'} from cart`}
                           >
                             <svg
                               className="w-5 h-5"
@@ -431,7 +413,7 @@ export function CartPage() {
                                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                               />
                             </svg>
-                            <span className="sr-only">Remover</span>
+                            <span className="sr-only">Remove</span>
                           </Button>
                         </div>
                       </div>
@@ -446,7 +428,7 @@ export function CartPage() {
           <div className="lg:col-span-1">
             <Card variant="elevated" padding="md" className="sticky top-24">
               <CardHeader>
-                <CardTitle as="h2">Resumo do Pedido</CardTitle>
+                <CardTitle as="h2">Order summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
@@ -454,12 +436,12 @@ export function CartPage() {
                   <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Frete</span>
-                  <span className="font-medium text-gray-900">Calculado no checkout</span>
+                  <span className="text-gray-600">Shipping</span>
+                  <span className="font-medium text-gray-900">Calculated at checkout</span>
                 </div>
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex justify-between text-base">
-                    <span className="font-semibold text-gray-900">Total</span>
+                    <span className="font-semibold text-gray-900">Partial estimate excluding shipping</span>
                     <span className="font-bold text-gray-900 text-lg">
                       {formatCurrency(subtotal)}
                     </span>
@@ -471,17 +453,18 @@ export function CartPage() {
                   fullWidth
                   size="lg"
                   variant="primary"
-                  disabled={isCartEmpty || updateQuantityMutation.isPending || removeItemMutation.isPending}
+                  disabled={isCartEmpty || updateQuantityMutation.isPending || removeItemMutation.isPending || processing || !!unconfirmed || Object.keys(drafts).length > 0}
                   onClick={() => navigate('/checkout')}
                 >
-                  Ir para o Checkout
+                  Proceed to checkout
                 </Button>
                 <Button
                   fullWidth
                   variant="ghost"
+                  disabled={Object.keys(drafts).length > 0 || processing || updateQuantityMutation.isPending || removeItemMutation.isPending}
                   onClick={() => navigate('/products')}
                 >
-                  Continuar comprando
+                  Continue shopping
                 </Button>
               </CardFooter>
             </Card>
@@ -494,10 +477,10 @@ export function CartPage() {
         isOpen={!!removeConfirm}
         onClose={handleRemoveCancel}
         onConfirm={handleRemoveConfirm}
-        title="Remover item do carrinho"
-        message={`Tem certeza que deseja remover "${removeConfirm?.itemName}" do carrinho?`}
-        confirmLabel="Remover"
-        cancelLabel="Cancelar"
+        title="Remove item from cart"
+        message={`Are you sure you want to remove "${removeConfirm?.itemName}" from your cart?`}
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
         variant="danger"
         isLoading={removeItemMutation.isPending}
       />

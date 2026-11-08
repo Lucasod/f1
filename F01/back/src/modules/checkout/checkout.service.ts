@@ -19,6 +19,8 @@ import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
 import { CheckoutPaymentProvider } from './stripe-checkout.provider';
 
+export const PENDING_ORDER_ADDRESS_CONFLICT = 'PENDING_ORDER_ADDRESS_CONFLICT';
+
 export interface CouponTarget {
   inclusionCategories: string[]; // category IDs to include (descendants included)
   exclusionCategories: string[]; // category IDs to exclude (descendants excluded)
@@ -208,15 +210,27 @@ export class CheckoutService {
       .join('|');
 
     const existingOrders = await this.orderRepo.findByPersonId(consumerId);
-    for (const existing of existingOrders) {
-      if (existing.status !== OrderStatus.PENDING_PAYMENT) continue;
+    const matchingOrders = existingOrders.filter(existing => {
+      if (existing.personId !== consumerId || existing.status !== OrderStatus.PENDING_PAYMENT) return false;
       const existingSignature = existing.vendorGroups
         .flatMap(vg => vg.items)
         .map(i => `${i.productId}:${i.quantity}`)
         .sort()
         .join('|');
-      if (existingSignature !== cartSignature) continue;
+      return existingSignature === cartSignature;
+    });
 
+    const addressFields = ['id', 'street', 'number', 'neighborhood', 'city', 'state'] as const;
+    if (matchingOrders.some(existing => addressFields.some(field =>
+      typeof existing.shippingAddress?.[field] !== 'string' ||
+      typeof shippingAddress[field] !== 'string' ||
+      (field !== 'neighborhood' && existing.shippingAddress[field].trim().length === 0) ||
+      existing.shippingAddress[field] !== shippingAddress[field]
+    ))) {
+      throw new Error(PENDING_ORDER_ADDRESS_CONFLICT);
+    }
+
+    for (const existing of matchingOrders) {
       const payments = await this.paymentRepo.findByOrderId(existing.id);
       const existingPayment = payments[0] || Payment.create({
         orderId: existing.id,
