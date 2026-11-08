@@ -97,7 +97,7 @@ export function Modal({
       {/* Overlay */}
       <div
         ref={overlayRef}
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-black/50 transition-opacity z-40"
         aria-hidden="true"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
@@ -111,6 +111,7 @@ export function Modal({
             w-full ${sizeClasses[size]} bg-white rounded-xl shadow-xl
             transform transition-all duration-200
             animate-in fade-in zoom-in-95
+            z-50
           `}
         >
           {(title || showCloseButton) && (

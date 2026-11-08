@@ -157,15 +157,21 @@ export class CartService {
   async clearCart(consumerId: string): Promise<void | CartError.CART_CONFLICT> {
     const cart = await this.cartRepo.findById(consumerId);
     if (cart) {
-      // Only clear cart if generation is set (accepted generation)
-      if (!cart.generation) return;
-      const snapshot = Cart.reconstruct(cart.toJSON());
-      snapshot.clear();
-      try {
-        await this.cartRepo.update(snapshot);
-      } catch (error) {
-        if (error instanceof Error && error.message === CartError.CART_CONFLICT) return CartError.CART_CONFLICT;
-        throw error;
+      if (!cart.generation) {
+        // Bug fix: cart has no generation → delete and create a new empty cart
+        await this.cartRepo.delete(consumerId);
+        const newCart = Cart.create(consumerId);
+        await this.cartRepo.save(newCart);
+      } else {
+        // Normal clear path: reconstruct, clear, update (when generation is set)
+        const snapshot = Cart.reconstruct(cart.toJSON());
+        snapshot.clear();
+        try {
+          await this.cartRepo.update(snapshot);
+        } catch (error) {
+          if (error instanceof Error && error.message === CartError.CART_CONFLICT) return CartError.CART_CONFLICT;
+          throw error;
+        }
       }
     }
   }
