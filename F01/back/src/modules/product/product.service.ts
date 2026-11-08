@@ -11,6 +11,7 @@ import {
 } from './product.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { config } from '../../config';
+import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
 
 export interface CreateProductInput {
   vendorId: string;
@@ -50,15 +51,19 @@ export class ProductService {
   private readonly categoryRepo: CategoryRepository;
   private readonly vendorRepo: VendorRepository;
 
+  private readonly searchIndex?: ElasticsearchProductIndex;
+
   constructor(
     productRepo: ProductRepository,
     categoryRepo: CategoryRepository,
     vendorRepo: VendorRepository,
-    _config: typeof config
+    _config: typeof config,
+    searchIndex?: ElasticsearchProductIndex
   ) {
     this.productRepo = productRepo;
     this.categoryRepo = categoryRepo;
     this.vendorRepo = vendorRepo;
+    this.searchIndex = searchIndex;
   }
 
   // ============ Product Methods ============
@@ -88,7 +93,11 @@ export class ProductService {
       images: input.images
     });
 
-    return this.productRepo.save(product);
+    const saved = await this.productRepo.save(product);
+    if (this.searchIndex) {
+      await this.searchIndex.indexProduct(saved);
+    }
+    return saved;
   }
 
   async getProductById(id: string): Promise<Product | null> {
@@ -109,6 +118,14 @@ export class ProductService {
   }
 
   async listProducts(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]> {
+    if (this.searchIndex && filters?.search) {
+      return this.searchIndex.search({
+        status: filters.status,
+        vendorId: filters.vendorId,
+        search: filters.search,
+        sortBy: filters.sortBy,
+      });
+    }
     return this.productRepo.findAll(filters);
   }
 
@@ -179,7 +196,11 @@ export class ProductService {
       }
     }
 
-    return this.productRepo.update(product);
+    const updated = await this.productRepo.update(product);
+    if (this.searchIndex) {
+      await this.searchIndex.indexProduct(updated);
+    }
+    return updated;
   }
 
   async deleteProduct(productId: string, vendorId: string, isAdmin: boolean): Promise<void> {
@@ -210,7 +231,11 @@ export class ProductService {
     }
 
     product.inactivate();
-    return this.productRepo.update(product);
+    const updatedStock = await this.productRepo.update(product);
+    if (this.searchIndex) {
+      await this.searchIndex.indexProduct(updatedStock);
+    }
+    return updatedStock;
   }
 
   async activateProduct(productId: string, vendorId: string, isAdmin: boolean): Promise<Product> {
@@ -225,7 +250,11 @@ export class ProductService {
     }
 
     product.activate();
-    return this.productRepo.update(product);
+    const updatedStock = await this.productRepo.update(product);
+    if (this.searchIndex) {
+      await this.searchIndex.indexProduct(updatedStock);
+    }
+    return updatedStock;
   }
 
   async updateProductStock(
@@ -250,7 +279,11 @@ export class ProductService {
     }
 
     product.updateStock(quantity);
-    return this.productRepo.update(product);
+    const updatedStock = await this.productRepo.update(product);
+    if (this.searchIndex) {
+      await this.searchIndex.indexProduct(updatedStock);
+    }
+    return updatedStock;
   }
 
   // ============ Category Methods ============

@@ -846,3 +846,16 @@ OPERATIONAL PAUSE (T-703b partial; infrastructure verification pending). No comm
 - **Typecheck:** `npx tsc --noEmit` em `F01/back` → exit 0, zero diagnósticos.
 - **Git read-only:** `git cat-file -t e2caea1` → commit; `git status --short` confirmou worktree já dirty com alterações preexistentes; preservadas. Nenhum commit/push/rebase/mutação Git. Base `e2caea1` verificada. Sem AWS, Mongo operacional destrutivo, pagamentos reais ou dependências novas.
 - **Limitações:** testes usam Mongo local (container `back-mongo-1`, porta 27017) e DBs com sufixo aleatório; cleanup agora efetivo. Revisão independente ainda necessária; não se afirma PASS.
+
+### T-801/T-802 — Elasticsearch functional increment — 2026-11-08
+
+- **Scope implemented:** `F01/back/src/modules/search/elasticsearch-product-index.ts`, `F01/back/src/modules/product/product.service.ts`, `F01/back/src/index.ts`, `F01/back/src/integration/elasticsearch.integration.test.ts`, `F01/docs/task_list.md`.
+- **Base:** e2caea1 verified as commit. Pre-existing changes preserved.
+- **Implementation:** `ElasticsearchProductIndex` creates `products_v1` index with minimum mapping and `products` alias, idempotently. `indexProduct` uses the bounded `ElasticsearchProductWriter` for dual-write. `ProductService.createProduct` and `updateProduct` (plus stock/status mutations) index the saved product. `ProductService.listProducts` uses ES when `search` is provided; otherwise Mongo. GET `/api/v1/products` keeps filters, category descendant filtering, pagination and sort compatibility. ES delete remains unavailable via `ELASTICSEARCH_DELETE_UNAVAILABLE`. Indexing/search failures throw normalized errors.
+- **Verification:**
+  - `cd F01/back && npx tsc --noEmit` → exit 0, no diagnostics.
+  - `cd F01/back && npx vitest run src/modules/search src/modules/product/product.search-literal.test.ts` → 2 files, 20 tests passed.
+  - `cd F01/back && npx vitest run src/integration/elasticsearch.integration.test.ts` → 5 tests passed (ensure alias, index/search, filters, sort, delete unavailable).
+  - Backend startup with Mongo + ES → `✅ Elasticsearch product index ready`.
+- **Limits:** ES cluster watermark adjusted transiently in this environment due to high disk usage; not a code change. No independent review performed. No Git mutation. Real Mongo/ES integration covered by integration tests; broader suites not run.
+- **Review status:** REVIEW_PENDING. No PASS or DONE claimed.

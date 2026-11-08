@@ -54,6 +54,7 @@ import { MongoVendorRepository } from './modules/vendor/vendor.mongo.repository'
 import { MongoTransferRepository } from './modules/transfer/transfer.mongo.repository';
 import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
 import { MongoProductRepository } from './modules/product/product.mongo.repository';
+import { ElasticsearchProductIndex } from './modules/search/elasticsearch-product-index';
 import { MongoReviewRepository } from './modules/review/review.mongo.repository';
 import { MongoOrderRepository } from './modules/order/order.mongo.repository';
 import { MongoPaymentRepository } from './modules/order/payment.mongo.repository';
@@ -85,6 +86,7 @@ let invoiceRepo: InvoiceRepository;
 let walletRepo: WalletRepository;
 let walletTxRepo: WalletTransactionRepository;
 let financialRepo: FinancialAllocationRepository;
+let searchIndex: ElasticsearchProductIndex | undefined;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -115,7 +117,7 @@ function initializeServices(): void {
   const stripeClient = createStripeClientFromEnvironment();
   authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
   vendorService = new VendorService(vendorRepo, personRepo, config);
-  productService = new ProductService(productRepo, categoryRepo, vendorRepo, config);
+  productService = new ProductService(productRepo, categoryRepo, vendorRepo, config, searchIndex);
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
   checkoutService = new CheckoutService(
     orderRepo,
@@ -248,6 +250,16 @@ walletTxRepo = new MongoWalletTransactionRepository(db);
 financialRepo = new MongoFinancialAllocationRepository(db);
       transferRepo = new MongoTransferRepository(db);
 
+      // Initialize Elasticsearch product index (best effort)
+      searchIndex = new ElasticsearchProductIndex(config.elasticsearchUrl);
+      try {
+        await searchIndex.ensureIndex();
+        console.log('✅ Elasticsearch product index ready');
+      } catch (error) {
+        console.warn('⚠️ Elasticsearch product index unavailable:', error);
+        searchIndex = undefined;
+      }
+
       // Initialize services with MongoDB repositories
       initializeServices();
       console.log('✅ MongoDB repositories initialized');
@@ -335,6 +347,15 @@ invoiceRepo = new InMemoryInvoiceRepository();
 walletRepo = new InMemoryWalletRepository();
 walletTxRepo = new InMemoryWalletTransactionRepository();
 financialRepo = new InMemoryFinancialAllocationRepository();
+
+        searchIndex = new ElasticsearchProductIndex(config.elasticsearchUrl);
+        try {
+          await searchIndex.ensureIndex();
+          console.log('✅ Elasticsearch product index ready');
+        } catch (error) {
+          console.warn('⚠️ Elasticsearch product index unavailable:', error);
+          searchIndex = undefined;
+        }
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');

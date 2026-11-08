@@ -186,8 +186,8 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | audited (read-only, 2026-11-08): no ES client/implementation in backend; config + docker only. Sync contract, mapping, safe isolated ES verification and implementation remain. Not DONE. |
-| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | parallel audit candidate (read-only): query/sort/contract prerequisites; no implementation claim. Not blocked by T-302 coverage. |
+| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | 🟡 partial (2026-11-08): products_v1 index + products alias with minimum mapping, dual-write on product create/update, ES integration tests pass; delete unavailable by design. Independent review pending. |
+| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | 🟡 partial (2026-11-08): GET /api/v1/products uses ES when search is provided; filters/sort compatible; Mongo fallback for non-search. Independent review pending. |
 | T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | 🔴 blocked: depends on T-802; T-302's decision status is not itself a blocker. |
 
 ---
