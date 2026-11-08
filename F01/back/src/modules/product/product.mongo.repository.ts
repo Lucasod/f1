@@ -127,7 +127,7 @@ export class MongoProductRepository implements ProductRepository {
     }
 
     if (filters?.search) {
-      const searchRegex = new RegExp(filters.search, 'i');
+      const searchRegex = new RegExp(filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       query.$or = [
         { name: searchRegex },
         { description: searchRegex }
@@ -138,8 +138,7 @@ export class MongoProductRepository implements ProductRepository {
     const products = await cursor.toArray();
     let mappedProducts = products.map(doc => this.mapToProduct(doc));
 
-    if (filters?.sortBy) {
-      switch (filters.sortBy) {
+    switch (filters?.sortBy ?? 'stock_status') {
         case 'name':
           mappedProducts.sort((a, b) => a.name.localeCompare(b.name));
           break;
@@ -159,7 +158,6 @@ export class MongoProductRepository implements ProductRepository {
             return b.quantity - a.quantity;
           });
           break;
-      }
     }
 
     return mappedProducts;

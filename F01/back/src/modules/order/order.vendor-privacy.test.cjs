@@ -74,6 +74,7 @@ test('vendor A order detail excludes vendor B private group data', async () => {
     return id === storedOrder.id ? storedOrder : null;
   } };
   const vendorRepo = { findByPersonId: async personId => {
+    if (personId === 'fake-nonparticipant-person') return { id: 'fake-nonparticipant' };
     assert.equal(personId, 'fake-vendor-a-person');
     return { id: 'fake-vendor-a' };
   } };
@@ -117,6 +118,47 @@ test('vendor A order detail excludes vendor B private group data', async () => {
   assert.deepEqual(body.order.vendorGroups.map(group => group.vendorId), ['fake-vendor-a'],
     'Vendor A response must exclude vendor B group, items, commission and net');
   assert.equal(body.order.totalAmount, 100, 'Vendor detail total must exclude vendor B amounts');
+  assert.equal(Object.hasOwn(body.order, 'status'), false, 'Vendor detail must not disclose global order status');
+  assert.equal(Object.hasOwn(body.order, 'financialStatus'), false, 'Vendor detail must not disclose global financial status');
+
+  principal = { sub: 'fake-vendor-a-person', roles: [roles.CONSUMER, roles.VENDOR], type: 'access' };
+  delete req.user;
+  body = undefined;
+  status = 200;
+  for (const handler of detail.handlers) {
+    let advanced = false;
+    await handler(req, res, error => { if (error) throw error; advanced = true; });
+    if (!advanced) break;
+  }
+  assert.equal(status, 200);
+  assert.deepEqual(body.order.vendorGroups.map(group => group.vendorId), ['fake-vendor-a'], 'Nonowner consumer/vendor must retain only vendor-scoped access');
+  assert.equal(body.order.totalAmount, 100);
+
+  principal = { sub: 'fake-nonparticipant-person', roles: [roles.VENDOR], type: 'access' };
+  delete req.user;
+  body = undefined;
+  status = 200;
+  for (const handler of detail.handlers) {
+    let advanced = false;
+    await handler(req, res, error => { if (error) throw error; advanced = true; });
+    if (!advanced) break;
+  }
+  assert.equal(status, 403);
+  assert.equal(Object.hasOwn(body, 'order'), false);
+
+  // A nonparticipant cannot distinguish an absent order from a foreign order.
+  req.params.orderId = 'fake-missing-order';
+  delete req.user;
+  body = undefined;
+  status = 200;
+  for (const handler of detail.handlers) {
+    let advanced = false;
+    await handler(req, res, error => { if (error) throw error; advanced = true; });
+    if (!advanced) break;
+  }
+  assert.equal(status, 403);
+  assert.equal(Object.hasOwn(body, 'order'), false);
+  req.params.orderId = storedOrder.id;
 
   // Same isolated detail scenario: consumer ownership and admin precedence stay intact.
   for (const actor of [

@@ -127,7 +127,7 @@ export function OrderItemReview({ orderId, productId }: OrderItemReviewProps) {
 export interface OrderReviewSectionProps {
   order: {
     id: string;
-    status: string;
+    status?: string;
     vendorGroups: { items: { id: string; productId: string; productName: string }[] }[];
   };
   canReview?: boolean;

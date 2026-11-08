@@ -518,7 +518,7 @@ describe('CheckoutPage', () => {
     expect(applyButton).not.toBeDisabled();
   });
 
-  it('applies coupon code successfully', async () => {
+  it('does not mark a coupon applied when preview does not confirm validation', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -530,19 +530,26 @@ describe('CheckoutPage', () => {
     fireEvent.change(couponInput, { target: { value: 'TEST10' } });
     fireEvent.click(applyButton);
 
-    // Should not show coupon error (valid coupon applied - element not in document)
-    const couponError = screen.queryByTestId('coupon-error');
-    expect(couponError).toBeNull();
+    expect(await screen.findByText(/validação de cupons está indisponível/i)).toBeInTheDocument();
+    expect(mockUseCheckoutState.addCouponCode).not.toHaveBeenCalled();
   });
 
-  it('shows mixed-cart discount calculation pending note', async () => {
+  it('displays a coupon service error without applying the code', async () => {
+    mockCheckoutApi.preview.mockRejectedValueOnce(new Error('Cupons temporariamente indisponíveis'));
+    renderWithNav(<CheckoutPage />);
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('coupon-input'), { target: { value: 'EXAMPLE' } });
+    fireEvent.click(screen.getByTestId('coupon-apply-button'));
+    expect(await screen.findByText('Cupons temporariamente indisponíveis')).toBeInTheDocument();
+    expect(mockUseCheckoutState.addCouponCode).not.toHaveBeenCalled();
+  });
+
+  it('shows that coupon application is temporarily unavailable', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // The mixed-cart discount note should still be present for informational purposes
-    const mixedCartNote = screen.getByText(/Mixed-cart discount calculation pending Q-016 decision/i);
-    expect(mixedCartNote).toBeInTheDocument();
+    expect(screen.getByText(/Aplicação de cupons temporariamente indisponível/i)).toBeInTheDocument();
   });
 
 it('displays order summary with vendor groups, items, subtotal, discount, total', async () => {

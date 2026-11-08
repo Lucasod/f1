@@ -891,15 +891,18 @@ components:
       type: object
       description: Paginated order list response
       required:
-        - items
+        - orders
         - total
         - page
         - limit
       properties:
-        items:
+        orders:
           type: array
           items:
-            $ref: '#/components/schemas/Order'
+            anyOf:
+              - $ref: '#/components/schemas/Order'
+              - $ref: '#/components/schemas/VendorOrder'
+          description: Orders visible to the caller; vendors receive vendor-scoped VendorOrder entries.
         total:
           type: integer
           format: int32
@@ -925,8 +928,8 @@ components:
         status:
           type: string
           description: New status for the vendor group
-          enum: [PENDING, CONFIRMED, PREPARING, SHIPPED, DELIVERED, CANCELLED, RETURNED]
-          example: "CONFIRMED"
+          enum: [pending, confirmed, preparing, shipped, delivered, cancelled, returned]
+          example: "confirmed"
 
     OrderItem:
       type: object
@@ -1012,8 +1015,8 @@ components:
         status:
           type: string
           description: Vendor group status per CD-063
-          enum: [PENDING, CONFIRMED, PREPARING, SHIPPED, DELIVERED, CANCELLED, RETURNED]
-          example: "CONFIRMED"
+          enum: [pending, confirmed, preparing, shipped, delivered, cancelled, returned]
+          example: "confirmed"
         items:
           type: array
           description: Order items belonging to this vendor
@@ -1087,8 +1090,8 @@ components:
         status:
           type: string
           description: Order status per CD-063
-          enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
-          example: "PAID"
+          enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
+          example: "paid"
         vendorGroups:
           type: array
           description: Vendor-specific groups within this order
@@ -1105,8 +1108,8 @@ components:
         financialStatus:
           type: string
           description: Financial status per CD-058
-          enum: [FULLY_REFUNDED, PARTIALLY_REFUNDED, PAID]
-          example: "PAID"
+          enum: [fully_refunded, partially_refunded, paid]
+          example: "paid"
         createdAt:
           type: string
           format: date-time
@@ -1117,6 +1120,60 @@ components:
           format: date-time
           description: Last update timestamp
           example: "2024-01-20T14:45:00Z"
+
+    VendorOrder:
+      type: object
+      description: Vendor-scoped view of an order. Omits global order/financial status and recomputes totalAmount from the vendor's own OrderVendorGroups only (CD-039/CD-059).
+      required:
+        - id
+        - personId
+        - vendorGroups
+        - shippingAddress
+        - totalAmount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+          example: "550e8400-e29b-41d4-a716-446655440008"
+        personId:
+          type: string
+          format: uuid
+          description: Reference to the customer
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        vendorGroups:
+          type: array
+          description: Only the vendor's own groups within this order
+          items:
+            $ref: '#/components/schemas/OrderVendorGroup'
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        totalAmount:
+          type: number
+          format: float
+          description: Sum of the vendor's own group subtotals (in BRL)
+          minimum: 0
+          example: 599.98
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-20T14:45:00Z"
+        comment:
+          type: string
+          description: Optional order comment
+        commentedAt:
+          type: string
+          format: date-time
+        commentedBy:
+          type: string
 
     Payment:
       type: object
@@ -3181,10 +3238,10 @@ paths:
       parameters:
         - name: status
           in: query
-          description: Filter orders by status
+          description: Filter orders by status. Vendors cannot filter by global order status and receive 400 VENDOR_ORDER_STATUS_FILTER_UNAVAILABLE.
           schema:
             type: string
-            enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
+            enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
         - name: page
           in: query
           description: Page number (1-based)
@@ -3275,11 +3332,17 @@ paths:
           description: Order unique identifier
       responses:
         '200':
-          description: Order retrieved successfully
+          description: Order retrieved successfully. Consumer/Admin receive the full Order; a Vendor receives the vendor-scoped VendorOrder variant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Order'
+                type: object
+                required: [order]
+                properties:
+                  order:
+                    anyOf:
+                      - $ref: '#/components/schemas/Order'
+                      - $ref: '#/components/schemas/VendorOrder'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -3395,11 +3458,17 @@ paths:
               $ref: '#/components/schemas/OrderStatusUpdate'
       responses:
         '200':
-          description: OrderVendorGroup status updated successfully
+          description: OrderVendorGroup status updated successfully. Vendor actors receive the vendor-scoped VendorOrder variant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrderVendorGroup'
+                type: object
+                required: [order]
+                properties:
+                  order:
+                    anyOf:
+                      - $ref: '#/components/schemas/Order'
+                      - $ref: '#/components/schemas/VendorOrder'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -4328,7 +4397,7 @@ paths:
           description: Filter orders by status
           schema:
             type: string
-            enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
+            enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
         - name: vendorId
           in: query
           description: Filter orders by vendor ID

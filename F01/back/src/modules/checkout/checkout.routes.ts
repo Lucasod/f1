@@ -12,6 +12,15 @@ export interface CheckoutRoutesConfig {
   personRepo: PersonRepository;
 }
 
+function parseCouponCodes(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  const codes = Array.isArray(value) ? value : [value];
+  if (codes.length > 20 || codes.some(code => typeof code !== 'string' || code.trim().length === 0 || code.length > 64)) {
+    throw new Error('INVALID_COUPON_CODES');
+  }
+  return codes;
+}
+
 export function createCheckoutRoutes({ authService, checkoutService, personRepo }: CheckoutRoutesConfig): Router {
   const router = Router();
 
@@ -22,7 +31,13 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
   router.get('/preview', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const consumerId = req.user.sub;
-      const { couponCodes } = req.body;
+      const queryKeys = new URLSearchParams(req.originalUrl.split('?')[1] || '').keys();
+      if (Array.from(queryKeys).some(key => key.startsWith('couponCodes['))) throw new Error('INVALID_COUPON_CODES');
+      const couponCodes = parseCouponCodes(req.query.couponCodes);
+      const bodyCodes = parseCouponCodes(req.body?.couponCodes);
+      if ((couponCodes?.length ?? 0) > 0 || (bodyCodes?.length ?? 0) > 0) {
+        return res.status(503).json({ error: 'COUPONS_UNAVAILABLE', message: 'Coupon validation and application are temporarily unavailable' });
+      }
 
       const preview: CheckoutPreviewResponse = await checkoutService.previewCheckout(consumerId, couponCodes);
 
@@ -30,6 +45,8 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case 'INVALID_COUPON_CODES':
+            return res.status(400).json({ error: 'INVALID_COUPON_CODES', message: 'Invalid coupon codes' });
           case OrderError.CART_EMPTY:
             return res.status(400).json({ error: OrderError.CART_EMPTY, message: 'Cart is empty' });
           case OrderError.PERSON_ID_REQUIRED:
@@ -55,6 +72,12 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
         return res.status(400).json({ error: 'SHIPPING_ADDRESS_ID_REQUIRED', message: 'Shipping address ID is required' });
       }
 
+      if (couponCodes !== undefined && !Array.isArray(couponCodes)) throw new Error('INVALID_COUPON_CODES');
+      const parsedCoupons = parseCouponCodes(couponCodes);
+      if ((parsedCoupons?.length ?? 0) > 0) {
+        return res.status(503).json({ error: 'COUPONS_UNAVAILABLE', message: 'Coupon validation and application are temporarily unavailable' });
+      }
+
       const consumerId = req.user.sub;
 
       const { order, checkoutUrl } = await checkoutService.checkout(consumerId, shippingAddressId, couponCodes);
@@ -63,6 +86,8 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case 'INVALID_COUPON_CODES':
+            return res.status(400).json({ error: 'INVALID_COUPON_CODES', message: 'Invalid coupon codes' });
           case OrderError.CART_EMPTY:
             return res.status(400).json({ error: OrderError.CART_EMPTY, message: 'Cart is empty' });
           case OrderError.INVALID_SHIPPING_ADDRESS:

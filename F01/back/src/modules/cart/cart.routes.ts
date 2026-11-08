@@ -99,6 +99,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case CartError.CART_CONFLICT:
+            return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed or requires recovery' });
           case CartError.INVALID_QUANTITY:
             return res.status(400).json({ error: CartError.INVALID_QUANTITY, message: 'Quantity must be a positive integer' });
           case CartError.PRODUCT_NOT_FOUND:
@@ -155,6 +157,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case CartError.CART_CONFLICT:
+            return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed or requires recovery' });
           case CartError.INVALID_QUANTITY:
             return res.status(400).json({ error: CartError.INVALID_QUANTITY, message: 'Quantity must be a non-negative integer' });
           case CartError.PRODUCT_NOT_FOUND:
@@ -200,6 +204,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case CartError.CART_CONFLICT:
+            return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed or requires recovery' });
           case CartError.CART_NOT_FOUND:
             return res.status(404).json({ error: CartError.CART_NOT_FOUND, message: 'Cart not found' });
           case CartError.CART_ITEM_NOT_FOUND:
@@ -227,7 +233,9 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
   router.delete('/', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const consumerId = req.user.sub;
-      await cartService.clearCart(consumerId);
+      if (await cartService.clearCart(consumerId) === CartError.CART_CONFLICT) {
+        return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed; retry the operation' });
+      }
 
       const response: any = { cart: null };
       addGuestCartHeader(req, res, consumerId);
@@ -242,7 +250,9 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
   router.patch('/clear', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const consumerId = req.user.sub;
-      await cartService.clearCart(consumerId);
+      if (await cartService.clearCart(consumerId) === CartError.CART_CONFLICT) {
+        return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed; retry the operation' });
+      }
 
       const response: any = { cart: null };
       addGuestCartHeader(req, res, consumerId);
@@ -273,6 +283,8 @@ export function createCartRoutes({ authService, cartService, personRepo }: CartR
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case CartError.CART_CONFLICT:
+            return res.status(409).json({ error: CartError.CART_CONFLICT, message: 'Cart changed or requires recovery' });
           case CartError.CART_NOT_FOUND:
             return res.status(404).json({ error: CartError.CART_NOT_FOUND, message: 'Cart not found' });
           case 'CONSUMER_ID_REQUIRED':

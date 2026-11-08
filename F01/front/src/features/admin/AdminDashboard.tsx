@@ -113,7 +113,7 @@ export function AdminDashboard() {
                     <tr key={order.id}>
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">{order.id}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{formatDate(order.createdAt)}</td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm capitalize text-gray-600">{order.status.replace(/_/g, ' ')}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm capitalize text-gray-600">{(order.status ?? '').replace(/_/g, ' ')}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{formatCurrency(order.totalAmount)}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                         <Link className="font-medium text-blue-700 hover:text-blue-900" to={`/orders/${order.id}`}>

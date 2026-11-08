@@ -190,7 +190,7 @@ describe('VendorOrderPage', () => {
     // Reset mock implementation to clear any mockResolvedValueOnce queue
     vi.mocked(orderApi.getVendorOrderGroups).mockReset();
     vi.mocked(orderApi.getVendorOrderGroups).mockResolvedValue(mockVendorGroupsResponse);
-    vi.mocked(orderApi.updateVendorGroupStatus).mockResolvedValue({ vendorGroup: mockVendorGroup1 });
+    vi.mocked(orderApi.updateVendorGroupStatus).mockResolvedValue({ order: {} as any });
   });
 
   it('shows loading state initially', () => {
@@ -613,8 +613,8 @@ describe('VendorOrderPage', () => {
 
   it('disabled state on status buttons when mutation is pending', async () => {
     // Create a mock that delays resolution to simulate pending state
-    let resolveMutation: (value: { vendorGroup: OrderVendorGroup }) => void;
-    const mutationPromise = new Promise<{ vendorGroup: OrderVendorGroup }>((resolve) => {
+    let resolveMutation: (value: { order: any }) => void;
+    const mutationPromise = new Promise<{ order: any }>((resolve) => {
       resolveMutation = resolve;
     });
     vi.mocked(orderApi.updateVendorGroupStatus).mockImplementation(() => mutationPromise);
@@ -642,7 +642,7 @@ describe('VendorOrderPage', () => {
 
     // Resolve the mutation
     await act(async () => {
-      resolveMutation!({ vendorGroup: mockVendorGroup1 });
+      resolveMutation!({ order: {} });
       await Promise.resolve();
     });
 

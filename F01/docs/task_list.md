@@ -186,8 +186,8 @@
 
 | ID | Task | Description | Dependencies | Completion Criteria | Status |
 |----|------|-------------|--------------|---------------------|--------|
-| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | pending: T-302 is covered by decision; mapping and sync implementation require task-level assessment and verification. |
-| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | pending: T-302 is covered by decision; technical details and implementation require task-level assessment and verification. |
+| T-801 | Backend: ES index sync | Real-time or batch sync from MongoDB (T-115) | T-302, T-702 | Search index current | audited (read-only, 2026-11-08): no ES client/implementation in backend; config + docker only. Sync contract, mapping, safe isolated ES verification and implementation remain. Not DONE. |
+| T-802 | Backend: Search API | Query DSL, facets, pagination, sorting (T-115) | T-302, T-403 | API returns ranked results | parallel audit candidate (read-only): query/sort/contract prerequisites; no implementation claim. Not blocked by T-302 coverage. |
 | T-803 | Frontend: Search UI | Autocomplete, filters, sort, results grid | T-502, T-802 | Search UX complete | 🔴 blocked: depends on T-802; T-302's decision status is not itself a blocker. |
 
 ---
@@ -304,3 +304,90 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
   - Phase authorization: `MAX_AUTHORIZED_PHASE = 4` preserved unchanged. No phase advancement.
 
 The timeline assessment and MP sequence in older execution records are historical snapshots. Use this task list, `open_questions.md`, and the latest run record for current execution status.
+
+## MVP closure mission queue — 2026-11-07
+
+The mission IDs below are traceability labels, not replacements for existing task IDs or a claim that historical tasks have been independently verified. Mission state describes remaining closure evidence; it does not silently change the statuses or history above. `PENDING_VALIDATION` means implementation and/or end-to-end evidence still requires assessment, not READY. Dependencies apply to the affected work only; do not infer a global blocker. Sources include [decisions](decisions.md), [open questions](open_questions.md), and the [current execution record](../../docs/agent_runs/orch-s3-integration-2026-11-06.md).
+
+| Mission | Required capability | Existing task IDs | Closure state and dependencies |
+|---|---|---|---|
+| MVP-01 | Catalog and product CRUD | T-701, T-702, T-704, T-705 | **PENDING_VALIDATION**; catalog/CRUD journeys need current evidence. The scoped T-705 stock-ordering correction below is eligible independently of S3. |
+| MVP-02 | Cart and Redis | T-303, T-901, T-904 | **PENDING_VALIDATION**; verify guest/authenticated persistence, isolation, stock handling and merge; TTL remains a proposal under Q-014. |
+| MVP-03 | Orders and delivery | T-902, T-903, T-905, T-906, T-1111 | **PENDING_VALIDATION**; depends on cart/checkout and applicable delivery decisions; verify ownership, transitions and integrated journey, not just internal tests. |
+| MVP-04 | Coupons | T-1102, T-1106 | **PENDING_VALIDATION**; T-116/CD-050 and checkout are dependencies. Q-016 is decided; eligible-subtotal calculation and deterministic minor-unit allocation still require current implementation and journey evidence. |
+| MVP-05 | PDF invoices | T-304, T-1103 | **PENDING_VALIDATION**; payment confirmation and authorized download are relevant dependencies. Current MVP closure requires PDF generation after confirmed payment, not only on demand; reconcile that requirement with the historical Q-018/on-demand documentation without silently changing decisions. Storage and retention remain separately scoped. |
+| MVP-06 | Product images and S3 | T-703a, T-703b | **BLOCKED/PARTIAL** for unsafe physical image deletion, cleanup and operational S3 verification; do not re-enable unsafe paths or treat mocks as provider evidence. Other missions do not globally depend on S3. |
+| MVP-07 | Stripe and split | T-1001, T-1002, T-1003, T-1004, T-1005, T-1006 | **PENDING_VALIDATION / provider-dependent work blocked** until safe test-mode integration and relevant provider prerequisites are established; internal lifecycle/tests do not establish provider-backed payment or split. |
+| MVP-08 | Elasticsearch | T-302, T-801, T-802, T-803 | **PENDING_VALIDATION**; T-302 is covered by decision, T-801/T-802 require task-level assessment, and T-803 depends on T-802. |
+| MVP-09 | Admin dashboard | T-1104, T-1107 | **PENDING_VALIDATION**; assess existing approved metrics and authorization separately from unresolved Q-003 details; do not treat Q-003 as a blanket blocker. |
+| MVP-10 | Integrated frontend | T-603, T-704, T-705, T-904, T-905, T-906, T-907, T-1005, T-1105, T-1106, T-1107 | **PENDING_VALIDATION**; depends on each underlying API/provider journey. Existing screens or isolated tests alone do not demonstrate complete journeys. |
+
+### Next eligible scoped work: T-705 stock ordering (MVP-01)
+
+- **Priority/state:** first candidate, **READY for a scoped audit/fix**, not mission completion. T-702 and T-502 are recorded as completed/covered; CD-013 and FR-PROD-003 define in-stock products before out-of-stock products. S3 and its operational blockers are not prerequisites for this ordering correction.
+- **Observed hypothesis:** the catalog starts with `newest` in `../front/src/features/catalog/ProductCatalogPage.tsx`, whereas stock ordering is an explicit option; current tests do not establish the default or cross-page behavior. Static inspection is not a reproduced runtime failure.
+- **Acceptance:** use RED/GREEN tests to demonstrate the required available-before-unavailable ordering in the catalog, including a newer unavailable item, pagination and relevant explicit sort/filter behavior; apply ordering before pagination where required, preserve ownership and existing API contracts, and obtain independent review. Determine interaction with user-selected sorts from the applicable requirements rather than silently inventing policy.
+- **Scope:** catalog frontend and product listing/sorting backend plus directly related isolated tests and required in-scope documentation. No S3, seed, provider, operational MongoDB, index creation or P5/deploy work is authorized by this scoped candidate.
+
+## Dependency audit addendum — 2026-11-07
+
+This addendum reconciles current open/equivalent work without rewriting historical task rows or changing completed/covered decisions into verified implementations. `READY FOR AUDIT` authorizes no implementation by itself: the responsible orchestrator must confirm a bounded task, acceptance criteria, test safety and independent review. T-705 is already in progress/review; do not start a competing change. Evidence and limitations are recorded in the [run checkpoint](../../docs/agent_runs/orch-s3-integration-2026-11-06.md).
+
+| Open work | Dependency audit and next gate |
+|---|---|
+| T-703b / MVP-06 | T-304, T-602 and T-703a are recorded covered/completed; CD-075 reports an account, **not** operational S3 validation. **BLOCKED/PARTIAL:** product-image delete returns 503, both cleanup adapters fail closed, and cross-writer safety, reconciliation, review and authorized infrastructure evidence remain. Q-018 invoice retention is not an image prerequisite. |
+| T-705 / MVP-01 | T-502 covered and T-702 reported completed, but neither proves current behavior. **IN PROGRESS / REVIEW_PENDING:** the default-order increment has isolated tests; full FR-PROD-003 is not demonstrated because `out_of_stock` can be filtered out and explicit-sort precedence requires assessment. See run checkpoint; do not treat as READY new work or DONE. |
+| T-801 | T-302 is covered by CD-049/Q-015; T-702 is reported implemented. **AUDITED (read-only, 2026-11-08):** no ES client/implementation; config + docker only. Sync contract, mapping, safe isolated ES verification and implementation remain. Not DONE. |
+| T-802 | T-302 is covered and T-403 is covered. **READY FOR TASK-SCOPED AUDIT** of query, sorting and contract prerequisites; no automatic T-302 blocker and no claim that search is implemented. CD-049 requires ES, not Atlas Search. |
+| T-803 | T-502 covered; **BLOCKED on T-802** for a complete search UI. Independent frontend work may be assessed separately without claiming integration. |
+| T-1102 and T-1106 / MVP-04 | T-116/CD-050/Q-016 is decided; T-902 is reported implemented, not proof of coupon/payment integration. T-502 is covered for T-1106. **READY FOR SCOPED AUDIT** of eligible-item subtotal, selected coupon, deterministic minor-unit rounding/allocation and preview-to-order consistency; T-1106's complete UI remains dependent on verified T-1102 behavior. Existing checkout code references eligible subtotal but also contains a fixed percentage (`../back/src/modules/checkout/checkout.service.ts`); this is not evidence that the approved contract is met. |
+| T-1104 and T-1107 / MVP-09 | T-602/T-502 are reported completed/covered. Q-003's unresolved Admin permission-matrix sufficiency does **not** globally block already-defined Admin work; CD-051/T-119 define Vendor-only metrics, not a blanket Admin analytics decision. **READY FOR SCOPED REQUIREMENTS AUDIT** of separately evidenced Admin metrics and authorization; unspecified metrics or permissions stay unresolved. T-1107's existing workspace does not prove metric completion. |
+| T-1112 | No task dependency is listed; delivery-dispute scope is explicitly deferred. **DEFERRED**, not READY without authorized requirements and acceptance criteria; T-1111 internal delivery does not itself approve dispute policy. |
+| T-1201–T-1209 | P5 remains **BLOCKED by `MAX_AUTHORIZED_PHASE = 4`**. Their listed dependencies remain: T-1201/T-1202 → T-601..T-1107; T-1203 → T-802/T-902/T-1001; T-1204 → T-504/T-502; T-1205 → T-504/T-501; T-1206 → T-1204/T-1205; T-1207–T-1209 → all prior. Task-focused safe P4 checks do not authorize P5 deployment or phase advancement. |
+| MVP-02/MVP-03 | T-303/T-901/T-904 and T-902/T-903/T-905/T-906/T-1111 are recorded covered/implemented. **PENDING_VALIDATION**, not proof of safe Redis/Mongo/provider-integrated journeys; Q-014 TTL remains a proposal, not a blocker for the established cart contract. |
+| MVP-05 | T-118/T-304 are covered; T-1103 on-demand PDF is reported implemented. **PENDING_VALIDATION:** current closure requires generation after confirmed payment and authorized download, while Q-018 still describes automation deferred; reconcile the requirement without rewriting decisions. Q-018 Glacier/WORM applies only to invoice retention, not S3 images. |
+| MVP-07 | T-111/T-112 and CD-064/CD-065 define Stripe Connect; T-1001–T-1006 report varying internal implementations. **PENDING_VALIDATION / provider-dependent work blocked:** real provider setup, verified webhook correlation/idempotency and safe test-mode evidence remain; internal tests do not prove transfer, payout or refund execution. The separate `payment-webhook-transfer-contract` candidate is BLOCKED as recorded in the run. |
+| MVP-10 | T-502 is covered; T-603/T-704/T-705/T-904–T-907/T-1005/T-1105–T-1107 have historical implementation reports. **PENDING_VALIDATION:** complete journeys depend on their underlying API, ownership and provider behavior, not merely screen existence. |
+
+**Identifier/graph audit:** 103 task rows were parsed; no duplicate defined task IDs, missing explicitly referenced task IDs or directed cycles were found within the parsed task dependency columns. Numeric ranges were expanded only over IDs actually defined, and prose dependencies such as “All prior”, external services, decisions, open questions and semantic dependencies were not graph-expanded; this is not proof that no missing requirement or semantic cycle exists. Historical notes that describe automatic cleanup or completed payment/invoice integrations do not supersede current limitations above.
+
+### Review reconciliation — 2026-11-07
+
+- **T-705: INCONCLUSIVE / not DONE.** Reviewer reported CR-001 visibility correction confirmed by static inspection; 134 backend and 44 frontend tests plus typechecks are developer-reported. The actual diff was unavailable for review, and precedence between stock-first and explicit sorting remains unresolved. This supersedes the earlier static hypothesis and the earlier statement that the catalog necessarily still filters out `out_of_stock`; it does not establish a global PASS.
+- **Dependency-audit documentation: INCONCLUSIVE.** The queue reconciliation has not received a conclusive independent review. Its `READY FOR ... AUDIT` entries are candidates for investigation, not approval or proof of implementation readiness.
+
+### Coupon audit — scoped candidate, not coupon completion
+
+- **T-1102/T-1106:** CD-050/Q-016 confirms eligible-subtotal/minor-unit invariants, exclusion precedence and consumer choice; it does not prescribe a percentage. Static inspection found a narrower frontend/backend preview contract mismatch: the frontend encodes coupon codes in a GET query (`../front/src/shared/api/checkout.ts`), while the backend reads `req.body` and wraps the response (`../back/src/modules/checkout/checkout.routes.ts`). The frontend client treats the response as unwrapped. Reproduction with a focused HTTP contract test is still needed.
+- **Candidate for a future scoped TDD correction:** align preview query transport and response envelope while preserving authentication, input validation and callers; use isolated Supertest and frontend client tests. This does not establish coupon validity, price calculation, persistence, checkout discounts, or readiness of the full T-1102/T-1106 journey. Avoid any UI claim that a coupon was validated or applied merely because preview transport succeeds.
+- `couponTargets` is currently an empty process-local map; inspection found no coupon repository under backend modules. Checkout receives coupon codes but the order creation path shown in `checkout.service.ts` does not apply them; the allocation helper has isolated tests but no production caller found in this inspection. A complete implementation needs an authoritative coupon model/source, validation, vendor isolation and consistent preview/order calculations, not an assumed discount rate. This task is independent of S3 but remains **PENDING_VALIDATION**, not DONE.
+
+### Review outcomes — checkout and catalog
+
+- **T-1102/T-1106: INCONCLUSIVE / not DONE.** Reviewer outcome is inconclusive. The 503 coupon response is a temporary nonfunctional safeguard, not coupon implementation. Developer reported 69 backend and 25 frontend tests passing; these are not independent verification. Persisted terms, eligibility, vendor isolation, selection and consistent preview/order/payment calculation remain dependencies.
+- **T-705: INCONCLUSIVE / not DONE.** CR-001 was reported statically corrected; review of the actual diff and explicit-sort precedence remain outstanding.
+
+### T-901 review reconciliation
+
+- **INCONCLUSIVE / not DONE for the cart-creation increment.** The final reviewer reported Lua TTL CR-001 statically corrected; 154 passing tests and typecheck are developer-reported, not independently reproduced. Mocked creation tests do not demonstrate Redis real atomicity or exactly-once retry behavior. The distinct `clear`/whole-cart update race remains open; see the [execution checkpoint](../../docs/agent_runs/orch-s3-integration-2026-11-06.md).
+
+### T-901 CR-008 review reconciliation
+
+- **INCONCLUSIVE / not DONE.** Reviewer reported CR-008 corrected by static inspection; 192 tests and typecheck are developer-reported, not independently reproduced. Real Redis behavior, mixed-version writers and noncanonical legacy timestamps remain unverified. Webhook clear CR-003 remains **BLOCKED**; see the [execution record](../../docs/agent_runs/orch-s3-integration-2026-11-06.md).
+
+### T-903 review reconciliation — 2026-11-08
+
+- **T-903: CR001-CR003 no reviewer blockers; task not DONE.** Reviewer found no corrective findings for CR001-CR003. Developer-reported tests: 25 frontend (OrderDetailPage), 1 backend node (vendor-privacy), 8 backend (vendor-projection/vendor-group-status), broader backend suite 68, frontend and backend typechecks passing, `git diff --check` passing. Observations recorded (non-blocking): OBS-001 list OpenAPI still `Order` (not `VendorOrder`); OBS-002 fallback status handling requires end-to-end verification. T-903 remains REVIEW_PENDING: in-memory/fake/mocked dependencies only; no real DB/auth/deployed runtime; broader vendor list/mutation privacy and concurrency remain. See [run record](../../docs/agent_runs/orch-s3-integration-2026-11-06.md).
+- **Selected next independent eligible task for MVP closure:** T-801 (Elasticsearch sync contract audit, MVP-08). Independent of T-903/T-705; audit-scoped only; no implementation approval or DONE claim. T-802 and T-1104/T-1107 remain parallel audit candidates; T-705 remains in progress.
+
+### Queue correction — 2026-11-08
+
+- **T-903: INCOMPLETE / BLOCKED locally.** The earlier “no reviewer blockers” entry above attributed a Developer-session assessment to an independent reviewer; it was not independent and was not PASS. A real independent review reported **CORRECTIONS_NEEDED**: CR003 remains open because `api/openapi.yaml:1111` omits `pending` from `Order.financialStatus`. Three correction rounds have been reported; stop retrying the same finding at the attempt limit. CR008 was corrected statically, but dual-role delivery and identity-switch tests remain absent and the actual diff was unavailable to the reviewer. Historical test results remain reports, not new verification. See the [checkpoint](../../docs/agent_runs/orch-s3-integration-2026-11-06.md). This local blocker is not a global MVP blocker.
+- **T-802: INCONCLUSIVE review** of the Mongo literal-search increment, including a potential NUL issue; ES is not implemented by that increment. Earlier simulated-Mongo tests do not establish real Mongo behavior. T-803 remains dependent on T-802.
+- **Independent READY selection:** no implementation task is established READY by the available evidence. T-801's earlier audit requires defined bounded acceptance criteria and safe isolated ES verification; T-1102/T-1106's preview candidate was already acted on and its review is INCONCLUSIVE; T-1104 remains an audit candidate, not proven implementation-ready. Reconcile a concrete independent task and its dependencies and acceptance criteria without treating an audit candidate as implementation approval or repeating completed investigation.
+
+### Review checkpoint — 2026-11-08
+
+- **T-802: INCONCLUSIVE, not DONE or PASS.** The reported independent review of the Mongo literal-search increment found the NUL HTTP 400 correction addressed statically, but the actual diff was unavailable. The 16 passing tests and typecheck are Developer-reported, not independently reproduced; simulated Mongo and BSON serialization do not prove live Mongo behavior. Elasticsearch search and synchronization remain unimplemented; T-803 still depends on T-802.
+- **T-903: CORRECTIONS_NEEDED / locally BLOCKED.** The actual independent review leaves CR003 open: the `Order.financialStatus` enum omits `pending`. Three correction attempts were reported; do not retry this finding beyond the limit. Dual-role delivery and identity-switch test coverage remain pending; the actual diff was unavailable. The earlier Developer-session assessment was not independent, and no PASS is claimed.
+- **Next functional increment:** no independent implementation is established **READY** by the existing queue. T-801 remains a candidate, not READY: its acceptance is a current search index; dependencies are T-302 and T-702, recorded as covered and implemented respectively, but bounded implementation criteria and safe isolated Elasticsearch verification remain prerequisites. T-1104 metric implementation is blocked by an undefined approved metric contract, per the run record. Do not repeat the completed audits or claim an implementation is ready without satisfying its gates.

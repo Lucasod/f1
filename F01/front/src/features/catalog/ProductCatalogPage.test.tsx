@@ -217,6 +217,11 @@ describe('ProductCatalogPage', () => {
     ));
   });
 
+  it('requests stock-first ordering by default before server pagination', async () => {
+    render(<ProductCatalogPage />, { wrapper: createWrapper() });
+    await waitFor(() => expect(productApi.list).toHaveBeenCalledWith(expect.objectContaining({ sortBy: 'stock_status', page: 1 })));
+  });
+
   it('sorts products by selected option', async () => {
     const wrapper = createWrapper();
     render(<ProductCatalogPage />, { wrapper });

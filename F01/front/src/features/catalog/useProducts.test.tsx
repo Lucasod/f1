@@ -69,6 +69,13 @@ describe('useProducts', () => {
     vi.mocked(productApi.list).mockResolvedValue(mockProductListResponse);
   });
 
+  it('requests catalog visibility including out-of-stock products', async () => {
+    const { result } = renderHook(() => useProducts(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(productApi.list).toHaveBeenCalledWith(expect.objectContaining({ catalog: true }));
+    expect(productApi.list).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
+  });
+
   it('fetches products with default parameters', async () => {
     const wrapper = createWrapper();
     const { result } = renderHook(() => useProducts(), { wrapper });
@@ -76,10 +83,10 @@ describe('useProducts', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(productApi.list).toHaveBeenCalledWith({
-      status: 'active',
+      catalog: true,
       page: 1,
       limit: 20,
-      sortBy: 'newest',
+      sortBy: 'stock_status',
     });
     expect(result.current.data).toEqual(mockProductListResponse);
   });
@@ -94,11 +101,11 @@ describe('useProducts', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(productApi.list).toHaveBeenCalledWith({
-      status: 'active',
+      catalog: true,
       categoryId: 'cat-1',
       page: 2,
       limit: 20,
-      sortBy: 'newest',
+      sortBy: 'stock_status',
     });
   });
 
@@ -112,11 +119,11 @@ describe('useProducts', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(productApi.list).toHaveBeenCalledWith({
-      status: 'active',
+      catalog: true,
       search: 'laptop',
       page: 1,
       limit: 20,
-      sortBy: 'newest',
+      sortBy: 'stock_status',
     });
   });
 
@@ -130,7 +137,7 @@ describe('useProducts', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(productApi.list).toHaveBeenCalledWith({
-      status: 'active',
+      catalog: true,
       sortBy: 'price_desc',
       page: 1,
       limit: 20,

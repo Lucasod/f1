@@ -157,7 +157,6 @@ export function CheckoutPage() {
     couponCodes,
     selectedAddressId,
     paymentMethod,
-    addCouponCode,
     removeCouponCode,
     setSelectedAddressId,
     setPaymentMethod,
@@ -228,15 +227,14 @@ export function CheckoutPage() {
     try {
       // Test the coupon by calling preview
       await checkoutApi.preview([...couponCodes, code]);
-      addCouponCode(code);
-      setCouponInput('');
+      throw new Error('A validação de cupons está indisponível no momento');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Cupom inválido';
       setCouponError(message);
     } finally {
       setApplyingCoupon(false);
     }
-  }, [couponInput, couponCodes, addCouponCode]);
+  }, [couponInput, couponCodes]);
 
   // Handle remove coupon
   const handleRemoveCoupon = useCallback((code: string) => {
@@ -528,7 +526,7 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  Mixed-cart discount calculation pending Q-016 decision
+                  Aplicação de cupons temporariamente indisponível.
                 </p>
 
                 {couponCodes.length > 0 && (

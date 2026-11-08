@@ -12,7 +12,7 @@ function ProductCatalogContent() {
   const [filters, setFilters] = useState<ProductFilterParams>({
     page: 1,
     limit: 20,
-    sortBy: 'newest',
+    sortBy: 'stock_status',
   });
 
   // Debounced search using useDeferredValue
@@ -184,7 +184,7 @@ function ProductCatalogContent() {
         onCategoryChange={handleCategoryChange}
         searchQuery={deferredSearch}
         onSearchChange={handleSearchChange}
-        sortBy={filters.sortBy || 'newest'}
+        sortBy={filters.sortBy || 'stock_status'}
         onSortChange={handleSortChange}
       />
 

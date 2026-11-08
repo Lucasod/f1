@@ -70,6 +70,7 @@ export class OrderService {
       // Consumer: only their own orders
       orders = await this.orderRepo.findByPersonId(personId);
     } else if (role === 'vendor') {
+      if (filters?.status) throw new Error(OrderError.FORBIDDEN);
       // Vendor: orders containing their vendor groups
       const vendorId = filters?.vendorId;
       if (!vendorId) {

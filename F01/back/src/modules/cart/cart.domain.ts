@@ -1,6 +1,7 @@
 export enum CartError {
   CART_NOT_FOUND = 'CART_NOT_FOUND',
   CART_ALREADY_EXISTS = 'CART_ALREADY_EXISTS',
+  CART_CONFLICT = 'CART_CONFLICT',
   CART_ITEM_NOT_FOUND = 'CART_ITEM_NOT_FOUND',
   INVALID_QUANTITY = 'INVALID_QUANTITY',
   PRODUCT_NOT_FOUND = 'PRODUCT_NOT_FOUND',
@@ -22,6 +23,7 @@ export interface CartItem {
 
 export interface CartData {
   id: string;
+  generation?: string;
   items: CartItem[];
   updatedAt: Date;
   version: number;
@@ -52,15 +54,17 @@ export function isValidGuestCartId(id: string): boolean {
 
 export class Cart {
   public readonly id: string;
+  public readonly generation?: string;
   public items: CartItem[];
   public updatedAt: Date;
   public version: number;
 
   private constructor(data: CartData) {
     this.id = data.id;
-    this.items = data.items || [];
-    this.updatedAt = data.updatedAt || new Date();
-    this.version = data.version || 1;
+    this.generation = data.generation;
+    this.items = (data.items || []).map(item => ({ ...item, addedAt: new Date(item.addedAt) }));
+    this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
+    this.version = data.version ?? 1;
   }
 
   static create(consumerId: string): Cart {
@@ -69,6 +73,7 @@ export class Cart {
     }
     return new Cart({
       id: consumerId,
+      generation: crypto.randomUUID(),
       items: [],
       updatedAt: new Date(),
       version: 1,
@@ -201,8 +206,9 @@ export class Cart {
   toJSON(): CartData {
     return {
       id: this.id,
-      items: this.items.map(item => ({ ...item })),
-      updatedAt: this.updatedAt,
+      generation: this.generation,
+      items: this.items.map(item => ({ ...item, addedAt: new Date(item.addedAt) })),
+      updatedAt: new Date(this.updatedAt),
       version: this.version,
     };
   }
@@ -230,12 +236,15 @@ export class InMemoryCartRepository implements CartRepository {
   private carts: Map<string, Cart> = new Map();
 
   async save(cart: Cart): Promise<Cart> {
-    this.carts.set(cart.id, cart);
-    return cart;
+    if (this.carts.has(cart.id)) throw new Error(CartError.CART_ALREADY_EXISTS);
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
+    this.carts.set(cart.id, Cart.reconstruct(cart.toJSON()));
+    return Cart.reconstruct(cart.toJSON());
   }
 
   async findById(id: string): Promise<Cart | null> {
-    return this.carts.get(id) || null;
+    const cart = this.carts.get(id);
+    return cart ? Cart.reconstruct(cart.toJSON()) : null;
   }
 
   async update(cart: Cart): Promise<Cart> {
@@ -243,8 +252,11 @@ export class InMemoryCartRepository implements CartRepository {
     if (!existing) {
       throw new Error(CartError.CART_NOT_FOUND);
     }
-    this.carts.set(cart.id, cart);
-    return cart;
+    if (!existing.generation || !cart.generation || existing.generation !== cart.generation || existing.version !== cart.version) throw new Error(CartError.CART_CONFLICT);
+    const updated = Cart.reconstruct(cart.toJSON());
+    updated.incrementVersion();
+    this.carts.set(cart.id, updated);
+    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -264,6 +276,7 @@ export class InMemoryCartRepository implements CartRepository {
     if (!cart) {
       cart = Cart.create(cartId);
     }
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
 
     const combinedQuantity = (cart.getItem(productId)?.quantity ?? 0) + quantity;
     if (combinedQuantity > maxStock) {
@@ -275,7 +288,7 @@ export class InMemoryCartRepository implements CartRepository {
       cart.incrementVersion();
     }
     this.carts.set(cartId, cart);
-    return cart;
+    return Cart.reconstruct(cart.toJSON());
   }
 
   async updateItemQuantity(
@@ -288,13 +301,14 @@ export class InMemoryCartRepository implements CartRepository {
     if (!cart) {
       throw new Error(CartError.CART_NOT_FOUND);
     }
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
     if (quantity > maxStock) {
       throw new Error(CartError.STOCK_INSUFFICIENT);
     }
 
     cart.updateItemQuantity(productId, quantity);
     cart.incrementVersion();
-    return cart;
+    return Cart.reconstruct(cart.toJSON());
   }
 
   async removeItem(cartId: string, productId: string): Promise<Cart> {
@@ -302,9 +316,10 @@ export class InMemoryCartRepository implements CartRepository {
     if (!cart) {
       throw new Error(CartError.CART_NOT_FOUND);
     }
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
     cart.removeItem(productId);
     cart.incrementVersion();
-    return cart;
+    return Cart.reconstruct(cart.toJSON());
   }
 
   async mergeGuestCart(
@@ -314,6 +329,9 @@ export class InMemoryCartRepository implements CartRepository {
   ): Promise<Cart> {
     const guestCart = this.carts.get(guestId);
     let userCart = this.carts.get(userId);
+
+    if (guestCart && (!guestCart.generation || !Number.isSafeInteger(guestCart.version))) throw new Error(CartError.CART_CONFLICT);
+    if (userCart && (!userCart.generation || !Number.isSafeInteger(userCart.version))) throw new Error(CartError.CART_CONFLICT);
 
     if (guestCart && !guestCart.isEmpty) {
       for (const guestItem of guestCart.getItems()) {
@@ -327,10 +345,10 @@ export class InMemoryCartRepository implements CartRepository {
 
     if (!userCart) {
       if (guestCart && !guestCart.isEmpty) {
-        userCart = Cart.reconstruct({ ...guestCart.toJSON(), id: userId });
+        userCart = Cart.reconstruct({ ...guestCart.toJSON(), id: userId, generation: crypto.randomUUID() });
         this.carts.set(userId, userCart);
         this.carts.delete(guestId);
-        return userCart;
+        return Cart.reconstruct(userCart.toJSON());
       } else {
         userCart = Cart.create(userId);
       }
@@ -342,7 +360,7 @@ export class InMemoryCartRepository implements CartRepository {
       this.carts.delete(guestId);
     }
 
-    return userCart;
+    return Cart.reconstruct(userCart.toJSON());
   }
 
   clear(): void {

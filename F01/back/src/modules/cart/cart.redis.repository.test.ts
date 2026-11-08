@@ -32,6 +32,21 @@ class TestRedisClient extends RedisMock {
       const argv = args.slice(numKeys);
 
       // Identify which script by checking for unique patterns in the Lua code
+      if (script.includes("return 'UPDATED'")) {
+        const existing = this.data.get(keys[0]) as Record<string, string> | undefined;
+        if (!existing) return 'CART_NOT_FOUND';
+        if (!existing.generation || !existing.version || !Number.isFinite(Number(existing.version)) || existing.generation !== argv[4] || Number(existing.version) !== Number(argv[2])) return 'CART_CONFLICT';
+        if (!/^[1-9]\d*$/.test(argv[3]) || Number(argv[3]) > 9007199254740) return 'INVALID_CART_TTL';
+        this.setCartData(keys[0], JSON.parse(argv[0]), argv[1], Number(existing.version) + 1, Number(argv[3]));
+        return 'UPDATED';
+      }
+      if (script.includes("return 'CREATED'")) {
+        if (!/^[1-9]\d*$/.test(argv[3]) || Number(argv[3]) > 9007199254740) return 'INVALID_CART_TTL';
+        if (this.data.has(keys[0])) return 'CART_ALREADY_EXISTS';
+        if (!argv[4]) return 'CART_CONFLICT';
+        this.setCartData(keys[0], JSON.parse(argv[0]), argv[1], Number(argv[2]), Number(argv[3]), argv[4]);
+        return 'CREATED';
+      }
       if (script.includes('unit_price = tonumber(ARGV[7])')) {
         return this.handleAddItem(keys[0], argv);
       }
@@ -41,8 +56,8 @@ class TestRedisClient extends RedisMock {
       if (script.includes('local new_items = {}') && script.includes('local found = false')) {
         return this.handleRemoveItem(keys[0], argv);
       }
-      if (script.includes('items = cjson.decode(items_data)') && script.includes('updated_at = updated_at')) {
-        return this.handleGetCart(keys[0]);
+      if (script.includes('pcall(cjson.decode, items_data)') && script.includes('updated_at = updated_at')) {
+        return this.handleGetCart(keys[0], argv);
       }
       if (script.includes('guest_items_data') && script.includes('user_items_data')) {
         return this.handleMergeGuestCart(keys[0], keys[1], argv);
@@ -57,21 +72,25 @@ class TestRedisClient extends RedisMock {
     this.evalsha = this.eval;
   }
 
-  private getCartData(key: string): { items: any[]; updated_at: string; version: number } | null {
+  private getCartData(key: string): { items: any[]; updated_at: string; version: number; validVersion: boolean; generation?: string } | null {
     const data = this.data.get(key);
     if (!data || typeof data !== 'object') return null;
     const hash = data as Record<string, string>;
-    const itemsStr = hash.items || '[]';
+    if (hash.items === undefined) return null;
+    const itemsStr = hash.items;
     return {
       items: JSON.parse(itemsStr),
       updated_at: hash.updated_at || new Date().toISOString(),
       version: parseInt(hash.version || '1', 10),
+      validVersion: hash.version !== undefined && Number.isFinite(Number(hash.version)),
+      generation: hash.generation,
     };
   }
 
-  private setCartData(key: string, items: any[], updated_at: string, version: number, ttl: number): void {
+  private setCartData(key: string, items: any[], updated_at: string, version: number, ttl: number, generation?: string): void {
     // Use originalHset to properly store hash fields in RedisMock's internal format
     this.originalHset(key, 'items', JSON.stringify(items), 'updated_at', updated_at, 'version', version.toString());
+    if (generation) this.originalHset(key, 'generation', generation);
     this.pexpire(key, ttl * 1000);
   }
 
@@ -83,6 +102,7 @@ private handleAddItem(key: string, argv: string[]): string {
     const maxStock = parseInt(argv[7] || Number.MAX_SAFE_INTEGER.toString(), 10);
 
     let cartData = this.getCartData(key);
+    if (!cartData?.generation || !cartData.validVersion || cartData.generation !== argv[8]) return 'CART_CONFLICT';
     let items = cartData?.items || [];
     let version = cartData?.version || 0;
 
@@ -108,7 +128,7 @@ private handleAddItem(key: string, argv: string[]): string {
     version += 1;
     this.setCartData(key, items, updatedAt, version, ttl);
 
-    return JSON.stringify({ items: JSON.stringify(items), updated_at: updatedAt, version });
+    return JSON.stringify({ items: JSON.stringify(items), updated_at: updatedAt, version, generation: cartData?.generation });
   }
 
   private handleUpdateItemQuantity(key: string, argv: string[]): string | null {
@@ -119,6 +139,7 @@ private handleAddItem(key: string, argv: string[]): string {
 
     const cartData = this.getCartData(key);
     if (!cartData) return null;
+    if (!cartData.generation || !cartData.validVersion || cartData.generation !== argv[5]) return 'CART_CONFLICT';
     if (quantity > maxStock) return 'STOCK_INSUFFICIENT';
     if (!cartData.items.some((item: any) => item.product_id === productId)) return 'CART_ITEM_NOT_FOUND';
 
@@ -138,7 +159,7 @@ private handleAddItem(key: string, argv: string[]): string {
     const version = cartData.version + 1;
     this.setCartData(key, newItems, updatedAt, version, ttl);
 
-   return JSON.stringify({ items: newItems.length === 0 ? {} : JSON.stringify(newItems), updated_at: updatedAt, version });
+   return JSON.stringify({ items: newItems.length === 0 ? {} : JSON.stringify(newItems), updated_at: updatedAt, version, generation: cartData.generation });
   }
 
   private handleRemoveItem(key: string, argv: string[]): string | null {
@@ -147,56 +168,74 @@ private handleAddItem(key: string, argv: string[]): string {
 
     const cartData = this.getCartData(key);
     if (!cartData) return null;
+    if (!cartData.generation || !cartData.validVersion || cartData.generation !== argv[3]) return 'CART_CONFLICT';
     if (!cartData.items.some((item: any) => item.product_id === productId)) return 'CART_ITEM_NOT_FOUND';
 
     const items = cartData.items.filter((item: any) => item.product_id !== productId);
     const version = cartData.version + 1;
     this.setCartData(key, items, updatedAt, version, ttl);
 
-    return JSON.stringify({ items: items.length === 0 ? {} : JSON.stringify(items), updated_at: updatedAt, version });
+    return JSON.stringify({ items: items.length === 0 ? {} : JSON.stringify(items), updated_at: updatedAt, version, generation: cartData.generation });
   }
 
-  private handleGetCart(key: string): string | null {
-    const cartData = this.getCartData(key);
+  private handleGetCart(key: string, argv: string[]): string | null {
+    let cartData;
+    try { cartData = this.getCartData(key); } catch { return 'CART_CONFLICT'; }
     if (!cartData) return null;
+    const hash = this.data.get(key) as Record<string, string>;
+    const canonicalDate = (value: unknown): boolean => typeof value === 'string'
+      && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+      && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+    if (!canonicalDate(hash.updated_at)) return 'CART_CONFLICT';
+    if (hash.version !== undefined && (!/^\d+$/.test(hash.version) || !cartData.validVersion || !Number.isInteger(Number(hash.version)) || Number(hash.version) < 1 || Number(hash.version) >= Number.MAX_SAFE_INTEGER)) return 'CART_CONFLICT';
+    if (!Array.isArray(cartData.items) && !(cartData.items && typeof cartData.items === 'object' && Object.keys(cartData.items).length === 0)) return 'CART_CONFLICT';
+    if (Array.isArray(cartData.items) && !cartData.items.every(item => item && typeof item === 'object'
+      && typeof item.product_id === 'string' && typeof item.vendor_id === 'string'
+      && typeof item.quantity === 'number' && Number.isInteger(item.quantity) && item.quantity > 0
+      && typeof item.unit_price === 'number' && Number.isFinite(item.unit_price) && canonicalDate(item.added_at))) return 'CART_CONFLICT';
+    if (hash.generation === '') return 'CART_CONFLICT';
+    if (hash.version === undefined) this.originalHset(key, 'version', '1');
+    if (hash.generation === undefined) this.originalHset(key, 'generation', argv[0]);
+    cartData.generation = hash.generation || argv[0];
 
     const items = cartData.items.length === 0 ? {} : JSON.stringify(cartData.items);
     return JSON.stringify({
       items,
       updated_at: cartData.updated_at,
       version: cartData.version,
+      generation: cartData.generation,
     });
   }
 
-  private handleMergeGuestCart(guestKey: string, userKey: string, argv: string[]): number {
+  private handleMergeGuestCart(guestKey: string, userKey: string, argv: string[]): number | string {
     const [ttlStr, updatedAt] = argv;
     const ttl = parseInt(ttlStr, 10);
 
     const guestData = this.getCartData(guestKey);
     if (!guestData) return 0;
+    if (!guestData.generation || !guestData.validVersion || guestData.generation !== argv[4]) return 'CART_CONFLICT';
 
     const userData = this.getCartData(userKey);
-    if (!userData) {
-      // RENAME guest to user
-      this.data.set(userKey, this.data.get(guestKey)!);
-      this.pexpire(userKey, ttl * 1000);
-      this.data.delete(guestKey);
-      return 1;
-    }
+    if (!userData && this.data.has(userKey)) return 'CART_CONFLICT';
+    if (userData && (!userData.generation || !userData.validVersion || userData.generation !== argv[5])) return 'CART_CONFLICT';
+    if (!userData && argv[5] !== '') return 'CART_CONFLICT';
 
     // Merge items
-    const userItems = [...userData.items];
+    const userItems = [...(userData?.items || [])];
+    const stockByProduct = JSON.parse(argv[2]);
     for (const guestItem of guestData.items) {
       const foundIndex = userItems.findIndex((u: any) => u.product_id === guestItem.product_id);
       if (foundIndex >= 0) {
+        if (stockByProduct[guestItem.product_id] !== undefined && userItems[foundIndex].quantity + guestItem.quantity > stockByProduct[guestItem.product_id]) return 'STOCK_INSUFFICIENT';
         userItems[foundIndex].quantity += guestItem.quantity;
       } else {
+        if (stockByProduct[guestItem.product_id] !== undefined && guestItem.quantity > stockByProduct[guestItem.product_id]) return 'STOCK_INSUFFICIENT';
         userItems.push(guestItem);
       }
     }
 
-    const version = userData.version + 1;
-    this.setCartData(userKey, userItems, updatedAt, version, ttl);
+    const version = (userData?.version || 0) + 1;
+    this.setCartData(userKey, userItems, updatedAt, version, ttl, userData?.generation || argv[3]);
     this.data.delete(guestKey);
 
     return 1;
@@ -231,6 +270,141 @@ describe('RedisCartRepository', () => {
   });
 
   describe('save()', () => {
+    it('recovers a legacy hash on read without losing items or existing version', async () => {
+      const items = [{ product_id: 'legacy-item', vendor_id: 'vendor', quantity: 1, unit_price: 5, added_at: new Date().toISOString() }];
+      await redis.hset('cart:legacy-read', 'items', JSON.stringify(items), 'updated_at', new Date().toISOString(), 'version', '7');
+      const recovered = await repo.findById('legacy-read');
+      expect(recovered?.generation).toMatch(/^[0-9a-f-]{36}$/);
+      expect(recovered?.version).toBe(7);
+      expect(recovered?.getItem('legacy-item')?.quantity).toBe(1);
+      expect(await redis.hget('cart:legacy-read', 'generation')).toBe(recovered?.generation);
+    });
+
+    it('recovers a missing legacy version once and rejects its snapshot after recreation', async () => {
+      const items = [{ product_id: 'legacy', vendor_id: 'vendor', quantity: 1, unit_price: 5, added_at: new Date().toISOString() }];
+      await redis.hset('cart:legacy-aba', 'items', JSON.stringify(items), 'updated_at', new Date().toISOString());
+      const [first, second] = await Promise.all([repo.findById('legacy-aba'), repo.findById('legacy-aba')]);
+      expect(first?.generation).toBe(second?.generation);
+      expect(first?.version).toBe(1);
+      expect((await redis.hget('cart:legacy-aba', 'items'))).toBe(JSON.stringify(items));
+      await repo.delete('legacy-aba');
+      const replacement = Cart.create('legacy-aba');
+      replacement.addItem('new', 'vendor', 1, 5);
+      await repo.save(replacement);
+      await expect(repo.update(first!)).rejects.toThrow('CART_CONFLICT');
+      expect((await repo.findById('legacy-aba'))?.getItem('new')).toBeDefined();
+    });
+
+    it('preserves an existing generation when the legacy version is absent', async () => {
+      await redis.hset('cart:legacy-version', 'items', '[]', 'updated_at', new Date().toISOString(), 'generation', 'existing-generation');
+      const cart = await repo.findById('legacy-version');
+      expect(cart?.generation).toBe('existing-generation');
+      expect(cart?.version).toBe(1);
+      expect(await redis.hget('cart:legacy-version', 'generation')).toBe('existing-generation');
+    });
+
+    it('fails closed on malformed legacy version without changing metadata', async () => {
+      await redis.hset('cart:legacy-bad-version', 'items', '[]', 'updated_at', new Date().toISOString(), 'version', 'invalid');
+      await expect(repo.findById('legacy-bad-version')).rejects.toThrow('CART_CONFLICT');
+      expect(await redis.hget('cart:legacy-bad-version', 'version')).toBe('invalid');
+      expect(await redis.hget('cart:legacy-bad-version', 'generation')).toBeNull();
+    });
+
+    it('rejects nonempty legacy object without changing hash or TTL', async () => {
+      const key = 'cart:legacy-invalid-object';
+      await redis.hset(key, 'items', '{"x":1}', 'updated_at', '2026-01-01T00:00:00.000Z');
+      await redis.expire(key, 300);
+      const before = await redis.hgetall(key);
+      const ttl = await redis.ttl(key);
+      await expect(repo.findById('legacy-invalid-object')).rejects.toThrow('CART_CONFLICT');
+      expect(await redis.hgetall(key)).toEqual(before);
+      expect(await redis.ttl(key)).toBeLessThanOrEqual(ttl);
+      expect(await redis.ttl(key)).toBeGreaterThan(0);
+    });
+
+    it.each([
+      ['invalid item', '[{"product_id":"item","vendor_id":"vendor","quantity":-1,"unit_price":5,"added_at":"2026-01-01T00:00:00.000Z"}]', '2026-01-01T00:00:00.000Z'],
+      ['invalid updated timestamp', '[]', 'invalid-date'],
+      ['invalid item timestamp', '[{"product_id":"item","vendor_id":"vendor","quantity":1,"unit_price":5,"added_at":"bad-date"}]', '2026-01-01T00:00:00.000Z'],
+    ])('rejects %s before metadata writes and preserves hash and TTL', async (label, items, updatedAt) => {
+      const id = `legacy-invalid-${label.replaceAll(' ', '-')}`;
+      const key = `cart:${id}`;
+      await redis.hset(key, 'items', items, 'updated_at', updatedAt);
+      await redis.expire(key, 300);
+      const before = await redis.hgetall(key);
+      const beforeTtl = await redis.ttl(key);
+      await expect(repo.findById(id)).rejects.toThrow();
+      expect(await redis.hgetall(key)).toEqual(before);
+      expect(await redis.ttl(key)).toBeGreaterThan(0);
+      expect(await redis.ttl(key)).toBeLessThanOrEqual(beforeTtl);
+    });
+
+    it('validates the current hash when it changes immediately before atomic recovery', async () => {
+      const key = 'cart:legacy-interleaving';
+      await redis.hset(key, 'items', '[]', 'updated_at', '2026-01-01T00:00:00.000Z');
+      const run = redis.eval.bind(redis);
+      vi.spyOn(redis, 'eval').mockImplementationOnce(async (...args: any[]) => {
+        await redis.hset(key, 'items', '[{"quantity":-1}]');
+        return (run as any)(...args);
+      });
+      try {
+        await expect(repo.findById('legacy-interleaving')).rejects.toThrow('CART_CONFLICT');
+        expect(await redis.hget(key, 'items')).toBe('[{"quantity":-1}]');
+        expect(await redis.hget(key, 'generation')).toBeNull();
+        expect(await redis.hget(key, 'version')).toBeNull();
+      } finally { vi.restoreAllMocks(); }
+    });
+
+    it('accepts the explicitly supported empty legacy object without rewriting its bytes', async () => {
+      const key = 'cart:legacy-empty-object';
+      await redis.hset(key, 'items', '{ }', 'updated_at', '2026-01-01T00:00:00.000Z');
+      const cart = await repo.findById('legacy-empty-object');
+      expect(cart?.items).toEqual([]);
+      expect(cart?.generation).toBeTruthy();
+      expect(await redis.hget(key, 'items')).toBe('{ }');
+    });
+
+    it.each(['add', 'update', 'remove'] as const)('recovers a legacy cart before direct %s operations', async operation => {
+      const id = `legacy-direct-${operation}`;
+      const items = [{ product_id: 'item', vendor_id: 'vendor', quantity: 1, unit_price: 5, added_at: new Date().toISOString() }];
+      await redis.hset(`cart:${id}`, 'items', JSON.stringify(items), 'updated_at', new Date().toISOString());
+      const cart = operation === 'add' ? await repo.addItem(id, 'item', 'vendor', 1, 5, 3)
+        : operation === 'update' ? await repo.updateItemQuantity(id, 'item', 2, 3)
+        : await repo.removeItem(id, 'item');
+      expect(cart.generation).toMatch(/^[0-9a-f-]{36}$/);
+      expect(cart.version).toBe(2);
+      expect(cart.getItem('item')?.quantity).toBe(operation === 'remove' ? undefined : 2);
+    });
+
+    it('rejects item mutation if the recovered cart is replaced before the write', async () => {
+      const cart = Cart.create('recovered-aba');
+      cart.addItem('original', 'vendor', 1, 5);
+      await repo.save(cart);
+      const read = repo.findById.bind(repo);
+      vi.spyOn(repo, 'findById').mockImplementationOnce(async id => {
+        const snapshot = await read(id);
+        await repo.delete(id);
+        const replacement = Cart.create(id);
+        replacement.addItem('replacement', 'vendor', 1, 5);
+        await repo.save(replacement);
+        return snapshot;
+      });
+      await expect(repo.addItem('recovered-aba', 'new', 'vendor', 1, 5, 5)).rejects.toThrow('CART_CONFLICT');
+      expect((await read('recovered-aba'))?.getItem('replacement')).toBeDefined();
+      vi.restoreAllMocks();
+    });
+
+    it('merges into a new destination with a fresh generation and checks stock', async () => {
+      const guest = Cart.create('guest-generation');
+      guest.addItem('item', 'vendor', 2, 5);
+      await repo.save(guest);
+      await expect(repo.mergeGuestCart('guest-generation', 'user-generation', { item: 1 })).rejects.toThrow('STOCK_INSUFFICIENT');
+      expect((await repo.findById('guest-generation'))?.getItem('item')?.quantity).toBe(2);
+      const merged = await repo.mergeGuestCart('guest-generation', 'user-generation', { item: 2 });
+      expect(merged.generation).toBeTruthy();
+      expect(merged.generation).not.toBe(guest.generation);
+      expect(merged.version).toBe(1);
+    });
     it('should create new cart with unitPrice, version=1, TTL set', async () => {
       const cart = Cart.create('consumer-1');
       cart.addItem('prod-1', 'vendor-1', 2, 29.99);
@@ -289,14 +463,13 @@ describe('RedisCartRepository', () => {
   });
 
   describe('update()', () => {
-    it('should update existing cart preserving version from cart', async () => {
+    it('updates an unchanged snapshot and increments its version atomically', async () => {
       const cart = Cart.create('consumer-4');
       cart.addItem('prod-1', 'vendor-1', 1, 10);
       await repo.save(cart);
 
-      // Update cart with new item - caller should increment version
+      // The snapshot version is the expected version; the repository increments it.
       cart.addItem('prod-2', 'vendor-2', 2, 20);
-      cart.incrementVersion(); // Caller increments version
       const updated = await repo.update(cart);
 
       expect(updated.version).toBe(2);

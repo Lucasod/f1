@@ -32,6 +32,7 @@ export interface ProductListResponse {
 }
 
 export interface ProductListParams {
+  catalog?: boolean;
   status?: string;
   vendorId?: string;
   categoryId?: string;
@@ -70,6 +71,7 @@ export interface UploadImageResponse {
 export const productApi = {
   async list(filters?: ProductListParams): Promise<ProductListResponse> {
     const params = new URLSearchParams();
+    if (filters?.catalog) params.append('catalog', 'true');
     if (filters?.status) params.append('status', filters.status);
     if (filters?.vendorId) params.append('vendorId', filters.vendorId);
     if (filters?.categoryId) params.append('categoryId', filters.categoryId);

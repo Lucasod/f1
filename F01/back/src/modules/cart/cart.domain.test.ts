@@ -454,6 +454,7 @@ describe('Cart Domain', () => {
 
         expect(json).toEqual({
           id: 'consumer-123',
+          generation: cart.generation,
           items: [
             { productId: 'prod-1', vendorId: 'vendor-1', quantity: 2, addedAt: expect.any(Date), unitPrice: 29.99 },
             { productId: 'prod-2', vendorId: 'vendor-2', quantity: 1, addedAt: expect.any(Date), unitPrice: 19.99 },

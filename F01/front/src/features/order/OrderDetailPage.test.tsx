@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { orderApi, Order, OrderVendorGroup, OrderItem, OrderStatus, Address } from '@/shared/api/order';
+import { vendorApi } from '@/shared/api/vendor';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import React from 'react';
 
@@ -45,6 +46,12 @@ vi.mock('@/shared/api/order', () => ({
     getById: vi.fn(),
     updateVendorGroupStatus: vi.fn(),
     updateOrderStatus: vi.fn(),
+  },
+}));
+
+vi.mock('@/shared/api/vendor', () => ({
+  vendorApi: {
+    getMe: vi.fn(),
   },
 }));
 
@@ -178,8 +185,9 @@ describe('OrderDetailPage', () => {
     
     // Default mock - tests that need different behavior must override explicitly
     vi.mocked(orderApi.getById).mockResolvedValue({ order: mockOrder });
-    vi.mocked(orderApi.updateVendorGroupStatus).mockResolvedValue({ vendorGroup: mockVendorGroup1 });
+    vi.mocked(orderApi.updateVendorGroupStatus).mockResolvedValue({ order: mockOrder });
     vi.mocked(orderApi.updateOrderStatus).mockResolvedValue({ order: mockOrder });
+    vi.mocked(vendorApi.getMe).mockResolvedValue({ vendor: { id: 'vendor-1', personId: 'vendor-person-1', storeName: 'Store', slug: 'store', status: 'active', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' } });
     
     // Default to consumer role
     setMockAuthRole('CONSUMER');
@@ -202,6 +210,44 @@ describe('OrderDetailPage', () => {
     // Resolve the promise to clean up
     resolvePromise!({ order: mockOrder });
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+  });
+
+  it('renders a vendor-scoped response without global status or an invented shipping amount', async () => {
+    setMockAuthRole('VENDOR', 'vendor-person-1');
+    const { status: _status, financialStatus: _financialStatus, ...vendorOrder } = mockOrder;
+    vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...vendorOrder, vendorGroups: [mockVendorGroup1], totalAmount: mockVendorGroup1.subtotal } as Order });
+    renderWithNav(<OrderDetailPage />);
+    expect(await screen.findByText('Produto Teste 1')).toBeInTheDocument();
+    expect(screen.queryByText('Status do Pedido')).not.toBeInTheDocument();
+    expect(screen.queryByText('Frete')).not.toBeInTheDocument();
+  });
+
+  it('shows vendor profile error and refetches on retry', async () => {
+    setMockAuthRole('VENDOR', 'vendor-person-1');
+    vi.mocked(vendorApi.getMe).mockRejectedValueOnce(new Error('Network error'));
+    vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...mockOrder, vendorGroups: [mockVendorGroup1], status: undefined as any, financialStatus: undefined } as Order });
+    renderWithNav(<OrderDetailPage />);
+
+    await waitFor(() => expect(screen.getByText(/could not load vendor profile/i)).toBeInTheDocument());
+    const callsBeforeRetry = vi.mocked(vendorApi.getMe).mock.calls.length;
+    const retryButton = screen.getByRole('button', { name: /try again/i });
+    fireEvent.click(retryButton);
+
+    await waitFor(() => expect(vi.mocked(vendorApi.getMe).mock.calls.length).toBeGreaterThan(callsBeforeRetry));
+  });
+
+  it('recovers vendor profile after retry and enables vendor actions', async () => {
+    setMockAuthRole('VENDOR', 'vendor-person-1');
+    vi.mocked(vendorApi.getMe)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({ vendor: { id: 'vendor-1', personId: 'vendor-person-1', storeName: 'Store', slug: 'store', status: 'active', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' } });
+    vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...mockOrder, vendorGroups: [mockVendorGroup1], status: undefined as any, financialStatus: undefined } as Order });
+    renderWithNav(<OrderDetailPage />);
+
+    await waitFor(() => expect(screen.getByText(/could not load vendor profile/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /PREPARING/i })).toBeInTheDocument());
   });
 
   it('shows error state when fetch fails with retry button', async () => {
@@ -314,10 +360,9 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(screen.getByText(/R\$ 10,00/i)).toBeInTheDocument();
     
     // Total - in the order totals card (not table headers)
-    const totalsCard = screen.getByText(/totais do pedido/i).closest('section') || screen.getByText(/totais do pedido/i).closest('div[class*="rounded"]');
-    expect(totalsCard).toBeInTheDocument();
-    const totalLabel = totalsCard!.querySelector('span:not([class*="uppercase"])') || totalsCard!.querySelector('span.text-gray-900');
-    expect(totalLabel).toBeInTheDocument();
+    const totalsCard = screen.getByText(/totais do pedido/i).closest('div[class*="rounded-xl"]');
+    expect(totalsCard).not.toBeNull();
+    expect(totalsCard!.textContent).toMatch(/119,97/);
     expect(screen.getByText(/R\$ 119,97/i)).toBeInTheDocument();
   });
 
@@ -364,7 +409,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
   });
 
   it('shows "Atualizar status" buttons for vendor on their vendor groups', async () => {
-    setMockAuthRole('VENDOR', 'vendor-1');
+    setMockAuthRole('VENDOR', 'vendor-person-1');
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -376,7 +421,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
   });
 
   it('does not show vendor status buttons for other vendor groups', async () => {
-    setMockAuthRole('VENDOR', 'vendor-1');
+    setMockAuthRole('VENDOR', 'vendor-person-1');
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -386,10 +431,9 @@ it('displays order header: ID, status badge, date, financial status', async () =
     // For vendor-2 group, available statuses from 'pending' would be 'confirmed', 'cancelled'
     // But these should not be visible since vendor-1 doesn't own vendor-2 group
     // We verify by checking the vendor group for vendor-2 doesn't have action buttons
-    const vendor2Group = screen.getByText(/vendedor: VENDOR-2/i).closest('section');
-    if (vendor2Group) {
-      expect(vendor2Group.querySelectorAll('button').length).toBe(0);
-    }
+    const vendor2Group = screen.getByText(/vendedor: VENDOR-2/i).closest('div[class*="rounded-xl"]');
+    expect(vendor2Group).not.toBeNull();
+    expect(vendor2Group!.querySelectorAll('button').length).toBe(0);
   });
 
   it('shows "Alterar status do pedido" buttons for admin', async () => {
@@ -418,7 +462,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
   });
 
   it('clicking "Voltar" navigates to /orders', async () => {
-    const { navigateMock } = renderWithNav(<OrderDetailPage />);
+    renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
@@ -429,7 +473,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
   });
 
   it('clicking "Comprar Novamente" navigates to /cart', async () => {
-    const { navigateMock } = renderWithNav(<OrderDetailPage />);
+    renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
@@ -440,7 +484,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
   });
 
   it('clicking vendor group status button calls updateVendorGroupStatus', async () => {
-    setMockAuthRole('VENDOR', 'vendor-1');
+    setMockAuthRole('VENDOR', 'vendor-person-1');
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -538,7 +582,7 @@ it('shows vendor group status badge with correct variant', async () => {
   it('clicking "Voltar para meus pedidos" in not found state navigates to /orders', async () => {
     const notFoundError = new Error('404 Not Found');
     vi.mocked(orderApi.getById).mockRejectedValueOnce(notFoundError);
-    const { navigateMock } = renderWithNav(<OrderDetailPage />);
+    renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: /voltar para meus pedidos/i })).toBeInTheDocument());
 

@@ -50,6 +50,10 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         vendorId = vendor.id;
       }
 
+      if (role === 'vendor' && status !== undefined) {
+        return res.status(400).json({ error: 'VENDOR_ORDER_STATUS_FILTER_UNAVAILABLE', message: 'Global order status filter is unavailable for vendors' });
+      }
+
       const result = await orderService.listOrders(personId, {
         status: status as OrderStatus | undefined,
         page: page ? parseInt(page as string, 10) : undefined,
@@ -59,7 +63,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       });
 
       return res.json({
-        orders: result.orders.map(order => orderToResponse(order, vendorId)),
+        orders: result.orders.map(order => vendorId ? vendorOrderToResponse(order, vendorId) : orderToResponse(order)),
         total: result.total,
         page: result.page,
         limit: result.limit
@@ -103,6 +107,8 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       }
 
       let order: Order | null = null;
+      let responseVendorId: string | undefined;
+      let attemptedVendorAccess = false;
       const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
       const isConsumer = req.user.roles.includes(PersonRole.CONSUMER);
       const isVendor = req.user.roles.includes(PersonRole.VENDOR);
@@ -120,15 +126,21 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
             return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
           }
           if (vendor) {
+            attemptedVendorAccess = true;
             order = await orderService.getOrderById(orderId, personId, 'vendor', vendor.id);
+            if (order) responseVendorId = vendor.id;
           }
         }
       }
 
       if (!order) {
+        if (attemptedVendorAccess) return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
         return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
       }
 
+      if (responseVendorId !== undefined) {
+        return res.json({ order: vendorOrderToResponse(order, responseVendorId) });
+      }
       return res.json({ order: orderToResponse(order) });
     } catch (error) {
       if (error instanceof Error) {
@@ -186,7 +198,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       );
 
       const responseVendorId = actorRole === 'vendor' ? actorId : undefined;
-      return res.json({ order: orderToResponse(order, responseVendorId) });
+      return res.json({ order: responseVendorId ? vendorOrderToResponse(order, responseVendorId) : orderToResponse(order) });
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -322,11 +334,28 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
       }
 
+      const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
+      const isConsumer = req.user.roles.includes(PersonRole.CONSUMER);
+      const isVendor = req.user.roles.includes(PersonRole.VENDOR);
+
       let role: 'consumer' | 'vendor' | 'admin' = 'consumer';
       let vendorId: string | undefined;
-      if (req.user.roles.includes(PersonRole.ADMIN)) {
+
+      if (isAdmin) {
         role = 'admin';
-      } else if (req.user.roles.includes(PersonRole.VENDOR)) {
+      } else if (isConsumer && isVendor) {
+        const probe = await orderService.getOrderById(orderId, personId, 'admin');
+        if (probe && probe.personId === personId) {
+          role = 'consumer';
+        } else {
+          const vendor = await vendorRepo.findByPersonId(personId);
+          if (!vendor) {
+            return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+          }
+          vendorId = vendor.id;
+          role = 'vendor';
+        }
+      } else if (isVendor) {
         role = 'vendor';
         const vendor = await vendorRepo.findByPersonId(personId);
         if (!vendor) {
@@ -346,13 +375,10 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         all === true
       );
 
-      const response = orderToResponse(order, role === 'vendor' ? vendorId : undefined);
       if (role === 'vendor') {
-        const { status: _status, financialStatus: _financialStatus, ...vendorResponse } = response;
-        vendorResponse.totalAmount = vendorResponse.vendorGroups.reduce((sum, group) => sum + group.subtotal, 0);
-        return res.json({ order: vendorResponse });
+        return res.json({ order: vendorOrderToResponse(order, vendorId!) });
       }
-      return res.json({ order: response });
+      return res.json({ order: orderToResponse(order) });
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -390,6 +416,11 @@ function orderToResponse(order: Order, vendorId?: string) {
     commentedAt: order.commentedAt,
     commentedBy: order.commentedBy
   };
+}
+
+function vendorOrderToResponse(order: Order, vendorId: string) {
+  const { status: _status, financialStatus: _financialStatus, ...scoped } = orderToResponse(order, vendorId);
+  return { ...scoped, totalAmount: scoped.vendorGroups.reduce((sum, group) => sum + group.subtotal, 0) };
 }
 
 function vendorGroupToResponse(vg: OrderVendorGroup) {

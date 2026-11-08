@@ -1,8 +1,10 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useOrderDetail, useOrderMutations } from './useOrder';
 import { OrderCommentSection } from './OrderCommentSection';
 import { OrderReviewSection } from './OrderReviewSection';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { vendorApi } from '@/shared/api/vendor';
 import {
   Order,
   OrderVendorGroup,
@@ -91,23 +93,23 @@ interface VendorGroupCardProps {
   vendorGroup: OrderVendorGroup;
   isVendor: boolean;
   isAdmin: boolean;
-  currentUserId: string;
+  currentVendorId?: string;
   onUpdateStatus: (ovgId: string, status: OrderVendorGroupStatus) => void;
-  orderStatus: OrderStatus;
+  orderStatus?: OrderStatus;
 }
 
 function VendorGroupCard({
   vendorGroup,
   isVendor,
   isAdmin,
-  currentUserId,
+  currentVendorId,
   onUpdateStatus,
   orderStatus,
 }: VendorGroupCardProps) {
   const statusConfig = getVendorGroupStatusConfig(vendorGroup.status);
-  const isOwnVendorGroup = vendorGroup.vendorId === currentUserId;
+  const isOwnVendorGroup = isVendor && !!currentVendorId && vendorGroup.vendorId === currentVendorId;
   const canUpdateVendorGroup = (isVendor && isOwnVendorGroup) || isAdmin;
-  const isTerminalStatus = TERMINAL_STATUSES.includes(orderStatus);
+  const isTerminalStatus = orderStatus ? TERMINAL_STATUSES.includes(orderStatus) : false;
 
   // Determine available next statuses for vendor group
   const getNextVendorGroupStatuses = (currentStatus: OrderVendorGroupStatus): OrderVendorGroupStatus[] => {
@@ -210,6 +212,7 @@ interface OrderTotalsProps {
 function OrderTotals({ order }: OrderTotalsProps) {
   const subtotal = order.vendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
   const shipping = order.totalAmount - subtotal;
+  const hasOrderStatus = typeof order.status === 'string';
 
   return (
     <Card variant="bordered" padding="md">
@@ -221,10 +224,12 @@ function OrderTotals({ order }: OrderTotalsProps) {
           <span className="text-gray-600">Subtotal ({order.vendorGroups.length} vendedor{order.vendorGroups.length !== 1 ? 'es' : ''})</span>
           <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Frete</span>
-          <span className="font-medium text-gray-900">{formatCurrency(shipping)}</span>
-        </div>
+        {hasOrderStatus && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Frete</span>
+            <span className="font-medium text-gray-900">{formatCurrency(shipping)}</span>
+          </div>
+        )}
         <div className="border-t border-gray-200 pt-3 flex justify-between text-lg font-bold">
           <span className="text-gray-900">Total</span>
           <span className="text-gray-900">{formatCurrency(order.totalAmount)}</span>
@@ -343,6 +348,14 @@ export function OrderDetailPage() {
   const isVendor = hasRole('VENDOR');
   const isAdmin = hasRole('ADMIN');
 
+  const vendorProfileQuery = useQuery({
+    queryKey: ['vendor', 'me', user?.id ?? null],
+    queryFn: () => vendorApi.getMe(),
+    enabled: isVendor,
+    retry: false,
+  });
+  const currentVendorId = vendorProfileQuery.data?.vendor.id;
+
   const {
     data,
     isLoading,
@@ -451,8 +464,9 @@ description="The requested order does not exist or has been removed."
     );
   }
 
-  const orderStatusConfig = getOrderStatusConfig(order.status);
-  const isTerminal = TERMINAL_STATUSES.includes(order.status);
+  const hasOrderStatus = typeof order.status === 'string';
+  const orderStatusConfig = hasOrderStatus ? getOrderStatusConfig(order.status as OrderStatus) : null;
+  const isTerminal = hasOrderStatus && TERMINAL_STATUSES.includes(order.status as OrderStatus);
 
   // Determine available next statuses for admin
   const getNextOrderStatuses = (currentStatus: OrderStatus): OrderStatus[] => {
@@ -468,7 +482,7 @@ description="The requested order does not exist or has been removed."
     return transitions[currentStatus] || [];
   };
 
-  const availableOrderStatuses = getNextOrderStatuses(order.status);
+  const availableOrderStatuses = hasOrderStatus ? getNextOrderStatuses(order.status as OrderStatus) : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -494,6 +508,7 @@ description="The requested order does not exist or has been removed."
         <Card variant="bordered" padding="md" className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              {hasOrderStatus && orderStatusConfig && (
               <div>
                 <p className="text-sm text-gray-500">Status do Pedido</p>
                 <div className="flex items-center gap-2 mt-1">
@@ -507,6 +522,7 @@ description="The requested order does not exist or has been removed."
                   )}
                 </div>
               </div>
+              )}
               <div className="border-l border-gray-200 pl-4 sm:pl-0 sm:border-l-0 sm:border-t sm:pt-4">
                 <p className="text-sm text-gray-500">Data do Pedido</p>
                 <p className="font-medium text-gray-900">{formatDate(order.createdAt)}</p>
@@ -516,7 +532,7 @@ description="The requested order does not exist or has been removed."
             {/* Role-based Actions */}
             <div className="flex flex-wrap gap-2">
               {/* Consumer: Reorder */}
-              {isConsumer && !isTerminal && (
+              {isConsumer && hasOrderStatus && !isTerminal && (
                 <Button variant="primary" onClick={handleReorder} leftIcon={
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -546,10 +562,22 @@ description="The requested order does not exist or has been removed."
           </div>
         </Card>
 
+        {isVendor && vendorProfileQuery.isError && (
+          <div className="mb-6">
+            <ErrorAlert
+              message="Could not load vendor profile. Vendor actions are unavailable."
+              title="Vendor profile error"
+              variant="error"
+              action={{ label: 'Try again', onClick: () => vendorProfileQuery.refetch() }}
+              role="alert"
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: Timeline + Shipping Address */}
           <div className="lg:col-span-1 space-y-6">
-            <TimelineTracker currentStatus={order.status} />
+            {hasOrderStatus && <TimelineTracker currentStatus={order.status as OrderStatus} />}
             <ShippingAddressCard address={order.shippingAddress} />
           </div>
 
@@ -564,9 +592,9 @@ description="The requested order does not exist or has been removed."
                   vendorGroup={vendorGroup}
                   isVendor={isVendor}
                   isAdmin={isAdmin}
-                  currentUserId={user?.id ?? ''}
+                  currentVendorId={currentVendorId}
                   onUpdateStatus={handleUpdateVendorGroupStatus}
-                  orderStatus={order.status}
+                  orderStatus={order.status as OrderStatus | undefined}
                 />
               ))}
             </div>

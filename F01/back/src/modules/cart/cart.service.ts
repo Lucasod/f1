@@ -69,7 +69,12 @@ export class CartService {
     let cart = await this.cartRepo.findById(consumerId);
     if (!cart) {
       cart = Cart.create(consumerId);
-      await this.cartRepo.save(cart);
+      try {
+        await this.cartRepo.save(cart);
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== CartError.CART_ALREADY_EXISTS) throw error;
+        if (!await this.cartRepo.findById(consumerId)) throw error;
+      }
     }
 
     return this.cartRepo.addItem(
@@ -149,11 +154,17 @@ export class CartService {
     return this.cartRepo.mergeGuestCart(guestId, userId, stockByProduct);
   }
 
-  async clearCart(consumerId: string): Promise<void> {
+  async clearCart(consumerId: string): Promise<void | CartError.CART_CONFLICT> {
     const cart = await this.cartRepo.findById(consumerId);
     if (cart) {
-      cart.clear();
-      await this.cartRepo.update(cart);
+      const snapshot = Cart.reconstruct(cart.toJSON());
+      snapshot.clear();
+      try {
+        await this.cartRepo.update(snapshot);
+      } catch (error) {
+        if (error instanceof Error && error.message === CartError.CART_CONFLICT) return CartError.CART_CONFLICT;
+        throw error;
+      }
     }
   }
 
@@ -175,7 +186,7 @@ export class CartService {
       try {
         await this.cartRepo.save(cart);
       } catch (saveError) {
-        // If save fails (e.g., duplicate key race), retry findById
+        if (!(saveError instanceof Error) || saveError.message !== CartError.CART_ALREADY_EXISTS) throw saveError;
         const existingCart = await this.cartRepo.findById(resolvedGuestId);
         if (existingCart) {
           return existingCart;

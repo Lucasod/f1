@@ -157,13 +157,16 @@ export function createProductRoutes({ authService, productService, personRepo, v
   // GET /api/v1/products - List products (public, with optional filters)
   router.get('/', (async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { status, vendorId, categoryId, search, sortBy, page, limit } = req.query;
+      const { status, vendorId, categoryId, search, sortBy, page, limit, catalog } = req.query;
       
       const filters: { status?: string; vendorId?: string; search?: string; sortBy?: string } = {};
       const statusStr = getQueryString(status);
       const vendorIdStr = getQueryString(vendorId);
       const searchStr = getQueryString(search);
       const sortByStr = getQueryString(sortBy);
+      if (searchStr?.includes('\0')) {
+        return res.status(400).json({ error: 'INVALID_SEARCH', message: 'Search must not contain NUL characters' });
+      }
       if (statusStr) filters.status = statusStr;
       if (vendorIdStr) filters.vendorId = vendorIdStr;
       if (searchStr) filters.search = searchStr;
@@ -172,7 +175,9 @@ export function createProductRoutes({ authService, productService, personRepo, v
       const products = await productService.listProducts(filters);
       
       // Filter before pagination, retaining the repository's product order.
-      let filteredProducts = products;
+      let filteredProducts = getQueryString(catalog) === 'true'
+        ? products.filter(product => product.status === ProductStatus.ACTIVE || product.status === ProductStatus.OUT_OF_STOCK)
+        : products;
       const categoryIdStr = getQueryString(categoryId);
       if (categoryIdStr) {
         const categories = await productService.listCategories();
@@ -194,7 +199,7 @@ export function createProductRoutes({ authService, productService, personRepo, v
             }
           }
         }
-        filteredProducts = products.filter(p => categoryIds.has(p.categoryId));
+        filteredProducts = filteredProducts.filter(p => categoryIds.has(p.categoryId));
       }
 
       // Pagination

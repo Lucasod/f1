@@ -4,7 +4,6 @@ import {
   OrderListParams,
   OrderListResponse,
   Order,
-  OrderVendorGroup,
   OrderVendorGroupStatus,
   OrderStatus,
   VendorOrderGroupsParams,
@@ -63,7 +62,7 @@ export function useOrderMutations() {
   };
 
   const useUpdateVendorGroupStatus = () =>
-    useMutation<{ vendorGroup: OrderVendorGroup }, Error, { orderId: string; ovgId: string; status: OrderVendorGroupStatus }>({
+    useMutation<{ order: Order }, Error, { orderId: string; ovgId: string; status: OrderVendorGroupStatus }>({
       mutationFn: ({ orderId, ovgId, status }) => orderApi.updateVendorGroupStatus(orderId, ovgId, status),
       onSuccess: (_data, variables) => {
         invalidateVendorOrders();

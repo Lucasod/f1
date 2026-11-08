@@ -22,6 +22,7 @@ export interface CheckoutPreviewVendorGroup {
 export interface CheckoutPreviewResponse {
   vendorGroups: CheckoutPreviewVendorGroup[];
   totalAmount: number;
+  discountAmount?: number;
 }
 
 export interface CheckoutInput {
@@ -83,7 +84,8 @@ export const checkoutApi = {
   async preview(couponCodes?: string[]): Promise<CheckoutPreviewResponse> {
     const query = buildQueryString({ couponCodes });
     const response = await apiClient.get(`/api/v1/checkout/preview?${query}`);
-    return handleResponse<CheckoutPreviewResponse>(response);
+    const result = await handleResponse<{ preview: CheckoutPreviewResponse }>(response);
+    return result.preview;
   },
 
   /**

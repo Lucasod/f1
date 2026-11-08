@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { AuthService } from '../auth/auth.service';
@@ -66,6 +66,21 @@ describe('Cart routes', () => {
       cartService,
       personRepo: personRepository,
     }));
+  });
+
+  it.each(['delete', 'patch'] as const)('returns conflict for a concurrent add during %s clear', async method => {
+    await request(app).post('/api/v1/cart/items').set('Authorization', `Bearer ${accessToken}`)
+      .send({ productId, quantity: 1 }).expect(201);
+    const update = cartRepository.update.bind(cartRepository);
+    vi.spyOn(cartRepository, 'update').mockImplementationOnce(async snapshot => {
+      await cartRepository.addItem(consumerId, productId, vendor.id, 1, 25, 4);
+      return update(snapshot);
+    });
+    const call = method === 'delete' ? request(app).delete('/api/v1/cart') : request(app).patch('/api/v1/cart/clear');
+    const response = await call.set('Authorization', `Bearer ${accessToken}`);
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('CART_CONFLICT');
+    expect((await cartRepository.findById(consumerId))?.getItem(productId)?.quantity).toBe(2);
   });
 
   it('creates a guest cart, persists it by its returned identifier, and isolates other guests', async () => {
@@ -216,7 +231,7 @@ describe('Cart routes', () => {
       quantity: 1, // Low stock: only 1 available
     });
     lowStockProduct.id = productId;
-    await productRepository.save(lowStockProduct);
+    await productRepository.update(lowStockProduct);
 
     // Add the low-stock item to the cart
     await request(app)
@@ -244,7 +259,7 @@ describe('Cart routes', () => {
     // Now make the product unavailable by changing its status to inactive
     const unavailableProduct = await productRepository.findById(productId);
     unavailableProduct.status = 'inactive';
-    await productRepository.save(unavailableProduct);
+    await productRepository.update(unavailableProduct);
     // Then try to update quantity on the now-unavailable product
     await request(app)
       .patch('/api/v1/cart/items/' + productId)

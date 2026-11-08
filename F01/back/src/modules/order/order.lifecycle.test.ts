@@ -299,10 +299,15 @@ describe('Order lifecycle transitions and ownership', () => {
     expect(listResponse.body.total).toBe(1);
     expect(listResponse.body.orders[0].id).toBe(orderId);
 
-    await request(app)
+    const forbidden = await request(app)
       .get(`/api/v1/orders/${otherOrderId}`)
       .set('Authorization', `Bearer ${vendorToken}`)
-      .expect(404);
+      .expect(403);
+    expect(forbidden.body.order).toBeUndefined();
+    await request(app)
+      .get('/api/v1/orders/nonexistent-order')
+      .set('Authorization', `Bearer ${vendorToken}`)
+      .expect(403);
 
     await request(app)
       .get(`/api/v1/orders/${orderId}`)

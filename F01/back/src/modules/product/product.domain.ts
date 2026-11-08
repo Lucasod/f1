@@ -469,8 +469,7 @@ export class InMemoryProductRepository implements ProductRepository {
       );
     }
 
-    if (filters?.sortBy) {
-      switch (filters.sortBy) {
+    switch (filters?.sortBy ?? 'stock_status') {
         case 'name':
           products.sort((a, b) => a.name.localeCompare(b.name));
           break;
@@ -491,7 +490,6 @@ export class InMemoryProductRepository implements ProductRepository {
             return b.quantity - a.quantity;
           });
           break;
-      }
     }
 
     return products;

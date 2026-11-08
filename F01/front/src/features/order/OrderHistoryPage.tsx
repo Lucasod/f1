@@ -34,7 +34,8 @@ function formatDate(dateString: string): string {
 /**
  * Map API order status to display label and badge variant
  */
-function getStatusConfig(status: OrderStatus): { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' } {
+function getStatusConfig(status: OrderStatus | undefined): { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' } {
+  if (!status) return { label: 'UNKNOWN', variant: 'neutral' };
   const statusMap: Record<OrderStatus, { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral' }> = {
     pending_payment: { label: 'PENDING_PAYMENT', variant: 'warning' },
     paid: { label: 'PAID', variant: 'default' },

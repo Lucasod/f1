@@ -9,9 +9,9 @@ export interface ProductFilterParams {
   limit?: number;
 }
 
-function buildQueryParams(filters: ProductFilterParams & { status: string; page: number; limit: number }): ProductListParams {
+function buildQueryParams(filters: ProductFilterParams & { page: number; limit: number }): ProductListParams {
   const params: ProductListParams = {
-    status: filters.status,
+    catalog: true,
     page: filters.page,
     limit: filters.limit,
   };
@@ -27,7 +27,7 @@ export function useProducts(filters: ProductFilterParams = {}) {
   const {
     categoryId,
     search,
-    sortBy = 'newest',
+    sortBy = 'stock_status',
     page = 1,
     limit = 20,
   } = filters;
@@ -36,7 +36,6 @@ export function useProducts(filters: ProductFilterParams = {}) {
     queryKey: ['products', { categoryId, search, sortBy, page, limit }],
     queryFn: () =>
       productApi.list(buildQueryParams({
-        status: 'active',
         categoryId,
         search,
         sortBy,

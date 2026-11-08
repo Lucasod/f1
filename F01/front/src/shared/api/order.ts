@@ -56,11 +56,11 @@ export interface OrderVendorGroup {
 export interface Order {
   id: string;
   personId: string;
-  status: OrderStatus;
+  status?: OrderStatus;
   vendorGroups: OrderVendorGroup[];
   shippingAddress: Address;
   totalAmount: number;
-  financialStatus: string;
+  financialStatus?: string;
   createdAt: string;
   updatedAt: string;
   comment?: string;
@@ -176,12 +176,12 @@ export const orderApi = {
     orderId: string,
     ovgId: string,
     status: OrderVendorGroupStatus
-  ): Promise<{ vendorGroup: OrderVendorGroup }> {
+  ): Promise<{ order: Order }> {
     const response = await apiClient.patch(
       `/api/v1/orders/${orderId}/vendor-groups/${ovgId}/status`,
       { status }
     );
-    return handleResponse<{ vendorGroup: OrderVendorGroup }>(response);
+    return handleResponse<{ order: Order }>(response);
   },
 
   /**
