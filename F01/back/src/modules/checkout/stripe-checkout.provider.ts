@@ -57,3 +57,11 @@ export class StripeCheckoutProvider implements CheckoutPaymentProvider {
     await this.stripe.checkout.sessions.expire(sessionId);
   }
 }
+
+export class MockCheckoutProvider implements CheckoutPaymentProvider {
+  async createSession(order: Order, payment: Payment): Promise<CheckoutSessionResult> {
+    const id = `cs_test_${order.id}_${payment.id}`;
+    return { id, url: `https://checkout.stripe.test/mock/${id}` };
+  }
+  async expireSession(sessionId: string): Promise<void> { /* no-op */ }
+}

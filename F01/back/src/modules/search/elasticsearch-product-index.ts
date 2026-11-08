@@ -1,5 +1,6 @@
 import { Product, ProductStatus } from '../product/product.domain';
 import { ElasticsearchProductWriter } from './elasticsearch-product-writer';
+import type { ProductSearchSync } from './product-search-sync';
 
 export interface ProductSearchFilters {
   status?: string;
@@ -29,7 +30,7 @@ export interface SearchRebuildResult {
 export class ElasticsearchProductIndex {
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string, private readonly fetcher: typeof fetch = fetch) {
+  constructor(baseUrl: string, private readonly fetcher: typeof fetch = fetch, private readonly sync?: Pick<ProductSearchSync, 'publish'>) {
     let url: URL;
     try {
       url = new URL(baseUrl);
@@ -46,6 +47,7 @@ export class ElasticsearchProductIndex {
     try {
       const aliasResponse = await this.fetcher(`${this.baseUrl}/_alias/products`, {
         method: 'GET',
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
       if (aliasResponse.ok) {
@@ -57,6 +59,7 @@ export class ElasticsearchProductIndex {
 
       const createResponse = await this.fetcher(`${this.baseUrl}/products_v1`, {
         method: 'PUT',
+        redirect: 'error',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           settings: {
@@ -83,6 +86,7 @@ export class ElasticsearchProductIndex {
               images: { type: 'keyword' },
               created_at: { type: 'date' },
               updated_at: { type: 'date' },
+              search_revision: { type: 'long' },
             },
           },
         }),
@@ -94,6 +98,7 @@ export class ElasticsearchProductIndex {
 
       const aliasResponse2 = await this.fetcher(`${this.baseUrl}/_aliases`, {
         method: 'POST',
+        redirect: 'error',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           actions: [{ add: { index: 'products_v1', alias: 'products' } }],
@@ -103,19 +108,21 @@ export class ElasticsearchProductIndex {
       if (!aliasResponse2.ok && aliasResponse2.status !== 400) {
         throw new Error('ELASTICSEARCH_INDEX_FAILED');
       }
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('ELASTICSEARCH_')) {
-        throw error;
-      }
+    } catch {
       throw new Error('ELASTICSEARCH_INDEX_FAILED');
     }
   }
 
   async indexProduct(product: Product): Promise<void> {
+    // In Mongo runtime no caller, including legacy seed/rebuild overloads, can
+    // publish a supplied memory snapshot through the unversioned writer.
+    if (this.sync) return this.sync.publish(product.id);
     await this.ensureIndex();
     const writer = new ElasticsearchProductWriter(this.baseUrl, this.fetcher);
     await writer.put(product.id, toDocument(product));
   }
+
+  get durable(): boolean { return this.sync !== undefined; }
 
   async rebuildFromMongo(source?: unknown): Promise<SearchRebuildResult> {
     return this.rebuildFromSource(source);
@@ -141,18 +148,13 @@ export class ElasticsearchProductIndex {
     const products = await this.resolveProducts(source);
     let indexed = 0;
     let failed = 0;
-    try {
-      await this.ensureIndex();
-    } catch (error) {
-      console.warn('Elasticsearch index ensure failed during rebuild', error);
-    }
     for (const product of products) {
       try {
         await this.indexProduct(product);
         indexed += 1;
       } catch (error) {
         failed += 1;
-        console.warn('Elasticsearch product indexing failed for product', product?.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return {
@@ -173,28 +175,7 @@ export class ElasticsearchProductIndex {
   }
 
   private async resolveProducts(source?: unknown): Promise<Product[]> {
-    if (Array.isArray(source)) {
-      return source as Product[];
-    }
-    if (typeof source === 'function') {
-      const result = await (source as () => Promise<unknown>)();
-      return Array.isArray(result) ? (result as Product[]) : [];
-    }
-    if (source && typeof source === 'object') {
-      const obj = source as Record<string, unknown>;
-      if (Array.isArray(obj.products)) {
-        return obj.products as Product[];
-      }
-      if (typeof obj.findAll === 'function') {
-        const result = await (obj.findAll as () => Promise<unknown>)();
-        return Array.isArray(result) ? (result as Product[]) : [];
-      }
-      if (typeof obj.then === 'function') {
-        const result = await (source as Promise<unknown>);
-        return Array.isArray(result) ? (result as Product[]) : [];
-      }
-    }
-    return [];
+    return resolveProductSource(source);
   }
 
   async removeProduct(id: string): Promise<void> {
@@ -285,7 +266,26 @@ export class ElasticsearchProductIndex {
   }
 }
 
-function toDocument(product: Product): Record<string, unknown> {
+/** Explicit source compatibility: source payloads select IDs, not durable content. */
+export async function resolveProductSource(source: unknown): Promise<Product[]> {
+  let result: unknown;
+  try {
+    if (Array.isArray(source)) result = source;
+    else if (typeof source === 'function') result = await source();
+    else if (source && typeof source === 'object') {
+      const object = source as Record<string, any>;
+      if (Array.isArray(object.products)) result = object.products;
+      else if (typeof object.findAll === 'function') result = await object.findAll();
+      else if (typeof object.then === 'function') result = await source;
+    }
+  } catch { throw new Error('PRODUCT_SEARCH_SOURCE_FAILED'); }
+  if (!Array.isArray(result) || result.some(product => !product || typeof product.id !== 'string' || !product.id)) {
+    throw new Error('PRODUCT_SEARCH_SOURCE_INVALID');
+  }
+  return result as Product[];
+}
+
+export function toDocument(product: Product): Record<string, unknown> {
   return {
     product_id: product.id,
     vendor_id: product.vendorId,

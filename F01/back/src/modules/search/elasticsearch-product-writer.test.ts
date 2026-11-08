@@ -6,6 +6,35 @@ const bulk = (action: string, item: object, errors = false) =>
   new Response(JSON.stringify({ errors, items: [{ [action]: item }] }), { status: 200 });
 
 describe('Elasticsearch product writer', () => {
+  it('aborts versioned HTTP on shutdown and sanitizes the transport failure', async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(async (_url, options) => new Promise<Response>((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('synthetic transport details')), { once: true });
+      controller.abort();
+    }));
+    await expect(new ElasticsearchProductWriter(base, fetcher).putVersioned('p1', {}, Number.MAX_SAFE_INTEGER, controller.signal))
+      .rejects.toThrow(/^ELASTICSEARCH_WRITE_FAILED$/);
+    expect(fetcher.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+  it('uses revision fencing and accepts only identified update results', async () => {
+    for (const result of ['created', 'updated', 'noop']) {
+      const fetcher = vi.fn().mockResolvedValue(bulk('update', { _id: 'p1', status: result === 'created' ? 201 : 200, result }));
+      await expect(new ElasticsearchProductWriter(base, fetcher).putVersioned('p1', { quantity: 1 }, 1)).resolves.toBeUndefined();
+    }
+    for (const response of [bulk('index', { _id: 'p1', status: 200, result: 'updated' }),
+      bulk('update', { _id: 'other', status: 200, result: 'noop' }),
+      bulk('update', { _id: 'p1', status: 409, result: 'noop' }),
+      bulk('update', { _id: 'p1', status: 200, result: 'noop', error: {} }),
+      bulk('update', { _id: 'p1', status: 200, result: 'deleted' }),
+      new Response('{}'), new Response('{'), bulk('update', { _id: 'p1', status: 200, result: 'noop' }, true)]) {
+      await expect(new ElasticsearchProductWriter(base, vi.fn().mockResolvedValue(response)).putVersioned('p1', {}, 1)).rejects.toThrow('ELASTICSEARCH_WRITE_FAILED');
+    }
+    const fetcher = vi.fn();
+    for (const revision of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity]) {
+      await expect(new ElasticsearchProductWriter(base, fetcher).putVersioned('p1', {}, revision)).rejects.toThrow('PRODUCT_SEARCH_REVISION_INVALID');
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('rejects deletion before any network request, even if the provider would succeed', async () => {
     const fetcher = vi.fn().mockResolvedValue(bulk('delete', { _id: 'p1', status: 200, result: 'deleted' }));
     await expect(new ElasticsearchProductWriter(base, fetcher).delete('p1')).rejects.toThrow('ELASTICSEARCH_DELETE_UNAVAILABLE');

@@ -4,10 +4,12 @@ import { apiClient } from './client';
 
 vi.mock('./client', () => ({ apiClient: { get: vi.fn() } }));
 
-it('unwraps the existing backend preview envelope and encodes multiple coupon codes', async () => {
+it('unwraps plain preview and rejects unvalidated coupon envelopes while encoding multiple codes', async () => {
   const preview = { vendorGroups: [], totalAmount: 9, discountAmount: 0 };
   vi.mocked(apiClient.get).mockResolvedValue({ ok: true, json: async () => ({ preview }) } as Response);
-  await expect(checkoutApi.preview(['ONE', 'TWO'])).resolves.toEqual(preview);
-  const params = new URLSearchParams(vi.mocked(apiClient.get).mock.calls[0][0].split('?')[1]);
+  await expect(checkoutApi.preview()).resolves.toEqual(preview);
+  await expect(checkoutApi.preview(['ONE', 'TWO'])).rejects.toMatchObject({ code: 'INVALID_COUPON_QUOTE' });
+  const calls = vi.mocked(apiClient.get).mock.calls;
+  const params = new URLSearchParams(calls[calls.length - 1][0].split('?')[1]);
   expect(params.getAll('couponCodes')).toEqual(['ONE', 'TWO']);
 });

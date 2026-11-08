@@ -323,7 +323,7 @@ export class PaymentService {
                   await this.searchIndex.indexProduct(product);
                 }
               } catch (indexError) {
-                console.warn('Elasticsearch product indexing failed for product', productId, indexError);
+                console.warn('Elasticsearch product indexing failed');
               }
             }
           } catch (err) {

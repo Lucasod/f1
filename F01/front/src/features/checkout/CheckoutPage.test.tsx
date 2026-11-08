@@ -86,7 +86,8 @@ vi.mock('./CheckoutPage', async () => {
   };
 });
 
-vi.mock('./useCheckout', () => ({
+vi.mock('./useCheckout', async () => ({
+  ...await vi.importActual('./useCheckout'),
   useCheckoutState: () => mockUseCheckoutState,
   useCheckoutPreview: () => mockUseCheckoutPreview,
   useCheckoutMutations: () => mockUseCheckoutMutations,
@@ -521,6 +522,7 @@ describe('CheckoutPage', () => {
   });
 
   it('does not mark a coupon applied when preview does not confirm validation', async () => {
+    mockCheckoutApi.preview.mockResolvedValueOnce(mockPreviewResponse);
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -529,29 +531,31 @@ describe('CheckoutPage', () => {
     const applyButton = screen.getByTestId('coupon-apply-button');
 
     // Enter a coupon code and apply
+    fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor-1' } });
     fireEvent.change(couponInput, { target: { value: 'TEST10' } });
     fireEvent.click(applyButton);
 
-    expect(await screen.findByText(/validação de cupons está indisponível/i)).toBeInTheDocument();
+    expect(await screen.findByText('Invalid coupon quote')).toBeInTheDocument();
     expect(mockUseCheckoutState.addCouponCode).not.toHaveBeenCalled();
   });
 
   it('displays a coupon service error without applying the code', async () => {
-    mockCheckoutApi.preview.mockRejectedValueOnce(new Error('Cupons temporariamente indisponíveis'));
+    mockCheckoutApi.preview.mockRejectedValueOnce(new Error('Coupon quote unavailable'));
     renderWithNav(<CheckoutPage />);
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor-1' } });
     fireEvent.change(screen.getByTestId('coupon-input'), { target: { value: 'EXAMPLE' } });
     fireEvent.click(screen.getByTestId('coupon-apply-button'));
-    expect(await screen.findByText('Cupons temporariamente indisponíveis')).toBeInTheDocument();
+    expect(await screen.findByText('Coupon quote unavailable')).toBeInTheDocument();
     expect(mockUseCheckoutState.addCouponCode).not.toHaveBeenCalled();
   });
 
-  it('shows that coupon application is temporarily unavailable', async () => {
+  it('explains that coupon quotes cannot be purchased', async () => {
     renderWithNav(<CheckoutPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/Aplicação de cupons temporariamente indisponível/i)).toBeInTheDocument();
+    expect(screen.getByText('Coupon quotes cannot be purchased. Remove the selection to checkout without a coupon.')).toBeInTheDocument();
   });
 
 it('displays order summary with vendor groups, items, subtotal, discount, total', async () => {
@@ -563,8 +567,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(screen.getByText(/resumo do pedido/i)).toBeInTheDocument();
 
     // Check vendor groups
-    expect(screen.getByText('Vendor 1')).toBeInTheDocument();
-    expect(screen.getByText('Vendor 2')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Vendor 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Vendor 2' })).toBeInTheDocument();
 
     // Check items
     expect(screen.getByText('Produto Teste 1')).toBeInTheDocument();
@@ -889,8 +893,8 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
   });
 
-  it('refetches preview when coupon is removed', async () => {
-    mockUseCheckoutState.setCouponCodes(['SAVE10']);
+  it('refetches plain preview when a confirmed coupon quote is removed', async () => {
+    mockCheckoutApi.preview.mockResolvedValueOnce({ ...mockPreviewResponse, calculationVersion: 'coupon-quote-v1', purchasable: false, vendorGroups: [{ ...mockPreviewVendorGroup1, coupon: { vendorId: 'vendor-1', code: 'SAVE10' } }, mockPreviewVendorGroup2] });
     mockUseCheckoutPreview.refetch.mockClear();
 
     renderWithNav(<CheckoutPage />);
@@ -900,13 +904,93 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     // Select address
     fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
 
-    // Apply coupon (already in state)
-
+    fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor-1' } });
+    fireEvent.change(screen.getByTestId('coupon-input'), { target: { value: 'SAVE10' } });
+    fireEvent.click(screen.getByTestId('coupon-apply-button'));
     // Remove coupon
-    fireEvent.click(screen.getByRole('button', { name: /remover cupom save10/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove coupon SAVE10 from Vendor 1' }));
 
-    // Should call removeCouponCode
-    expect(mockUseCheckoutState.removeCouponCode).toHaveBeenCalledWith('SAVE10');
+    expect(mockUseCheckoutPreview.refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Remove coupon SAVE10 from Vendor 1' })).not.toBeInTheDocument();
+  });
+
+  describe.each(['cart', 'preview'] as const)('%s error with unchanged cached cart and preview', (source) => {
+    const quote: CheckoutPreviewResponse = {
+      ...mockPreviewResponseWithDiscount,
+      calculationVersion: 'coupon-quote-v1',
+      purchasable: false,
+      vendorGroups: [{ ...mockPreviewResponseWithDiscount.vendorGroups[0], coupon: { id: 'coupon-1', revision: 1, vendorId: 'vendor-1', code: 'SAVE10', discountType: 'percentBps', value: 1000 } }, mockPreviewVendorGroup2],
+    };
+    const setError = (error: Error | null) => {
+      if (source === 'cart') mockUseCart.error = error;
+      else mockUseCheckoutPreview.error = error;
+    };
+    const apply = () => {
+      fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByTestId('coupon-input'), { target: { value: 'SAVE10' } });
+      fireEvent.click(screen.getByTestId('coupon-apply-button'));
+    };
+    const mount = async () => {
+      mockUseCheckoutState.setSelectedAddressId('addr-1');
+      mockUseCheckoutState.setPaymentMethod('stripe_checkout');
+      const rendered = renderWithNav(<CheckoutPage />);
+      await waitFor(() => expect(screen.getByTestId('checkout-submit-button')).toBeEnabled());
+      return rendered;
+    };
+    const expectPlain = () => {
+      expect(screen.queryByRole('button', { name: /Remove coupon/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('Discounted checkout is not available. This is a quote only.')).not.toBeInTheDocument();
+      expect(screen.queryByText(/98,97/)).not.toBeInTheDocument();
+      expect(screen.getByTestId('checkout-submit-button')).toBeEnabled();
+    };
+
+    it('discards a confirmed quote permanently and permits a new explicit quote after recovery', async () => {
+      const cart = mockUseCart.data.cart;
+      const preview = mockUseCheckoutPreview.data;
+      mockCheckoutApi.preview.mockResolvedValue(quote);
+      const rendered = await mount();
+      apply();
+      await screen.findByRole('button', { name: 'Remove coupon SAVE10 from Vendor 1' });
+      expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
+      setError(new Error('Refetch failed'));
+      rendered.rerender(<CheckoutPage />);
+      expect(screen.queryByRole('button', { name: /Remove coupon/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(/98,97/)).not.toBeInTheDocument();
+      if (source === 'preview') {
+        expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
+        fireEvent.keyDown(screen.getByTestId('coupon-input'), { key: 'Enter' });
+      }
+      setError(null);
+      rendered.rerender(<CheckoutPage />);
+      expectPlain();
+      expect(mockUseCart.data.cart).toBe(cart);
+      expect(mockUseCheckoutPreview.data).toBe(preview);
+      expect(mockCheckoutApi.preview).toHaveBeenCalledTimes(1);
+      apply();
+      await screen.findByRole('button', { name: 'Remove coupon SAVE10 from Vendor 1' });
+      expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
+      fireEvent.click(screen.getByTestId('checkout-submit-button'));
+      expect(mockCheckoutApi.checkout).not.toHaveBeenCalled();
+      expect(mockCheckoutApi.preview).toHaveBeenLastCalledWith(undefined, [{ vendorId: 'vendor-1', code: 'SAVE10' }]);
+    });
+
+    it.each(['during error', 'after recovery'] as const)('ignores an earlier deferred quote resolved %s', async (timing) => {
+      let release!: (value: CheckoutPreviewResponse) => void;
+      mockCheckoutApi.preview.mockImplementationOnce(() => new Promise<CheckoutPreviewResponse>(resolve => { release = resolve; }));
+      const rendered = await mount();
+      apply();
+      expect(mockCheckoutApi.preview).toHaveBeenCalledTimes(1);
+      setError(new Error('Refetch failed'));
+      rendered.rerender(<CheckoutPage />);
+      if (timing === 'during error') await act(async () => { release(quote); });
+      setError(null);
+      rendered.rerender(<CheckoutPage />);
+      if (timing === 'after recovery') await act(async () => { release(quote); });
+      expectPlain();
+      expect(screen.getByTestId('coupon-apply-button')).toBeEnabled();
+      expect(mockCheckoutApi.preview).toHaveBeenCalledTimes(1);
+      expect(mockCheckoutApi.checkout).not.toHaveBeenCalled();
+    });
   });
 
   it('shows progress steps', async () => {

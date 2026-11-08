@@ -130,4 +130,98 @@ describe('seed search index reindex', () => {
 
     expect(searchIndex.indexProduct).not.toHaveBeenCalled();
   });
+
+  async function completeCatalog() {
+    await runSeed(repositories);
+    const products = await repositories.productRepo.findAll();
+    const edited = Product.reconstruct({
+      ...products[0], id: 'persisted-complete-product', name: 'Edited complete product',
+      description: 'Persisted description', price: 8.5, quantity: 0,
+      status: ProductStatus.INACTIVE, images: ['/persisted-image'],
+    });
+    await repositories.productRepo.delete(products[0].id);
+    await repositories.productRepo.save(edited);
+    return { products: await repositories.productRepo.findAll(), edited };
+  }
+
+  function bootstrapWrites() {
+    return [
+      vi.spyOn(repositories.personRepo, 'save'), vi.spyOn(repositories.personRepo, 'update'),
+      vi.spyOn(repositories.vendorRepo, 'save'), vi.spyOn(repositories.vendorRepo, 'update'),
+      vi.spyOn(repositories.categoryRepo, 'save'), vi.spyOn(repositories.categoryRepo, 'update'),
+      vi.spyOn(repositories.productRepo, 'save'), vi.spyOn(repositories.productRepo, 'update'),
+    ];
+  }
+
+  it('recovers a missing index from the complete persisted catalog repeatedly without bootstrap writes', async () => {
+    const { products, edited } = await completeCatalog();
+    const writes = bootstrapWrites();
+    const indexed = new Map<string, Product>();
+    const searchIndex = { indexProduct: vi.fn(async (product: Product) => { indexed.set(product.id, product); }) };
+
+    await runDevelopmentSeed(repositories, searchIndex);
+    expect(searchIndex.indexProduct).toHaveBeenCalledTimes(12);
+    expect(indexed.get(edited.id)).toEqual(edited);
+    expect([...indexed.values()]).toEqual(expect.arrayContaining(products));
+    indexed.clear(); // Simulate a recreated Elasticsearch index.
+    await runDevelopmentSeed(repositories, searchIndex);
+
+    expect(searchIndex.indexProduct).toHaveBeenCalledTimes(24);
+    expect(indexed.size).toBe(12);
+    expect(await repositories.productRepo.findAll()).toEqual(products);
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps complete Mongo catalog unchanged and attempts every document when Elasticsearch fails', async () => {
+    const { products } = await completeCatalog();
+    const writes = bootstrapWrites();
+    const searchIndex = { indexProduct: vi.fn().mockRejectedValue(new Error('ES_DOWN')) };
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(runDevelopmentSeed(repositories, searchIndex)).resolves.toBeUndefined();
+      expect(searchIndex.indexProduct).toHaveBeenCalledTimes(12);
+      expect(warning).toHaveBeenCalledTimes(12);
+      expect(await repositories.productRepo.findAll()).toEqual(products);
+      for (const write of writes) expect(write).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it.each(['duplicate identity', 'wrong vendor', 'missing vendor'])(
+    'rejects a complete catalog with %s before indexing or bootstrap writes', async conflict => {
+      const { products } = await completeCatalog();
+      if (conflict === 'duplicate identity') {
+        vi.spyOn(repositories.productRepo, 'findAll').mockResolvedValue([
+          ...products, Product.reconstruct({ ...products[11], id: 'duplicate-seed' }),
+        ]);
+      } else if (conflict === 'wrong vendor') {
+        await repositories.productRepo.update(Product.reconstruct({ ...products[11], vendorId: 'unexpected-vendor' }));
+      } else {
+        vi.spyOn(repositories.vendorRepo, 'findBySlug').mockResolvedValue(null);
+      }
+      const writes = bootstrapWrites();
+      const searchIndex = { indexProduct: vi.fn() };
+
+      await expect(runDevelopmentSeed(repositories, searchIndex)).rejects.toThrow(
+        conflict === 'missing vendor' ? 'SEED_VENDOR_NOT_FOUND' : ProductError.PRODUCT_CONFLICT,
+      );
+      expect(searchIndex.indexProduct).not.toHaveBeenCalled();
+      for (const write of writes) expect(write).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not index unrelated products alongside the complete seed catalog', async () => {
+    const { products } = await completeCatalog();
+    const unrelated = Product.reconstruct({ ...products[0], id: 'unrelated-product', seedIdentity: undefined });
+    await repositories.productRepo.save(unrelated);
+    const writes = bootstrapWrites();
+    const searchIndex = { indexProduct: vi.fn().mockResolvedValue(undefined) };
+
+    await runDevelopmentSeed(repositories, searchIndex);
+
+    expect(searchIndex.indexProduct).toHaveBeenCalledTimes(12);
+    expect(searchIndex.indexProduct).not.toHaveBeenCalledWith(unrelated);
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+  });
 });

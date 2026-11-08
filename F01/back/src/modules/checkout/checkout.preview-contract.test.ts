@@ -27,7 +27,7 @@ describe('checkout preview contract', () => {
     try {
       await expect(checkoutApi.preview()).resolves.toEqual(preview);
       await expect(checkoutApi.preview(['ONE', 'TWO'])).rejects.toMatchObject({ status: 503, code: 'COUPONS_UNAVAILABLE' });
-      expect(previewCheckout).toHaveBeenCalledTimes(1);
+      expect(previewCheckout).toHaveBeenCalledTimes(2);
     } finally {
       get.mockRestore();
     }
@@ -56,6 +56,6 @@ describe('checkout preview contract', () => {
     const plainPurchase = await request(app).post('/').set('x-test-consumer', 'yes').send({ shippingAddressId: 'address' });
     expect(plainPurchase.status).toBe(201);
     expect(checkout).toHaveBeenCalledTimes(1);
-    expect(previewCheckout).toHaveBeenCalledTimes(1);
+    expect(previewCheckout).toHaveBeenCalledTimes(3);
   });
 });

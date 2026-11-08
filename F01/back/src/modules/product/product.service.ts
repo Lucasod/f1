@@ -11,7 +11,7 @@ import {
 } from './product.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { config } from '../../config';
-import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
+import { ElasticsearchProductIndex, resolveProductSource } from '../search/elasticsearch-product-index';
 
 export interface CreateProductInput {
   vendorId: string;
@@ -115,7 +115,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(saved);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', saved.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return saved;
@@ -148,7 +148,7 @@ export class ProductService {
           sortBy: filters.sortBy,
         });
       } catch (error) {
-        console.warn('Elasticsearch product search failed; falling back to MongoDB', error);
+        console.warn('Elasticsearch product search failed; falling back to MongoDB');
       }
     }
     return this.productRepo.findAll(filters);
@@ -226,7 +226,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(updated);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', updated.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return updated;
@@ -251,7 +251,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(updated);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', updated.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
   }
@@ -273,7 +273,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(updatedStock);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return updatedStock;
@@ -296,7 +296,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(updatedStock);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return updatedStock;
@@ -329,7 +329,7 @@ export class ProductService {
       try {
         await this.searchIndex.indexProduct(updatedStock);
       } catch (error) {
-        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
     return updatedStock;
@@ -378,7 +378,7 @@ export class ProductService {
         indexed += 1;
       } catch (error) {
         failed += 1;
-        console.warn('Elasticsearch product indexing failed for product', product?.id, error);
+        console.warn('Elasticsearch product indexing failed');
       }
     }
 
@@ -400,68 +400,19 @@ export class ProductService {
   }
 
   private async resolveRebuildSource(source?: unknown): Promise<{ products: any[]; searchIndex?: any }> {
-    let products: any[] = [];
-    let searchIndex: any;
-
     if (source === undefined || source === null) {
-      products = await this.productRepo.findAll();
-      return { products, searchIndex: this.searchIndex };
+      return { products: await this.productRepo.findAll(), searchIndex: this.searchIndex };
     }
-
-    if (Array.isArray(source)) {
-      return { products: source, searchIndex: this.searchIndex };
+    const object = source as any;
+    const publisher = typeof object?.indexProduct === 'function' ? object : undefined;
+    if (publisher && this.searchIndex?.durable && publisher !== this.searchIndex) {
+      throw new Error('PRODUCT_SEARCH_SOURCE_PUBLISHER_UNSUPPORTED');
     }
-
-    if (typeof source === 'function') {
-      try {
-        const result = await (source as () => Promise<unknown>)();
-        products = Array.isArray(result) ? result : [];
-      } catch {
-        products = [];
-      }
-      return { products, searchIndex: this.searchIndex };
-    }
-
-    if (typeof source === 'object') {
-      const obj = source as Record<string, unknown>;
-      if (typeof obj.indexProduct === 'function') {
-        searchIndex = obj;
-      }
-      if (Array.isArray(obj.products)) {
-        products = obj.products as any[];
-      } else if (typeof obj.findAll === 'function') {
-        try {
-          const result = await (obj.findAll as () => Promise<unknown>)();
-          products = Array.isArray(result) ? (result as any[]) : [];
-        } catch {
-          products = [];
-        }
-      } else {
-        try {
-          products = await this.productRepo.findAll();
-        } catch {
-          products = [];
-        }
-      }
-      if (searchIndex && (Array.isArray(obj.products) || typeof obj.findAll === 'function')) {
-        // keep searchIndex from source if it also has findAll+indexProduct combined
-      }
-      if (!searchIndex) {
-        searchIndex = this.searchIndex;
-      }
-      // If source provides both, prefer source as searchIndex already set
-      if (typeof obj.findAll === 'function' && typeof obj.indexProduct === 'function') {
-        // products already resolved from source.findAll; searchIndex from source
-      }
-      return { products, searchIndex };
-    }
-
-    try {
-      products = await this.productRepo.findAll();
-    } catch {
-      products = [];
-    }
-    return { products, searchIndex: this.searchIndex };
+    // Legacy combined publisher+source and publisher-only overloads remain
+    // supported outside durable runtime. They cannot bypass its versioned port.
+    const publisherOnly = publisher && !Array.isArray(object.products) && typeof object.findAll !== 'function' && typeof object.then !== 'function';
+    const products = publisherOnly ? await this.productRepo.findAll() : await resolveProductSource(source);
+    return { products, searchIndex: publisher ?? this.searchIndex };
   }
 
   // ============ Category Methods ============

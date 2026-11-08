@@ -22,6 +22,8 @@ interface OrderDoc {
   comment?: string;
   commentedAt?: Date;
   commentedBy?: string;
+  attemptId?: string;
+  acceptedHash?: string;
 }
 
 interface OrderVendorGroupDoc {
@@ -115,7 +117,9 @@ export class MongoOrderRepository implements OrderRepository {
       updatedAt: now,
       comment: order.comment,
       commentedAt: order.commentedAt,
-      commentedBy: order.commentedBy
+      commentedBy: order.commentedBy,
+      attemptId: order.attemptId,
+      acceptedHash: order.acceptedHash
     };
 
     const isPaidTransition = order.status === OrderStatus.PAID;
@@ -140,7 +144,9 @@ export class MongoOrderRepository implements OrderRepository {
           updatedAt: now,
           comment: orderDoc.comment,
           commentedAt: orderDoc.commentedAt,
-          commentedBy: orderDoc.commentedBy
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash
         },
         $setOnInsert: {
           createdAt: order.createdAt
@@ -277,7 +283,9 @@ export class MongoOrderRepository implements OrderRepository {
       updatedAt: doc.updatedAt,
       comment: doc.comment,
       commentedAt: doc.commentedAt,
-      commentedBy: doc.commentedBy
+      commentedBy: doc.commentedBy,
+      attemptId: doc.attemptId,
+      acceptedHash: doc.acceptedHash
     };
 
     return Order.reconstruct(orderData);

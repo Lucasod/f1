@@ -463,7 +463,7 @@ async function reindexSeededProducts(products: Product[], searchIndex: any): Pro
     try {
       await searchIndex.indexProduct(product);
     } catch (error) {
-      console.warn('Elasticsearch product indexing failed for product', product.id, error);
+      console.warn('Elasticsearch product indexing failed');
     }
   }
 }
@@ -474,6 +474,20 @@ export async function runDevelopmentSeed(repositories: SeedRepositories, searchI
   if (existingProducts.length > 0) {
     const hasSeedProducts = existingProducts.some(product => PRODUCTS.some(entry => entry.seedIdentity === product.seedIdentity));
     const catalogIncomplete = PRODUCTS.some(entry => !existingProducts.some(product => product.seedIdentity === entry.seedIdentity));
+    if (!catalogIncomplete && searchIndex) {
+      const seededProducts: Product[] = [];
+      for (const entry of PRODUCTS) {
+        const matching = existingProducts.filter(product => product.seedIdentity === entry.seedIdentity);
+        if (matching.length !== 1) throw new Error(ProductError.PRODUCT_CONFLICT);
+        const vendor = await repositories.vendorRepo.findBySlug(entry.vendorSlug);
+        if (!vendor) throw new Error('SEED_VENDOR_NOT_FOUND');
+        if (matching[0].vendorId !== vendor.id) throw new Error(ProductError.PRODUCT_CONFLICT);
+        seededProducts.push(matching[0]);
+      }
+      // Index-only recovery must not bootstrap accounts or rewrite the existing catalog.
+      await reindexSeededProducts(seededProducts, searchIndex);
+      return;
+    }
     if (hasSeedProducts && catalogIncomplete) {
       await repositories.productRepo.assertSeedIdentityReady();
       const categories = new Map<string, Category>();

@@ -18,6 +18,12 @@ import { RedisCartRepository } from './modules/cart/cart.redis.repository';
 import { CartRepository, InMemoryCartRepository } from './modules/cart/cart.domain';
 import { createCheckoutRoutes } from './modules/checkout/checkout.routes';
 import { CheckoutService } from './modules/checkout/checkout.service';
+import { CheckoutAttemptRepository } from './modules/checkout/checkout-attempt';
+import { MongoCheckoutAttemptRepository, InMemoryCheckoutAttemptRepository } from './modules/checkout/checkout-attempt.mongo.repository';
+import { CouponRepository, InMemoryCouponRepository } from './modules/coupon/coupon.domain';
+import { MongoCouponRepository } from './modules/coupon/coupon.mongo.repository';
+import { CouponService } from './modules/coupon/coupon.service';
+import { createCouponRoutes } from './modules/coupon/coupon.routes';
 import { createStripeClientFromEnvironment, StripeCheckoutProvider } from './modules/checkout/stripe-checkout.provider';
 import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
 import { createOrderRoutes } from './modules/order/order.routes';
@@ -55,6 +61,8 @@ import { MongoTransferRepository } from './modules/transfer/transfer.mongo.repos
 import { MongoCategoryRepository } from './modules/product/category.mongo.repository';
 import { MongoProductRepository } from './modules/product/product.mongo.repository';
 import { ElasticsearchProductIndex } from './modules/search/elasticsearch-product-index';
+import { ElasticsearchProductWriter } from './modules/search/elasticsearch-product-writer';
+import { ProductSearchSync, shutdownProductSearch } from './modules/search/product-search-sync';
 import { MongoReviewRepository } from './modules/review/review.mongo.repository';
 import { MongoOrderRepository } from './modules/order/order.mongo.repository';
 import { MongoPaymentRepository } from './modules/order/payment.mongo.repository';
@@ -77,6 +85,9 @@ let personRepo: PersonRepository;
 let vendorRepo: VendorRepository;
 let productRepo: ProductRepository;
 let categoryRepo: CategoryRepository;
+let couponRepo: CouponRepository;
+let checkoutAttemptRepo: CheckoutAttemptRepository;
+let couponService!: CouponService;
 let cartRepo: CartRepository;
 let orderRepo: OrderRepository;
 let paymentRepo: PaymentRepository;
@@ -87,6 +98,7 @@ let walletRepo: WalletRepository;
 let walletTxRepo: WalletTransactionRepository;
 let financialRepo: FinancialAllocationRepository;
 let searchIndex: ElasticsearchProductIndex | undefined;
+let searchSync: ProductSearchSync | undefined;
 
 // Initialize services (will be recreated after repositories are set)
 let authService!: AuthService;
@@ -119,6 +131,7 @@ function initializeServices(): void {
   vendorService = new VendorService(vendorRepo, personRepo, config);
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config, searchIndex);
   cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
+  couponService = new CouponService(couponRepo, vendorRepo, productRepo, categoryRepo);
   checkoutService = new CheckoutService(
     orderRepo,
     paymentRepo,
@@ -134,7 +147,9 @@ function initializeServices(): void {
       config.stripePaymentMethodConfiguration
     ),
     categoryRepo,
-    searchIndex
+    searchIndex,
+    couponService,
+    checkoutAttemptRepo
   );
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
@@ -195,7 +210,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   console.log(`\n${signal} received, starting graceful shutdown...`);
 
   try {
-    await closeMongoConnection();
+    await shutdownProductSearch(searchSync, closeMongoConnection);
     console.log('MongoDB connection closed');
   } catch (error) {
     console.error('Error closing MongoDB connection:', error);
@@ -241,7 +256,10 @@ if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js
       personRepo = new MongoPersonRepository(db);
       vendorRepo = new MongoVendorRepository(db);
       categoryRepo = new MongoCategoryRepository(db);
-      productRepo = new MongoProductRepository(db);
+      couponRepo = new MongoCouponRepository(db);
+      checkoutAttemptRepo = new MongoCheckoutAttemptRepository(db);
+      const mongoProducts = new MongoProductRepository(db);
+      productRepo = mongoProducts;
 reviewRepo = new MongoReviewRepository(db);
 orderRepo = new MongoOrderRepository(db);
 paymentRepo = new MongoPaymentRepository(db);
@@ -252,15 +270,13 @@ walletTxRepo = new MongoWalletTransactionRepository(db);
 financialRepo = new MongoFinancialAllocationRepository(db);
       transferRepo = new MongoTransferRepository(db);
 
-      // Initialize Elasticsearch product index (best effort)
-      searchIndex = new ElasticsearchProductIndex(config.elasticsearchUrl);
-      try {
-        await searchIndex.ensureIndex();
-        console.log('✅ Elasticsearch product index ready');
-      } catch (error) {
-        console.warn('⚠️ Elasticsearch product index unavailable:', error);
-        searchIndex = undefined;
-      }
+      // A failed alias check must not disable durable recovery. Only the worker's
+      // versioned writer publishes; all service/seed/rebuild calls resolve IDs.
+      const searchReader = new ElasticsearchProductIndex(config.elasticsearchUrl);
+      searchSync = new ProductSearchSync(mongoProducts, new ElasticsearchProductWriter(config.elasticsearchUrl),
+        () => searchReader.ensureIndex());
+      searchIndex = new ElasticsearchProductIndex(config.elasticsearchUrl, fetch, searchSync);
+      searchSync.start();
 
       // Initialize services with MongoDB repositories
       initializeServices();
@@ -288,6 +304,7 @@ financialRepo = new MongoFinancialAllocationRepository(db);
 
       // Checkout routes
       app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+      app.use('/api/v1/coupons', createCouponRoutes({ authService, couponService }));
 
       // Stripe sends signed events using the unparsed request body.
       app.post('/api/v1/webhooks/stripe', createStripeWebhookHandler(
@@ -330,6 +347,9 @@ financialRepo = new MongoFinancialAllocationRepository(db);
       });
 
     } catch (mongoError) {
+      await searchSync?.stop();
+      searchSync = undefined;
+      searchIndex = undefined;
       console.error('⚠️  MongoDB connection failed:', mongoError);
 
       // Fallback to InMemory repositories in development mode
@@ -339,6 +359,8 @@ financialRepo = new MongoFinancialAllocationRepository(db);
         const memoryVendorRepo = new InMemoryVendorRepository();
         vendorRepo = memoryVendorRepo;
         categoryRepo = new InMemoryCategoryRepository();
+        couponRepo = new InMemoryCouponRepository();
+        checkoutAttemptRepo = new InMemoryCheckoutAttemptRepository();
         productRepo = new InMemoryProductRepository();
         cartRepo = new InMemoryCartRepository();
         orderRepo = new InMemoryOrderRepository();
@@ -350,14 +372,9 @@ walletRepo = new InMemoryWalletRepository();
 walletTxRepo = new InMemoryWalletTransactionRepository();
 financialRepo = new InMemoryFinancialAllocationRepository();
 
-        searchIndex = new ElasticsearchProductIndex(config.elasticsearchUrl);
-        try {
-          await searchIndex.ensureIndex();
-          console.log('✅ Elasticsearch product index ready');
-        } catch (error) {
-          console.warn('⚠️ Elasticsearch product index unavailable:', error);
-          searchIndex = undefined;
-        }
+        // Ephemeral fallback must never compete with durable Mongo revisions in
+        // the shared alias. Search falls back to the in-memory repository here.
+        searchIndex = undefined;
 
         initializeServices();
         console.log('✅ InMemory repositories initialized (development fallback)');
@@ -391,6 +408,7 @@ financialRepo = new InMemoryFinancialAllocationRepository();
 
         // Checkout routes
         app.use('/api/v1/checkout', createCheckoutRoutes({ authService, checkoutService, personRepo }));
+        app.use('/api/v1/coupons', createCouponRoutes({ authService, couponService }));
 
         // Stripe webhook route (fallback dev) - best effort
         try {

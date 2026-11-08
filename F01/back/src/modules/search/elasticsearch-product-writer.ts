@@ -19,6 +19,38 @@ export class ElasticsearchProductWriter {
     await this.write(id, document);
   }
 
+  async putVersioned(id: string, document: Record<string, unknown>, revision: number, signal?: AbortSignal): Promise<void> {
+    if (typeof id !== 'string' || !id || id === '.' || id === '..') throw new Error('ELASTICSEARCH_PRODUCT_ID_INVALID');
+    if (!Number.isSafeInteger(revision) || revision < 1) throw new Error('PRODUCT_SEARCH_REVISION_INVALID');
+    const source = { ...document, search_revision: revision };
+    try {
+      // A full replacement avoids retaining fields removed from the Mongo snapshot.
+      // Equal revisions are immutable: retries and delayed sends must be no-ops.
+      const body = `${JSON.stringify({ update: { _id: id, retry_on_conflict: 3 } })}\n${JSON.stringify({
+        script: { lang: 'painless', source: "if (!ctx._source.containsKey('search_revision') || ctx._source.search_revision < params.revision) { ctx._source.clear(); ctx._source.putAll(params.document); } else { ctx.op = 'noop'; }",
+          params: { revision, document: source } },
+        upsert: source,
+      })}\n`;
+      const timeout = AbortSignal.timeout(5000);
+      const response = await this.fetcher(`${this.baseUrl}/products/_bulk?require_alias=true`, {
+        method: 'POST', headers: { 'content-type': 'application/x-ndjson' }, body,
+        redirect: 'error', signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
+      if (!response.ok) throw new Error();
+      const result = await response.json() as { errors?: unknown; items?: Array<Record<string, any>> };
+      if (result?.errors !== false || !Array.isArray(result.items) || result.items.length !== 1) throw new Error();
+      const entry = result.items[0];
+      if (!entry || Object.keys(entry).length !== 1) throw new Error();
+      const item = entry.update;
+      if (!item || item._id !== id || item.error !== undefined) throw new Error();
+      if ((item.status === 201 && item.result === 'created')
+        || (item.status === 200 && ['updated', 'noop'].includes(item.result))) return;
+    } catch {
+      // Never expose response bodies or transport errors to callers/loggers.
+    }
+    throw new Error('ELASTICSEARCH_WRITE_FAILED');
+  }
+
   async delete(_id: string): Promise<void> {
     throw new Error('ELASTICSEARCH_DELETE_UNAVAILABLE');
   }

@@ -15,31 +15,36 @@ import { CartRepository, Cart, CartItem } from '../cart/cart.domain';
 import { ProductRepository } from '../product/product.domain';
 import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
 import { VendorRepository } from '../vendor/vendor.domain';
-import { PersonRepository } from '../person/person.domain';
+import { PersonRepository, PersonRole } from '../person/person.domain';
 import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
 import { CheckoutPaymentProvider } from './stripe-checkout.provider';
+import { CouponService } from '../coupon/coupon.service';
+import { CouponSelection, CouponTerms, CouponError, priceToMinor, safeMinor, sumMinor } from '../coupon/coupon.domain';
+import { allocateMinorDiscount } from './coupon-allocation';
+import { AcceptedSnapshotV1, AttemptError, CheckoutAttempt, CheckoutAttemptRepository, attemptIdentity, snapshotHash } from './checkout-attempt';
 
 export const PENDING_ORDER_ADDRESS_CONFLICT = 'PENDING_ORDER_ADDRESS_CONFLICT';
-
-export interface CouponTarget {
-  inclusionCategories: string[]; // category IDs to include (descendants included)
-  exclusionCategories: string[]; // category IDs to exclude (descendants excluded)
-}
 
 export interface CheckoutPreviewResponse {
   vendorGroups: CheckoutPreviewVendorGroup[];
   totalAmount: number;
   discountAmount: number;
+  currency?: 'BRL';
+  calculationVersion?: 'coupon-quote-v1';
+  purchasable?: boolean;
+  grossMinor?: number;
+  eligibleMinor?: number;
+  discountMinor?: number;
+  netMinor?: number;
 }
 
-/**
- * Maps coupon codes to their target categories for inclusion/exclusion rules.
- * In a production system, this would be stored in a database or config file.
- */
-export const couponTargets: Record<string, CouponTarget> = {};
-
 export interface CheckoutPreviewVendorGroup {
+  coupon?: CouponTerms;
+  grossMinor?: number;
+  eligibleMinor?: number;
+  discountMinor?: number;
+  netMinor?: number;
   id: string;
   vendorName: string;
   subtotal: number;
@@ -50,6 +55,10 @@ export interface CheckoutPreviewVendorGroup {
 }
 
 export interface CheckoutPreviewItem {
+  grossMinor?: number;
+  eligibleMinor?: number;
+  discountMinor?: number;
+  netMinor?: number;
   productId: string;
   productName: string;
   quantity: number;
@@ -81,7 +90,9 @@ export class CheckoutService {
     config: typeof import('../../config').config,
     paymentProvider: CheckoutPaymentProvider,
     categoryRepo?: import('../product/product.domain').CategoryRepository,
-    searchIndex?: ElasticsearchProductIndex
+    searchIndex?: ElasticsearchProductIndex,
+    private readonly coupons?: CouponService,
+    private readonly attempts?: CheckoutAttemptRepository
   ) {
     this.orderRepo = orderRepo;
     this.paymentRepo = paymentRepo;
@@ -96,99 +107,8 @@ export class CheckoutService {
     this.searchIndex = searchIndex;
   }
 
-  /**
-   * Get all descendant category IDs (including the category itself) for a given category.
-   * Categories form a parent-child hierarchy where descendants include all children, grandchildren, etc.
-   */
-  private getDescendantCategories(categoryId: string, allCategories: Map<string, string>): Set<string> {
-    const descendants = new Set<string>();
-    const visit = (catId: string) => {
-      descendants.add(catId);
-      // Find children of this category
-      for (const [childId, parentId] of allCategories.entries()) {
-        if (parentId === catId) {
-          visit(childId);
-        }
-      }
-    };
-    visit(categoryId);
-    return descendants;
-  }
-
-  /**
-   * Check if a product is eligible for a coupon based on inclusion/exclusion rules.
-   * - A product matches inclusion if its category (or any ancestor) is in the inclusion list
-   * - A product is excluded if its category (or any ancestor) is in the exclusion list
-   * - Exclusions override inclusions
-   */
-  private isProductEligibleForCoupon(
-    productCategoryId: string,
-    inclusionCategories: Set<string>,
-    exclusionCategories: Set<string>,
-    allCategories: Map<string, string | null>
-  ): boolean {
-    // Get all ancestors of the product's category (including itself)
-    const ancestors: Set<string> = new Set();
-    let current: string | null = productCategoryId;
-    while (current !== null) {
-      ancestors.add(current);
-      // Find parent of current category
-      const parentId = allCategories.get(current);
-      if (parentId) {
-        current = parentId;
-      } else {
-        current = null;
-      }
-    }
-
-    // Check exclusions first: if any ancestor is in exclusion list, product is excluded
-    for (const ancestor of ancestors) {
-      if (exclusionCategories.has(ancestor)) {
-        return false;
-      }
-    }
-
-    // Check inclusions: product is eligible if any ancestor is in inclusion list
-    // If inclusion list is empty, all products are eligible (no filtering)
-    if (inclusionCategories.size === 0) {
-      return true;
-    }
-
-    for (const ancestor of ancestors) {
-      if (inclusionCategories.has(ancestor)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Get all product category IDs that are eligible for a coupon based on inclusion/exclusion rules.
-   * Returns a set of category IDs that match the coupon's targeting rules.
-   */
-  private getEligibleCategoriesForCoupon(
-    productCategories: string[],
-    coupon: CouponTarget,
-    allCategories: Map<string, string>
-  ): Set<string> {
-    const eligible = new Set<string>();
-    const inclusionCategories = new Set(coupon.inclusionCategories);
-    const exclusionCategories = new Set(coupon.exclusionCategories);
-
-    for (const catId of productCategories) {
-      const descendants = this.getDescendantCategories(catId, allCategories);
-      for (const descId of descendants) {
-        if (this.isProductEligibleForCoupon(descId, inclusionCategories, exclusionCategories, allCategories)) {
-          eligible.add(descId);
-        }
-      }
-    }
-
-    return eligible;
-  }
-
   async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
+    if (couponCodes?.length) throw new CouponError('COUPONS_UNAVAILABLE', 503);
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);
     if (!cart || cart.isEmpty) {
@@ -199,6 +119,15 @@ export class CheckoutService {
     const person = await this.personRepo.findById(consumerId);
     if (!person) {
       throw new Error(OrderError.PERSON_ID_REQUIRED);
+    }
+
+    // A stale or directly constructed cart must not bypass own-store purchase denial.
+    for (const item of cart.items) {
+      const product = await this.productRepo.findById(item.productId);
+      if (!product) throw new Error(OrderError.PRODUCT_NOT_FOUND);
+      const vendor = await this.vendorRepo.findById(product.vendorId);
+      if (!vendor) throw new Error(OrderError.VENDOR_NOT_FOUND);
+      if (vendor.personId === consumerId) throw new CouponError('SELF_PURCHASE_FORBIDDEN', 403);
     }
 
     // Find shipping address by ID
@@ -284,7 +213,7 @@ export class CheckoutService {
                 await this.searchIndex.indexProduct(product);
               }
             } catch (indexError) {
-              console.warn('Elasticsearch product indexing failed for product', entry.productId, indexError);
+              console.warn('Elasticsearch product indexing failed');
             }
           }
         } catch (restoreError) {
@@ -352,6 +281,7 @@ export class CheckoutService {
       const session = await this.paymentProvider.createSession(order, payment);
       checkoutSessionId = session.id;
       payment.providerTransactionId = session.id;
+      payment.checkoutUrl = session.url;
       await this.paymentRepo.update(payment);
 
       return {
@@ -376,7 +306,7 @@ export class CheckoutService {
     }
   }
 
-  async previewCheckout(consumerId: string, couponCodes?: string[]): Promise<CheckoutPreviewResponse> {
+  async previewCheckout(consumerId: string, couponCodes?: string[], selections: CouponSelection[] = []): Promise<CheckoutPreviewResponse> {
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);
     if (!cart || cart.isEmpty) {
@@ -389,138 +319,378 @@ export class CheckoutService {
       throw new Error(OrderError.PERSON_ID_REQUIRED);
     }
 
-    // Validate and prepare vendor groups for preview
-    const vendorGroupsData = await this.prepareVendorGroups(cart);
+    return this.quoteCart(consumerId, cart, couponCodes, selections);
+  }
 
-    // Build category parent map from category repository for coupon targeting
-    // Map: categoryId -> parent categoryId (null for root categories)
-    const categoryParentMap = new Map<string, string | null>();
-    if (this.categoryRepo) {
-      const allCategories = await this.categoryRepo.findAll();
-      for (const cat of allCategories) {
-        categoryParentMap.set(cat.id, cat.parentId);
+  private async quoteCart(consumerId: string, cart: Cart, couponCodes?: string[], selections: CouponSelection[] = [], acceptance = false): Promise<CheckoutPreviewResponse> {
+    const hasCoupons = !!couponCodes?.length || selections.length > 0;
+    if (hasCoupons && !this.coupons) throw new CouponError('COUPONS_UNAVAILABLE', 503);
+    const groups = new Map<string, { vendor: Awaited<ReturnType<VendorRepository['findById']>>; lines: { productId: string; productName: string; categoryId: string; quantity: number; unitPrice: number; grossMinor: number }[] }>();
+    // Coupon quotes use catalogue prices; normal previews retain the cart price
+    // used by the existing purchase flow. Product identity/stock remain current.
+    const quantities = new Map<string, number>();
+    for (const item of cart.items) quantities.set(item.productId, safeMinor((quantities.get(item.productId) ?? 0) + safeMinor(item.quantity)));
+    for (const [productId, quantity] of quantities) {
+      if (!quantity) throw new CouponError('INVALID_MONEY');
+      const product = await this.productRepo.findById(productId);
+      if (!product) throw new Error(OrderError.PRODUCT_NOT_FOUND);
+      if (acceptance && product.status !== 'active') throw new AttemptError('PRODUCT_NOT_AVAILABLE', 409);
+      if (cart.items.some(item => item.productId === productId && item.vendorId !== product.vendorId)) throw new Error(OrderError.VENDOR_NOT_FOUND);
+      if (product.quantity < quantity) throw new Error(OrderError.INSUFFICIENT_STOCK);
+      const vendor = await this.vendorRepo.findById(product.vendorId);
+      if (!vendor) throw new Error(OrderError.VENDOR_NOT_FOUND);
+      if (acceptance && vendor.status !== 'active') throw new AttemptError('VENDOR_NOT_AVAILABLE', 409);
+      if (vendor.personId === consumerId) throw new CouponError('SELF_PURCHASE_FORBIDDEN', 403);
+      const group = groups.get(vendor.id) ?? { vendor, lines: [] };
+      const catalogUnitMinor = priceToMinor(product.price);
+      const unitMinor = hasCoupons ? catalogUnitMinor : priceToMinor(cart.items.find(item => item.productId === productId)!.unitPrice);
+      group.lines.push({ productId, productName: product.name, categoryId: product.categoryId, quantity, unitPrice: unitMinor / 100, grossMinor: safeMinor(unitMinor * quantity) });
+      groups.set(vendor.id, group);
+    }
+    const chosen = hasCoupons ? await this.coupons!.resolve([...groups.keys()], couponCodes, selections) : new Map<string, CouponTerms>();
+    const hierarchy = hasCoupons ? await this.coupons!.hierarchy() : new Map<string, string | null>();
+    const vendorGroups: CheckoutPreviewVendorGroup[] = [];
+    for (const [vendorId, group] of groups) {
+      const terms = chosen.get(vendorId);
+      const eligible = group.lines.map(line => terms && this.coupons!.eligible(terms, line.productId, line.categoryId, hierarchy) ? line.grossMinor : 0);
+      const eligibleMinor = sumMinor(eligible);
+      if (terms && (!eligibleMinor || eligibleMinor < (terms.minimumEligibleMinor ?? 0))) throw new CouponError('COUPON_MINIMUM_NOT_MET');
+      const discountMinor = !terms ? 0 : terms.discountType === 'fixedMinorBRL' ? Math.min(terms.value, eligibleMinor) : safeMinor(Number((BigInt(eligibleMinor) * BigInt(terms.value) + 5000n) / 10000n));
+      const allocated = allocateMinorDiscount(discountMinor, group.lines.map((line, i) => ({ key: JSON.stringify([vendorId, line.productId]), weight: eligible[i] })));
+      const grossMinor = sumMinor(group.lines.map(l => l.grossMinor));
+      const netMinor = grossMinor - discountMinor;
+      const commissionPct = acceptance ? this.config.commissionPct : group.vendor!.commissionPct;
+      if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) throw new CouponError('INVALID_MONEY');
+      const commissionMinor = safeMinor(Number((BigInt(netMinor) * BigInt(Math.round(commissionPct * 100)) + 5000n) / 10000n));
+      vendorGroups.push({ id: vendorId, vendorName: group.vendor!.storeName, grossMinor, eligibleMinor, discountMinor, netMinor, ...(terms ? { coupon: terms } : {}), subtotal: netMinor / 100, commissionPct, commissionAmount: commissionMinor / 100, vendorNet: (netMinor - commissionMinor) / 100,
+        items: group.lines.map((line, i) => ({ productId: line.productId, productName: line.productName, quantity: line.quantity, unitPrice: line.unitPrice, totalPrice: line.grossMinor / 100, grossMinor: line.grossMinor, eligibleMinor: eligible[i], discountMinor: allocated[i], netMinor: line.grossMinor - allocated[i] })) });
+    }
+    const grossMinor = sumMinor(vendorGroups.map(g => g.grossMinor!));
+    const eligibleMinor = sumMinor(vendorGroups.map(g => g.eligibleMinor!));
+    const discountMinor = sumMinor(vendorGroups.map(g => g.discountMinor!));
+    const netMinor = grossMinor - discountMinor;
+    return { currency: 'BRL', calculationVersion: 'coupon-quote-v1', purchasable: !hasCoupons, grossMinor, eligibleMinor, discountMinor, netMinor, vendorGroups, totalAmount: netMinor / 100, discountAmount: discountMinor / 100 };
+  }
+
+  private attemptRepo(): CheckoutAttemptRepository {
+    if (!this.attempts) throw new AttemptError('ATTEMPT_UNAVAILABLE', 503);
+    return this.attempts;
+  }
+
+  private extractPersistedCheckoutUrl(payment: any, order: any): string | undefined {
+    const candidates = [
+      payment?.checkoutUrl,
+      payment?.sessionUrl,
+      payment?.url,
+      payment?.checkoutSessionUrl,
+      order?.checkoutUrl,
+      order?.sessionUrl,
+      order?.url,
+      order?.checkoutSessionUrl,
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim().length > 0) return c;
+    }
+    return undefined;
+  }
+
+  private extractUrlFromProviderResult(result: any): string | undefined {
+    if (typeof result === 'string') return result.trim() || undefined;
+    if (!result || typeof result !== 'object') return undefined;
+    const candidates = [
+      result.url,
+      result.checkoutUrl,
+      result.sessionUrl,
+      result.checkoutSessionUrl,
+      result?.session?.url,
+      result?.session?.checkoutUrl,
+      result?.checkoutSession?.url,
+      result?.data?.url,
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim().length > 0) return c;
+    }
+    return undefined;
+  }
+
+  private isMockPaymentProvider(provider: any, payment: any): boolean {
+    if (!provider) return false;
+    if (provider?.constructor?.name === 'MockCheckoutProvider') return true;
+    if (provider?.isMock === true) return true;
+    // A provider explicitly marked as mock via its name.
+    if (typeof provider?.name === 'string' && /mock/i.test(provider.name)) return true;
+    // Fall back to payment.provider label only when no other signal exists and the
+    // provider transaction id follows the mock id format.
+    if (payment?.provider === 'mock' && typeof payment?.providerTransactionId === 'string' &&
+        /^cs_test_/.test(payment.providerTransactionId) && !provider?.constructor?.name?.includes('Stripe')) {
+      // Only treat as mock if provider does not expose Stripe-like retrieval.
+      if (typeof provider?.getSession !== 'function' && typeof provider?.retrieveSession !== 'function') return true;
+    }
+    return false;
+  }
+
+  async getAttempt(owner: string, id: string): Promise<CheckoutAttempt> {
+    const attempt = await this.attemptRepo().find(owner, id);
+    if (!attempt) throw new AttemptError('ATTEMPT_NOT_FOUND', 404);
+    return attempt;
+  }
+
+  private async acceptanceSnapshot(owner: string, input: CheckoutAttempt['input']): Promise<AcceptedSnapshotV1> {
+    const person = await this.personRepo.findById(owner);
+    if (!person || person.roles.includes(PersonRole.ADMIN)) throw new AttemptError('FORBIDDEN', 403);
+    const address = person.addresses.find(a => a.id === input.shippingAddressId);
+    if (!address) throw new AttemptError('INVALID_SHIPPING_ADDRESS', 404);
+    const delivery = { id: address.id, street: address.street, number: address.number, neighborhood: address.neighborhood, city: address.city, state: address.state };
+    for (const [key, value] of Object.entries(delivery)) if (typeof value !== 'string' || (key !== 'neighborhood' && !value.trim())) throw new AttemptError('INVALID_SHIPPING_ADDRESS', 409);
+    const cart = await this.cartRepo.findById(owner);
+    if (!cart || cart.isEmpty) throw new AttemptError('CART_EMPTY', 409);
+    if (!cart.id || !Number.isSafeInteger(cart.version) || cart.version < 1) throw new AttemptError('CART_UNAVAILABLE', 409);
+    const pct = this.config.commissionPct;
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100 || Math.abs(pct * 100 - Math.round(pct * 100)) > 0.000001) throw new AttemptError('INVALID_COMMISSION', 503);
+    const quote = await this.quoteCart(owner, cart, undefined, input.selections, true);
+    const money = (m: CheckoutPreviewResponse | CheckoutPreviewVendorGroup | CheckoutPreviewItem) => ({ grossMinor: safeMinor(m.grossMinor!), eligibleMinor: safeMinor(m.eligibleMinor!), discountMinor: safeMinor(m.discountMinor!), netMinor: safeMinor(m.netMinor!) });
+    const groups = quote.vendorGroups.map(g => ({ ...money(g), vendorId: g.id, vendorName: g.vendorName,
+      ...(g.coupon ? { coupon: structuredClone(g.coupon) } : {}), commissionMinor: priceToMinor(g.commissionAmount), vendorNetMinor: priceToMinor(g.vendorNet),
+      items: g.items.map(i => ({ ...money(i), key: JSON.stringify([g.id, i.productId]), productId: i.productId, productName: i.productName, unitMinor: priceToMinor(i.unitPrice), quantity: i.quantity })).sort((a, b) => a.key.localeCompare(b.key)),
+    })).sort((a, b) => a.vendorId.localeCompare(b.vendorId));
+    const fingerprint = snapshotHash(groups.map(g => [g.vendorId, g.items.map(i => [i.productId, i.quantity])]));
+    return structuredClone({ schemaVersion: 1, calculationVersion: 'coupon-quote-v1', currency: 'BRL', personId: owner,
+      cart: { id: cart.id, version: cart.version, generation: cart.generation ?? null, fingerprint }, address: delivery,
+      selections: input.selections, ...money(quote), groups, commissionBps: Math.round(pct * 100), commissionBasis: 'netMinor', shippingMinor: 0, feeMinor: 0 });
+  }
+
+  async prepareAttempt(owner: string, requestId: string, shippingAddressId: string, selections: CouponSelection[]): Promise<CheckoutAttempt> {
+    const id = attemptIdentity(owner, requestId);
+    if (!selections.length) throw new AttemptError('COUPON_SELECTION_REQUIRED', 400);
+    const input = { shippingAddressId, selections: [...selections].sort((a, b) => a.vendorId.localeCompare(b.vendorId)) };
+    const requestFingerprint = snapshotHash(input);
+    const existing = await this.attemptRepo().find(owner, id);
+    if (existing) {
+      if (existing.requestFingerprint !== requestFingerprint) throw new AttemptError('REQUEST_CONFLICT', 409);
+      return existing;
+    }
+    const snapshot = await this.acceptanceSnapshot(owner, input);
+    return this.attemptRepo().createOrRead({ id, owner, input, requestFingerprint, state: 'PROPOSED', version: 1, proposedSnapshot: snapshot, proposedHash: snapshotHash(snapshot) });
+  }
+
+  async acceptAttempt(owner: string, id: string, version: number, hash: string): Promise<CheckoutAttempt> {
+    const current = await this.getAttempt(owner, id);
+    if (current.state === 'ACCEPTED') {
+      if (hash === current.acceptedHash && (version === current.version || version === current.version - 1)) return current;
+      throw new AttemptError('ATTEMPT_CONFLICT', 409);
+    }
+    if (current.version !== version || current.proposedHash !== hash) throw new AttemptError('ATTEMPT_CONFLICT', 409, current);
+    let snapshot: AcceptedSnapshotV1;
+    try { snapshot = await this.acceptanceSnapshot(owner, current.input); }
+    catch (error) {
+      if (error instanceof CouponError || error instanceof AttemptError || (error instanceof Error && Object.values(OrderError).includes(error.message as OrderError))) {
+        if (error instanceof AttemptError && error.status === 503) throw error;
+        const superseded = await this.attemptRepo().replaceProposal(current, null, error.message);
+        throw new AttemptError('QUOTE_CHANGED', 409, superseded);
       }
+      throw new AttemptError('ATTEMPT_UNAVAILABLE', 503);
+    }
+    if (snapshotHash(snapshot) !== hash || current.state !== 'PROPOSED') {
+      const proposal = await this.attemptRepo().replaceProposal(current, snapshot);
+      throw new AttemptError('QUOTE_CHANGED', 409, proposal);
+    }
+    return this.attemptRepo().acceptIfCurrent(current);
+  }
+
+  async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ order: Order; payment: Payment; checkoutUrl: string }> {
+    const attempt = await this.getAttempt(owner, attemptId);
+    if (attempt.state !== 'ACCEPTED' || !attempt.acceptedSnapshot) {
+      throw new AttemptError('ATTEMPT_NOT_ACCEPTED', 409, attempt);
+    }
+    const snapshot = attempt.acceptedSnapshot;
+    if (!snapshot || !Number.isFinite(snapshot.netMinor) || snapshot.netMinor <= 0) {
+      throw new AttemptError('ZERO_TOTAL_NOT_SUPPORTED', 503, attempt);
     }
 
-    // Build preview response
-    const previewVendorGroups: CheckoutPreviewVendorGroup[] = vendorGroupsData.map(vg => ({
-      id: vg.vendorId,
-      vendorName: '', // Will be filled below
-      subtotal: vg.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
-      commissionPct: vg.commissionPct,
-      commissionAmount: 0, // Will be calculated
-      vendorNet: 0, // Will be calculated
-      items: vg.items.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.unitPrice * item.quantity
-      }))
-    }));
-
-    // Fill vendor names and calculate base amounts
-    for (const vg of previewVendorGroups) {
-      const vendor = await this.vendorRepo.findById(vg.id);
-      if (vendor) {
-        vg.vendorName = vendor.storeName;
-      }
-      vg.commissionAmount = vg.subtotal * (vg.commissionPct / 100);
-      vg.vendorNet = vg.subtotal - vg.commissionAmount;
-    }
-
-    // Apply coupon discounts if coupon codes are provided
-    let discountAmount = 0;
-    const applicableCouponsByVendor = new Map<string, string>(); // vendorId -> selected coupon code
-
-    if (couponCodes && couponCodes.length > 0 && this.categoryRepo) {
-      // For each vendor group, determine eligible coupons
-      for (const vg of previewVendorGroups) {
-        let eligibleCouponCodes: string[] = [];
-
-        for (const code of couponCodes) {
-          const target = couponTargets[code];
-          if (!target) continue; // Unknown coupon code, skip
-
-          // Check if any product in this vendor group is eligible for this coupon
-          let anyProductEligible = false;
-
-          for (const item of vg.items) {
-            const product = await this.productRepo.findById(item.productId);
-            if (!product) continue;
-
-            // Check inclusion/exclusion rules using category hierarchy
-            const eligible = this.isProductEligibleForCoupon(
-              product.categoryId,
-              new Set(target.inclusionCategories),
-              new Set(target.exclusionCategories),
-              categoryParentMap
-            );
-
-            if (eligible) {
-              anyProductEligible = true;
-              break;
-            }
-          }
-
-          if (anyProductEligible) {
-            // Only add first eligible coupon (no stacking per vendor)
-            if (eligibleCouponCodes.length === 0) {
-              eligibleCouponCodes.push(code);
+    // Idempotency: reuse existing order/payment for this attempt if present.
+    const existingOrders = await this.orderRepo.findByPersonId(owner);
+    const existingOrder = existingOrders.find(o => o.attemptId === attemptId || (attempt.acceptedHash && o.acceptedHash === attempt.acceptedHash));
+    if (existingOrder) {
+      const payments = await this.paymentRepo.findByOrderId(existingOrder.id);
+      const payment = payments[0] ?? await this.paymentRepo.save(Payment.create({ orderId: existingOrder.id, personId: owner, amount: existingOrder.totalAmount, provider: 'stripe' }));
+      let checkoutUrl = this.extractPersistedCheckoutUrl(payment, existingOrder);
+      if (!checkoutUrl) {
+        // Try to retrieve the session URL from the provider when supported.
+        const provider = this.paymentProvider as any;
+        const sessionId = payment.providerTransactionId;
+        if (sessionId) {
+          const methodNames = ['getSession', 'getCheckoutUrl', 'retrieveSession', 'getSessionUrl', 'getCheckoutSession', 'fetchSession'];
+          for (const name of methodNames) {
+            if (typeof provider?.[name] === 'function') {
+              try {
+                const result = await provider[name](sessionId, existingOrder, payment);
+                const url = this.extractUrlFromProviderResult(result);
+                if (url) { checkoutUrl = url; break; }
+              } catch {
+                // Ignore provider retrieval failures and fall through.
+              }
             }
           }
         }
+      }
+      if (!payment.providerTransactionId) {
+        const session = await this.paymentProvider.createSession(existingOrder, payment);
+        payment.providerTransactionId = session.id;
+        payment.checkoutUrl = session.url;
+        await this.paymentRepo.update(payment);
+        checkoutUrl = session.url;
+      } else if (!checkoutUrl) {
+        // Only reconstruct the mock-provider URL when the provider is actually the mock.
+        if (this.isMockPaymentProvider(this.paymentProvider, payment)) {
+          checkoutUrl = `https://checkout.stripe.test/mock/${payment.providerTransactionId}`;
+        }
+      }
+      if (!checkoutUrl) {
+        throw new Error('CHECKOUT_URL_UNAVAILABLE');
+      }
+      // Persist the resolved URL on the payment record when possible.
+      if (!payment.checkoutUrl) {
+        payment.checkoutUrl = checkoutUrl;
+        try { await this.paymentRepo.update(payment); } catch { /* ignore */ }
+      }
+      return { order: existingOrder, payment, checkoutUrl };
+    }
 
-        // Apply the first eligible coupon (consumer selects per vendor, no automatic priority)
-        if (eligibleCouponCodes.length > 0) {
-          const selectedCouponCode = eligibleCouponCodes[0];
-          const target = couponTargets[selectedCouponCode];
-          
-          // Calculate discount: proportion of eligible items' subtotal
-          // For simplicity, apply discount to the full vendor subtotal proportionally
-          // based on which items are eligible
-          let eligibleSubtotal = 0;
-          let totalEligibleItems = 0;
-          
-          for (const item of vg.items) {
-            const product = await this.productRepo.findById(item.productId);
-            if (!product) continue;
-            
-            const isEligible = this.isProductEligibleForCoupon(
-              product.categoryId,
-              new Set(target.inclusionCategories),
-              new Set(target.exclusionCategories),
-              categoryParentMap
-            );
-            
-            if (isEligible) {
-              eligibleSubtotal += item.unitPrice * item.quantity;
-              totalEligibleItems++;
-            }
-          }
-          
-          // Apply percentage discount to eligible portion of subtotal
-          // Default 10% discount if no specific discount defined for the coupon
-          const discountPct = 10; // Default discount percentage
-          const discount = eligibleSubtotal * (discountPct / 100);
-          
-          vg.subtotal -= discount;
-          vg.vendorNet -= discount;
-          discountAmount += discount;
-          
-          // Track which coupon applies to which vendor (no stacking)
-          applicableCouponsByVendor.set(vg.id, selectedCouponCode);
+    // Build order from accepted snapshot (no re-quoting).
+    // Net allocation per accepted item: a=floor(netMinor/quantity),
+    // r=netMinor mod quantity. r units carry a+1 (minor) and the
+    // remaining units carry a (minor), so Stripe line items sum exactly
+    // to the accepted net amount. Zero-count segments are omitted.
+    // Segment totalPrice is derived from the integer allocated minor
+    // (allocatedMinor / 100), not from float unitPrice * quantity, to
+    // avoid cent-level drift. unitPrice stays the rounded major price.
+    // Validate accepted snapshot items before segment construction (CR-003).
+    const groups = Array.isArray(snapshot?.groups) ? snapshot.groups : null;
+    if (groups === null) {
+      throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+    }
+    if (typeof snapshot?.commissionBps !== 'number' || !Number.isFinite(snapshot.commissionBps) || snapshot.commissionBps < 0 || snapshot.commissionBps > 10000) {
+      throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+    }
+    for (const g of groups) {
+      const items = Array.isArray(g?.items) ? g.items : null;
+      if (items === null) {
+        throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+      }
+      if (!g || typeof g !== 'object' || typeof g.vendorId !== 'string' || g.vendorId.trim().length === 0) {
+        throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+      }
+      for (const i of items) {
+        if (!i || typeof i !== 'object') {
+          throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+        }
+        if (typeof i.productId !== 'string' || i.productId.trim().length === 0 || typeof i.productName !== 'string' || i.productName.trim().length === 0) {
+          throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+        }
+        if (!Number.isInteger(i.quantity) || i.quantity < 1) {
+          throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
+        }
+        if (typeof i.netMinor !== 'number' || !Number.isFinite(i.netMinor) || i.netMinor < 0) {
+          throw new AttemptError('INVALID_SNAPSHOT_ITEM', 409, attempt);
         }
       }
     }
 
-    const totalAmount = previewVendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
+    const groupAllocatedMinors: number[][] = [];
+    const vendorGroupsData = groups.map(g => {
+      const items: { productId: string; productName: string; vendorId: string; quantity: number; unitPrice: number }[] = [];
+      const allocated: number[] = [];
+      for (const i of g.items) {
+        const quantity = i.quantity;
+        const netMinor = i.netMinor;
+        const a = Math.floor(netMinor / quantity);
+        const r = netMinor % quantity;
+        // Remainder (extra minor) first, matching the repo's "first gets extra" convention.
+        if (r > 0) {
+          items.push({
+            productId: i.productId,
+            productName: i.productName,
+            vendorId: g.vendorId,
+            quantity: r,
+            unitPrice: (a + 1) / 100,
+          });
+          allocated.push((a + 1) * r);
+        }
+        const baseQuantity = quantity - r;
+        if (baseQuantity > 0) {
+          items.push({
+            productId: i.productId,
+            productName: i.productName,
+            vendorId: g.vendorId,
+            quantity: baseQuantity,
+            unitPrice: a / 100,
+          });
+          allocated.push(a * baseQuantity);
+        }
+      }
+      groupAllocatedMinors.push(allocated);
+      return {
+        vendorId: g.vendorId,
+        items,
+        commissionPct: snapshot.commissionBps / 100,
+      };
+    });
 
-    return {
-      vendorGroups: previewVendorGroups,
-      totalAmount,
-      discountAmount
-    };
+    const order = Order.create({
+      personId: owner,
+      vendorGroups: vendorGroupsData,
+      shippingAddress: {
+        id: snapshot.address.id,
+        street: snapshot.address.street,
+        number: snapshot.address.number,
+        neighborhood: snapshot.address.neighborhood,
+        city: snapshot.address.city,
+        state: snapshot.address.state,
+        isPrimary: false,
+      },
+      attemptId,
+      acceptedHash: attempt.acceptedHash,
+    });
+
+    // Override per-segment totalPrice to the exact allocated minor (integer / 100)
+    // and per-vendor-group subtotal/commission/vendorNet to the snapshot values,
+    // eliminating float drift from unitPrice * quantity.
+    order.vendorGroups.forEach((vg, gi) => {
+      const snapGroup = snapshot.groups.find(sg => sg.vendorId === vg.vendorId) ?? snapshot.groups[gi];
+      const minors = groupAllocatedMinors[gi] ?? [];
+      vg.items.forEach((item, idx) => {
+        const allocatedMinor = minors[idx];
+        if (typeof allocatedMinor === 'number') {
+          (item as any).totalPrice = allocatedMinor / 100;
+        }
+      });
+      if (snapGroup) {
+        vg.subtotal = snapGroup.netMinor / 100;
+        vg.commissionAmount = snapGroup.commissionMinor / 100;
+        vg.vendorNet = snapGroup.vendorNetMinor / 100;
+      }
+    });
+
+    // Ensure totalAmount matches accepted snapshot netMinor (minor -> major).
+    order.totalAmount = snapshot.netMinor / 100;
+
+    const payment = Payment.create({
+      orderId: order.id,
+      personId: owner,
+      amount: order.totalAmount,
+       provider: 'stripe',
+     });
+
+    await this.orderRepo.save(order);
+    await this.paymentRepo.save(payment);
+
+    // Persist session request before calling provider (SESSION_REQUESTED marker via payment providerTransactionId placeholder).
+    const session = await this.paymentProvider.createSession(order, payment);
+    payment.providerTransactionId = session.id;
+    payment.checkoutUrl = session.url;
+    await this.paymentRepo.update(payment);
+
+    return { order, payment, checkoutUrl: session.url };
   }
 
   private async decrementStock(cart: Cart, decremented: { productId: string; amount: number }[]): Promise<void> {
@@ -542,7 +712,7 @@ export class CheckoutService {
             await this.searchIndex.indexProduct(product);
           }
         } catch (error) {
-          console.warn('Elasticsearch product indexing failed for product', productId, error);
+          console.warn('Elasticsearch product indexing failed');
         }
       }
     }

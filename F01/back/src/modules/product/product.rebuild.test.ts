@@ -5,6 +5,33 @@ import { config } from '../../config';
 import { Product } from './product.domain';
 
 describe('ProductService rebuildFromMongo', () => {
+  it('supports explicit source shapes and legacy combined publishers without hiding source failures', async () => {
+    const repo = new InMemoryProductRepository();
+    const product = Product.create({ vendorId: 'v1', categoryId: 'c1', name: 'Product', description: 'd', price: 1, quantity: 1 });
+    await repo.save(product);
+    const index = { indexProduct: vi.fn().mockResolvedValue(undefined) };
+    const service = new ProductService(repo, {} as any, {} as any, config, index as any);
+    for (const source of [[product], () => [product], { products: [product] }, { findAll() { return [product]; } }, Promise.resolve([product])]) {
+      expect(await service.rebuildFromMongo(source)).toMatchObject({ indexed: 1, failed: 0 });
+    }
+    const combined = { findAll: vi.fn().mockResolvedValue([product]), indexProduct: vi.fn().mockResolvedValue(undefined) };
+    expect(await service.rebuildFromMongo(combined)).toMatchObject({ indexed: 1 });
+    expect(combined.findAll).toHaveBeenCalledTimes(1); expect(combined.indexProduct).toHaveBeenCalledWith(product);
+    const publisherOnly = { indexProduct: vi.fn().mockResolvedValue(undefined) };
+    expect(await service.rebuildFromMongo(publisherOnly)).toMatchObject({ indexed: 1 });
+    expect(publisherOnly.indexProduct).toHaveBeenCalledWith(product);
+    for (const source of [12, {}, () => null]) await expect(service.rebuildFromMongo(source)).rejects.toThrow('PRODUCT_SEARCH_SOURCE_INVALID');
+    await expect(service.rebuildFromMongo(() => { throw new Error('synthetic source error'); })).rejects.toThrow('PRODUCT_SEARCH_SOURCE_FAILED');
+    await expect(service.rebuildFromMongo({ findAll: async () => { throw new Error('synthetic source error'); } })).rejects.toThrow('PRODUCT_SEARCH_SOURCE_FAILED');
+  });
+
+  it('rejects alternate publishers in durable mode instead of letting them bypass fencing', async () => {
+    const publisher = { indexProduct: vi.fn(), durable: true };
+    const service = new ProductService(new InMemoryProductRepository(), {} as any, {} as any, config, publisher as any);
+    const other = { findAll: vi.fn(), indexProduct: vi.fn() };
+    await expect(service.rebuildFromMongo(other)).rejects.toThrow('PRODUCT_SEARCH_SOURCE_PUBLISHER_UNSUPPORTED');
+    expect(other.findAll).not.toHaveBeenCalled(); expect(other.indexProduct).not.toHaveBeenCalled();
+  });
   it.each([undefined, null])('rejects without indexing when Mongo findAll fails (source: %s)', async (source) => {
     const productRepo = new InMemoryProductRepository();
     const sourceError = new Error('MONGO_UNAVAILABLE');

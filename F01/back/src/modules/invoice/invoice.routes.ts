@@ -4,7 +4,7 @@ import { InvoiceService } from './invoice.service';
 import { Invoice, InvoiceError, InvoiceStatus } from './invoice.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
-import { OrderRepository } from '../order/order.domain';
+import { Order, OrderRepository } from '../order/order.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
 
 export interface InvoiceRoutesConfig {
@@ -19,14 +19,19 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
   const authMw = authMiddleware(authService);
   const requireAdmin = requireRole(PersonRole.ADMIN);
 
-  function invoiceToResponse(invoice: Invoice) {
+  router.use((_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
+
+  function invoiceToResponse(invoice: Invoice, access: 'full' | 'vendor' = 'full') {
     return {
       id: invoice.id,
       orderId: invoice.orderId,
       vendorId: invoice.vendorId,
       emissionAt: invoice.emissionAt,
-      pdfUrl: invoice.pdfUrl,
-      pdfPath: invoice.pdfPath,
+      // Vendors must use the authenticated download gate, never a raw storage link.
+      ...(access === 'full' ? { pdfUrl: invoice.pdfUrl, pdfPath: invoice.pdfPath } : {}),
       status: invoice.status,
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
@@ -49,16 +54,23 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
     return { page, limit };
   }
 
-  async function isInvoiceOwner(req: AuthenticatedRequest, invoice: Invoice): Promise<boolean> {
+  async function receiptAccess(req: AuthenticatedRequest, invoice: Invoice, order: Order | null): Promise<'full' | 'vendor' | null> {
     const personId = req.user.sub;
-    if (req.user.roles.includes(PersonRole.ADMIN)) return true;
-    const order = await orderRepo.findById(invoice.orderId);
-    if (req.user.roles.includes(PersonRole.CONSUMER) && order && order.personId === personId) return true;
+    if (order && order.id !== invoice.orderId) return null;
+    if (req.user.roles.includes(PersonRole.ADMIN)) return 'full';
+    if (!order || typeof order.personId !== 'string' || !order.personId.trim()) return null;
+    if (req.user.roles.includes(PersonRole.CONSUMER) && order.personId === personId) return 'full';
     if (req.user.roles.includes(PersonRole.VENDOR)) {
       const vendor = await vendorRepo.findByPersonId(personId);
-      if (vendor && (invoice.vendorId === vendor.id || (order && order.vendorGroups.some(vg => vg.vendorId === vendor.id)))) return true;
+      // The existing PDF contains every group and the order total. Its vendorId
+      // label alone is not evidence that its contents belong to this store.
+      if (vendor?.id && invoice.vendorId === vendor.id &&
+          Array.isArray(order.vendorGroups) && order.vendorGroups.length > 0 &&
+          order.vendorGroups.every(group => group && group.orderId === order.id && group.vendorId === vendor.id &&
+            Array.isArray(group.items) && group.items.length > 0 &&
+            group.items.every(item => item && item.vendorId === vendor.id))) return 'vendor';
     }
-    return false;
+    return null;
   }
 
   // GET /invoices - list invoices (admin only)
@@ -67,8 +79,8 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       const { page, limit } = parsePagination(req);
       const result = await invoiceService.listInvoices(page, limit);
       return res.json({
-        invoices: result.invoices.map(invoiceToResponse),
-        items: result.items.map(invoiceToResponse),
+        invoices: result.invoices.map(invoice => invoiceToResponse(invoice)),
+        items: result.items.map(invoice => invoiceToResponse(invoice)),
         total: result.total,
         page: result.page,
         limit: result.limit,
@@ -86,24 +98,15 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       if (!order) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      const allowed = await (async () => {
-        const personId = req.user.sub;
-        if (req.user.roles.includes(PersonRole.ADMIN)) return true;
-        if (req.user.roles.includes(PersonRole.CONSUMER) && order.personId === personId) return true;
-        if (req.user.roles.includes(PersonRole.VENDOR)) {
-          const vendor = await vendorRepo.findByPersonId(personId);
-          if (vendor && order.vendorGroups.some(vg => vg.vendorId === vendor.id)) return true;
-        }
-        return false;
-      })();
-      if (!allowed) {
-        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
-      }
       const invoice = await invoiceService.getInvoiceByOrderId(orderId);
-      if (!invoice) {
+      if (!invoice || invoice.orderId !== orderId) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      return res.json({ invoice: invoiceToResponse(invoice) });
+      const access = await receiptAccess(req, invoice, order);
+      if (!access) {
+        return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
+      }
+      return res.json({ invoice: invoiceToResponse(invoice, access) });
     } catch (error) {
       return handleInvoiceError(error, res, next);
     }
@@ -117,11 +120,11 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       if (!invoice) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      const allowed = await isInvoiceOwner(req, invoice);
-      if (!allowed) {
+      const access = await receiptAccess(req, invoice, await orderRepo.findById(invoice.orderId));
+      if (!access) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      return res.json({ invoice: invoiceToResponse(invoice) });
+      return res.json({ invoice: invoiceToResponse(invoice, access) });
     } catch (error) {
       return handleInvoiceError(error, res, next);
     }
@@ -146,8 +149,8 @@ export function createInvoiceRoutes({ authService, invoiceService, orderRepo, ve
       if (!invoice) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
-      const allowed = await isInvoiceOwner(req, invoice);
-      if (!allowed) {
+      const access = await receiptAccess(req, invoice, await orderRepo.findById(invoice.orderId));
+      if (!access) {
         return res.status(404).json({ error: InvoiceError.INVOICE_NOT_FOUND, message: 'Invoice not found' });
       }
       if (invoice.status !== InvoiceStatus.GENERATED) {

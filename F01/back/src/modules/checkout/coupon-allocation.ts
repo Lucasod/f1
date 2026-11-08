@@ -1,3 +1,23 @@
+import { safeMinor, sumMinor, CouponError } from '../coupon/coupon.domain';
+
+/** Exact largest remainder allocation; identity, not request order, breaks ties. */
+export function allocateMinorDiscount(total: number, lines: { key: string; weight: number }[]): number[] {
+  safeMinor(total);
+  const sum = sumMinor(lines.map(l => l.weight));
+  if (total > sum || new Set(lines.map(l => l.key)).size !== lines.length) throw new CouponError('INVALID_MONEY');
+  if (!sum) return lines.map(() => 0);
+  const divisor = BigInt(sum);
+  const ranked = lines.map((line, index) => {
+    const numerator = BigInt(total) * BigInt(line.weight);
+    return { index, key: line.key, floor: Number(numerator / divisor), remainder: numerator % divisor };
+  });
+  const result = ranked.map(r => r.floor);
+  ranked.sort((a, b) => a.remainder === b.remainder ? (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) : a.remainder > b.remainder ? -1 : 1);
+  const remaining = total - sumMinor(result);
+  for (let i = 0; i < remaining; i++) result[ranked[i].index]++;
+  return result;
+}
+
 export function allocateCouponDiscount(total: number, weights: number[]): number[] {
   if (weights.length === 0) return [];
   if (!Number.isFinite(total) || !weights.every((w) => Number.isFinite(w))) {

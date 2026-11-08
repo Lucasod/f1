@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useCart } from '@/features/cart/useCart';
-import { useCheckoutPreview, useCheckoutState } from './useCheckout';
-import { checkoutApi, CheckoutPreviewVendorGroup, CheckoutPreviewItem } from '@/shared/api/checkout';
+import { useCheckoutPreview, useCheckoutState, useCheckoutAcceptance } from './useCheckout';
+import { checkoutApi, CheckoutPreviewVendorGroup, CheckoutPreviewItem, CheckoutPreviewResponse, CouponSelection } from '@/shared/api/checkout';
 import { Address } from '@/shared/api/order';
 import { personApi } from '@/shared/api/person';
 import {
@@ -151,16 +151,21 @@ export function CheckoutPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: cartData, isLoading: cartLoading, error: cartError, refetch: refetchCart } = useCart();
   const items = cartData?.cart?.items || [];
+  const cartKey = JSON.stringify([user?.id, isAuthenticated, cartData?.cart?.id, cartData?.cart?.version, items.map(i => [i.productId, i.vendorId, i.quantity, i.unitPrice]).sort()]);
+  const currentCartKey = useRef(cartKey);
+  currentCartKey.current = cartKey;
+  const quoteRequest = useRef(0);
+  const [quote, setQuote] = useState<{ data: CheckoutPreviewResponse; selections: CouponSelection[]; cartKey: string } | null>(null);
+  const [couponVendor, setCouponVendor] = useState('');
   
   // Checkout state
   const {
     couponCodes,
     selectedAddressId,
     paymentMethod,
-    removeCouponCode,
     setSelectedAddressId,
     setPaymentMethod,
-  } = useCheckoutState();
+   } = useCheckoutState();
 
   // Checkout preview (totals with coupons)
   const {
@@ -168,13 +173,19 @@ export function CheckoutPage() {
     isLoading: previewLoading,
     error: previewError,
     refetch: refetchPreview,
-  } = useCheckoutPreview(couponCodes.length > 0 ? couponCodes : undefined, items.length > 0 && isAuthenticated);
+  } = useCheckoutPreview(undefined, items.length > 0 && isAuthenticated, cartKey);
 
+  const quoteSourceError = !!cartError || !!previewError;
+  const confirmedQuote = !quoteSourceError && quote?.cartKey === cartKey ? quote : null;
 
   // Addresses
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(true);
   const [addressesError, setAddressesError] = useState<string | null>(null);
+  const acceptanceContext = confirmedQuote && selectedAddressId && !addressesError && isAuthenticated
+    ? JSON.stringify([cartKey, selectedAddressId, [...confirmedQuote.selections].sort((a, b) => a.vendorId.localeCompare(b.vendorId))]) : null;
+  const acceptance = useCheckoutAcceptance(acceptanceContext, selectedAddressId, confirmedQuote?.selections ?? []);
+  const acceptanceSnapshot = acceptance.attempt?.acceptedSnapshot ?? acceptance.attempt?.proposedSnapshot;
 
   // Coupon input
   const [couponInput, setCouponInput] = useState('');
@@ -209,38 +220,53 @@ export function CheckoutPage() {
     loadAddresses();
   }, [loadAddresses]);
 
-  // Refetch preview when coupons change
-  useEffect(() => {
-    if (couponCodes.length > 0) {
-      refetchPreview();
-    }
-  }, [couponCodes, refetchPreview]);
+  // Invalidate at commit, before pending promise callbacks can publish a stale quote.
+  // Recovery with the same cart key must not revive a quote from before the error.
+  useLayoutEffect(() => {
+    quoteRequest.current++;
+    setQuote(null);
+    setCouponError(undefined);
+    setApplyingCoupon(false);
+  }, [cartKey, quoteSourceError]);
 
   // Handle coupon apply
   const handleApplyCoupon = useCallback(async () => {
+    if (quoteSourceError) return;
     const code = couponInput.trim().toUpperCase();
     if (!code) return;
+    if (!couponVendor) { setCouponError('Select a coupon vendor'); return; }
+    const selections = [...(confirmedQuote?.selections.filter(s => s.vendorId !== couponVendor) ?? []), { vendorId: couponVendor, code }];
+    const requestId = ++quoteRequest.current;
+    const requestedCart = cartKey;
+    setQuote(null);
     
     setApplyingCoupon(true);
     setCouponError(undefined);
     
     try {
-      // Test the coupon by calling preview
-      await checkoutApi.preview([...couponCodes, code]);
-      throw new Error('A validação de cupons está indisponível no momento');
+      const data = await checkoutApi.preview(undefined, selections);
+      if (requestId !== quoteRequest.current || currentCartKey.current !== requestedCart) return;
+      if (data?.purchasable !== false || data.calculationVersion !== 'coupon-quote-v1' || !selections.every(s => data.vendorGroups.some(g => g.id === s.vendorId && g.coupon?.code === s.code))) throw new Error('Invalid coupon quote');
+      setQuote({ data, selections, cartKey: requestedCart });
+      setCouponInput('');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Cupom inválido';
+      if (requestId !== quoteRequest.current || currentCartKey.current !== requestedCart) return;
+      setQuote(null);
+      const message = error instanceof Error ? error.message : 'Invalid coupon';
       setCouponError(message);
     } finally {
-      setApplyingCoupon(false);
+      if (requestId === quoteRequest.current) setApplyingCoupon(false);
     }
-  }, [couponInput, couponCodes]);
+  }, [couponInput, couponVendor, confirmedQuote, cartKey, quoteSourceError]);
 
   // Handle remove coupon
-  const handleRemoveCoupon = useCallback((code: string) => {
-    removeCouponCode(code);
+  const handleRemoveCoupon = useCallback(() => {
+    quoteRequest.current++;
+    setQuote(null);
+    setApplyingCoupon(false);
+    setCouponError(undefined);
     refetchPreview();
-  }, [removeCouponCode, refetchPreview]);
+  }, [refetchPreview]);
 
   // Validate form before submit
   const validateForm = useCallback((): boolean => {
@@ -260,7 +286,7 @@ export function CheckoutPage() {
   const isCartEmpty = items.length === 0;
 
   // Preview data
-  const preview = previewData;
+  const preview = quoteSourceError ? undefined : confirmedQuote?.data ?? previewData;
   const vendorGroups: CheckoutPreviewVendorGroup[] = preview?.vendorGroups || [];
   const totalAmount = preview?.totalAmount ?? 0;
   const previewSubtotal = vendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
@@ -283,11 +309,12 @@ export function CheckoutPage() {
     { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'You will be redirected to complete payment' },
   ], []);
 
-  const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview;
+  const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview && !confirmedQuote && !applyingCoupon && !couponCodes.length && preview.purchasable !== false;
 
   // Handle checkout submit
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return; // Double-click prevention
+    if (confirmedQuote || applyingCoupon || couponCodes.length || preview?.purchasable === false) { setSubmitError('Discounted checkout is not available. This is a quote only.'); return; }
     if (!validateForm()) return;
     if (!preview) {
       setSubmitError('Order preview unavailable');
@@ -312,7 +339,7 @@ export function CheckoutPage() {
       setIsSubmitting(false);
       submitLock.current = false;
     }
-  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes]);
+  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes, confirmedQuote, applyingCoupon]);
 
   // Loading state
   const isInitialLoading = authLoading || cartLoading || addressesLoading;
@@ -502,10 +529,15 @@ export function CheckoutPage() {
             {/* Step 2: Coupon */}
             <Card variant="bordered" padding="lg" data-testid="checkout-step-coupon">
               <CardHeader>
-                <CardTitle as="h2">2. Cupom de Desconto</CardTitle>
-                <CardDescription>Aplique cupons para obter descontos no seu pedido</CardDescription>
+                <CardTitle as="h2">2. Coupon quote</CardTitle>
+                <CardDescription>Select a store and validate its coupon for an informational quote.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <label htmlFor="coupon-vendor">Coupon vendor</label>
+                <select id="coupon-vendor" value={couponVendor} onChange={e => setCouponVendor(e.target.value)}>
+                  <option value="">Select a store</option>
+                  {vendorGroups.map(g => <option key={g.id} value={g.id}>{g.vendorName}</option>)}
+                </select>
                 <div className="flex gap-3">
                   <Input
                     id="coupon-code"
@@ -521,22 +553,23 @@ export function CheckoutPage() {
                   <Button
                     variant="secondary"
                     onClick={handleApplyCoupon}
+                    disabled={quoteSourceError}
                     isLoading={applyingCoupon}
-                    loadingText="Aplicando..."
+                    loadingText="Validating..."
                     data-testid="coupon-apply-button"
                   >
-                    Aplicar
+                    Validate coupon
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  Aplicação de cupons temporariamente indisponível.
+                  {confirmedQuote ? 'Discounted checkout is not available. This is a quote only.' : 'Coupon quotes cannot be purchased. Remove the selection to checkout without a coupon.'}
                 </p>
 
-                {couponCodes.length > 0 && (
+                {confirmedQuote && (
                   <div className="flex flex-wrap gap-2">
-                    {couponCodes.map((code) => (
+                    {confirmedQuote.selections.map(({ vendorId, code }) => (
                       <Badge
-                        key={code}
+                        key={vendorId}
                         variant="success"
                         size="md"
                         className="flex items-center gap-1.5"
@@ -544,15 +577,39 @@ export function CheckoutPage() {
                         {code}
                         <button
                           type="button"
-                          onClick={() => handleRemoveCoupon(code)}
+                          onClick={handleRemoveCoupon}
                           className="ml-1 text-green-800 hover:text-green-600 font-bold leading-none"
-                          aria-label={`Remover cupom ${code}`}
+                          aria-label={`Remove coupon ${code} from ${vendorGroups.find(g => g.id === vendorId)?.vendorName}`}
                         >
                           ×
                         </button>
                       </Badge>
                     ))}
                   </div>
+                )}
+
+                {confirmedQuote && selectedAddressId && !addressesError && (
+                  <section aria-label="Durable quote acceptance">
+                    <Button onClick={acceptance.prepare} disabled={acceptance.busy}>Prepare acceptance</Button>
+                    {acceptance.busy && <p role="status">Preparing acceptance...</p>}
+                    {acceptance.error && <p role="alert">{acceptance.error}</p>}
+                    {acceptance.attempt && acceptanceSnapshot && (
+                      <div>
+                        <h3>{acceptance.attempt.state === 'ACCEPTED' ? 'Quote accepted' : 'Review server proposal'}</h3>
+                        <p>Delivery: {acceptanceSnapshot.address.street}, {acceptanceSnapshot.address.number}, {acceptanceSnapshot.address.neighborhood}, {acceptanceSnapshot.address.city} - {acceptanceSnapshot.address.state}</p>
+                        {acceptanceSnapshot.groups.map(group => <div key={group.vendorId}>
+                          <h4>{group.vendorName}</h4>
+                          {group.items.map(item => <p key={item.key}>{item.productName}: {item.quantity} × {formatCurrency(item.unitMinor / 100)}; net {formatCurrency(item.netMinor / 100)}</p>)}
+                          {group.coupon && <p>Coupon {group.coupon.code}: {group.coupon.discountType} {group.coupon.value}; valid {group.coupon.startsAt} to {group.coupon.endsAt}; minimum {formatCurrency((group.coupon.minimumEligibleMinor ?? 0) / 100)}; included products {group.coupon.includeProducts.join(', ') || 'all'}, categories {group.coupon.includeCategories.join(', ') || 'all'}; excluded products {group.coupon.excludeProducts.join(', ') || 'none'}, categories {group.coupon.excludeCategories.join(', ') || 'none'}</p>}
+                        </div>)}
+                        <p>Proposal total: {formatCurrency(acceptanceSnapshot.netMinor / 100)}; shipping {formatCurrency(acceptanceSnapshot.shippingMinor / 100)}; fees {formatCurrency(acceptanceSnapshot.feeMinor / 100)}</p>
+                        {acceptance.attempt.state === 'PROPOSED' && <Button onClick={acceptance.accept} disabled={acceptance.busy}>Accept quote</Button>}
+                        {acceptance.attempt.state === 'SUPERSEDED' && <p>Proposal unavailable. Validate a current coupon before preparing a new acceptance.</p>}
+                        <Button onClick={acceptance.reload} disabled={acceptance.busy}>Reload acceptance</Button>
+                        <p>Payment is not available yet</p>
+                      </div>
+                    )}
+                  </section>
                 )}
 
                 {previewLoading && (

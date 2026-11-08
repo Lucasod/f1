@@ -21,6 +21,7 @@ interface PaymentDoc {
   refundedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  checkoutUrl?: string;
 }
 
 export class MongoPaymentRepository implements PaymentRepository {
@@ -47,7 +48,8 @@ export class MongoPaymentRepository implements PaymentRepository {
       failedAt: payment.failedAt,
       refundedAt: payment.refundedAt,
       createdAt: payment.createdAt,
-      updatedAt: now
+      updatedAt: now,
+      checkoutUrl: payment.checkoutUrl
     };
 
     const setDoc: Record<string, any> = {
@@ -65,6 +67,9 @@ export class MongoPaymentRepository implements PaymentRepository {
 
     if (paymentDoc.providerTransactionId !== undefined) {
       setDoc.providerTransactionId = paymentDoc.providerTransactionId;
+    }
+    if (paymentDoc.checkoutUrl !== undefined) {
+      setDoc.checkoutUrl = paymentDoc.checkoutUrl;
     }
 
     await this.paymentsCollection.updateOne(
@@ -135,7 +140,8 @@ export class MongoPaymentRepository implements PaymentRepository {
       failedAt: doc.failedAt,
       refundedAt: doc.refundedAt,
       createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt
+      updatedAt: doc.updatedAt,
+      checkoutUrl: doc.checkoutUrl
     };
 
     return Payment.reconstruct(paymentData);

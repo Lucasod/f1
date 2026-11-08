@@ -114,6 +114,8 @@ export interface OrderData {
   comment?: string;
   commentedAt?: Date;
   commentedBy?: string;
+  attemptId?: string;
+  acceptedHash?: string;
 }
 
 export interface PaymentData {
@@ -135,6 +137,7 @@ export interface PaymentData {
   eventType?: string;
   eventSource?: string;
   eventTimestamp?: Date;
+  checkoutUrl?: string;
 }
 
 function generateId(): string {
@@ -406,6 +409,8 @@ export class Order {
   public comment?: string;
   public commentedAt?: Date;
   public commentedBy?: string;
+  public attemptId?: string;
+  public acceptedHash?: string;
 
   private constructor(data: OrderData) {
     this.id = data.id;
@@ -420,12 +425,16 @@ export class Order {
     this.comment = data.comment;
     this.commentedAt = data.commentedAt;
     this.commentedBy = data.commentedBy;
+    this.attemptId = data.attemptId;
+    this.acceptedHash = data.acceptedHash;
   }
 
   static create(data: {
     personId: string;
     vendorGroups: { vendorId: string; items: Omit<OrderItemData, 'id' | 'totalPrice'>[]; commissionPct: number }[];
     shippingAddress: Address;
+    attemptId?: string;
+    acceptedHash?: string;
   }): Order {
     if (!data.personId || data.personId.trim().length === 0) {
       throw new Error(OrderError.PERSON_ID_REQUIRED);
@@ -460,7 +469,9 @@ export class Order {
       totalAmount,
       financialStatus: FinancialStatus.PENDING,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      attemptId: data.attemptId,
+      acceptedHash: data.acceptedHash
     });
   }
 
@@ -631,7 +642,9 @@ export class Order {
       updatedAt: this.updatedAt,
       comment: this.comment,
       commentedAt: this.commentedAt,
-      commentedBy: this.commentedBy
+      commentedBy: this.commentedBy,
+      attemptId: this.attemptId,
+      acceptedHash: this.acceptedHash
     };
   }
 }
@@ -655,6 +668,7 @@ export class Payment {
   public readonly eventType?: string;
   public readonly eventSource?: string;
   public readonly eventTimestamp?: Date;
+  public checkoutUrl?: string;
 
   private constructor(data: PaymentData) {
     this.id = data.id;
@@ -675,6 +689,7 @@ export class Payment {
     this.eventType = data.eventType;
     this.eventSource = data.eventSource;
     this.eventTimestamp = data.eventTimestamp;
+    this.checkoutUrl = data.checkoutUrl;
   }
 
   static create(data: {
@@ -786,7 +801,8 @@ export class Payment {
       originalEventId: this.originalEventId,
       eventType: this.eventType,
       eventSource: this.eventSource,
-      eventTimestamp: this.eventTimestamp
+      eventTimestamp: this.eventTimestamp,
+      checkoutUrl: this.checkoutUrl
     };
   }
 }
