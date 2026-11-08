@@ -264,9 +264,12 @@ export function CheckoutPage() {
   const vendorGroups: CheckoutPreviewVendorGroup[] = preview?.vendorGroups || [];
   const totalAmount = preview?.totalAmount ?? 0;
   const previewSubtotal = vendorGroups.reduce((sum, vg) => sum + vg.subtotal, 0);
-  const subtotal = preview ? previewSubtotal : items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const discountAmount = preview ? subtotal - previewSubtotal : 0;
-  const shippingAmount = preview ? totalAmount - previewSubtotal - discountAmount : 0;
+  const subtotal = preview
+    ? vendorGroups.reduce((sum, group) => sum + group.items.reduce((itemSum, item) => itemSum + item.totalPrice, 0), 0)
+    : items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const discountAmount = preview?.discountAmount ?? 0;
+  const shippingAmount = preview ? totalAmount - previewSubtotal : 0;
+  const unavailablePreviewLabel = previewLoading && !previewError ? 'Calculating...' : 'Unavailable';
 
   // Address options for radio group
   const addressOptions = useMemo(() => addresses.map((addr) => ({
@@ -612,25 +615,25 @@ export function CheckoutPage() {
 
                 <div className="border-t border-gray-200 pt-4 space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-600">Subtotal bruto</span>
                     <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between text-sm text-green-600">
-                      <span>Desconto (cupons)</span>
+                      <span>Desconto informado no preview</span>
                       <span className="font-medium">-{formatCurrency(discountAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Frete</span>
                     <span className="font-medium text-gray-900" data-testid="main-shipping-amount">
-{shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
+                      {!preview ? unavailablePreviewLabel : shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                     </span>
                   </div>
                   <div className="border-t border-gray-200 pt-3">
                     <div className="flex justify-between text-base">
                       <span className="font-semibold text-gray-900">Total</span>
-                      <span className="font-bold text-gray-900 text-lg">{formatCurrency(totalAmount)}</span>
+                      <span className="font-bold text-gray-900 text-lg">{preview ? formatCurrency(totalAmount) : unavailablePreviewLabel}</span>
                     </div>
                   </div>
                 </div>
@@ -684,25 +687,25 @@ export function CheckoutPage() {
                 </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
+                  <span className="text-gray-600">Subtotal bruto</span>
                   <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>Desconto</span>
+                    <span>Desconto informado no preview</span>
                     <span className="font-medium">-{formatCurrency(discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Frete</span>
                   <span className="font-medium text-gray-900" data-testid="sidebar-shipping-amount">
-                    {shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
+                    {!preview ? unavailablePreviewLabel : shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                   </span>
                 </div>
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex justify-between text-base">
                     <span className="font-semibold text-gray-900">Total</span>
-                    <span className="font-bold text-gray-900 text-lg">{formatCurrency(totalAmount)}</span>
+                    <span className="font-bold text-gray-900 text-lg">{preview ? formatCurrency(totalAmount) : unavailablePreviewLabel}</span>
                   </div>
                 </div>
               </CardContent>

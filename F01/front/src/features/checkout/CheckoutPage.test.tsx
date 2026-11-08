@@ -55,6 +55,7 @@ const mockUseCheckoutState = vi.hoisted(() => {
 const mockUseCheckoutPreview = vi.hoisted(() => ({
   data: undefined as CheckoutPreviewResponse | undefined,
   isLoading: false,
+  error: null as Error | null,
   refetch: vi.fn(),
 }));
 
@@ -362,6 +363,7 @@ const resetMocks = () => {
   // Reset useCheckoutPreview
   mockUseCheckoutPreview.data = mockPreviewResponse;
   mockUseCheckoutPreview.isLoading = false;
+  mockUseCheckoutPreview.error = null;
   mockUseCheckoutPreview.refetch.mockClear();
   
   // Reset useCheckout
@@ -573,7 +575,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(screen.getByText(/qtd: 1 ×/i)).toBeInTheDocument();
 
     // Check subtotal - use the sidebar subtotal which is more specific
-    expect(within(screen.getByTestId('checkout-sidebar-summary')).getByText(/^subtotal$/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId('checkout-sidebar-summary')).getByText(/^subtotal bruto$/i)).toBeInTheDocument();
     // Check total in sidebar (more specific than main summary) - use exact match
     expect(within(screen.getByTestId('checkout-sidebar-summary')).getByText(/^total$/i)).toBeInTheDocument();
     // Check total amount in sidebar (the large total at the bottom with bold text)
@@ -594,7 +596,78 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     fireEvent.click(screen.getByLabelText(/rua das flores, 123 - centro/i));
 
     // Discount line should not appear
-    expect(screen.queryByText(/desconto \(cupons\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/desconto informado no preview/i)).not.toBeInTheDocument();
+  });
+
+  it('shows gross subtotal and informational preview discount in both summaries without subtracting twice', async () => {
+    mockUseCheckoutPreview.data = {
+      vendorGroups: [{ ...mockPreviewVendorGroup1, subtotal: 53.98 }, mockPreviewVendorGroup2],
+      discountAmount: 6,
+      totalAmount: 103.97,
+    };
+
+    renderWithNav(<CheckoutPage />);
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+    for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
+      const section = within(summary);
+      expect(section.getByText(/^desconto informado no preview$/i).closest('div')).toHaveTextContent(/-R\$\s*6,00/);
+      expect(section.getByText(/^subtotal bruto$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*103,97/);
+    }
+    expect(screen.getByTestId('main-shipping-amount')).toHaveTextContent('free');
+    expect(screen.getByTestId('sidebar-shipping-amount')).toHaveTextContent('free');
+    expect(mockUseCheckoutState.addCouponCode).not.toHaveBeenCalled();
+  });
+
+  it('shows gross subtotal without a discount when no coupon discount is returned', async () => {
+    mockUseCheckoutPreview.data = { ...mockPreviewResponse, discountAmount: 0 };
+    renderWithNav(<CheckoutPage />);
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
+      const section = within(summary);
+      expect(section.getByText(/^subtotal bruto$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
+      expect(section.queryByText(/^desconto informado no preview$/i)).not.toBeInTheDocument();
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
+    }
+  });
+
+  it.each([
+    { state: 'loading', loading: true, error: null, label: 'Calculating...' },
+    { state: 'error', loading: false, error: new Error('Preview unavailable'), label: 'Unavailable' },
+    { state: 'idle', loading: false, error: null, label: 'Unavailable' },
+  ])('shows unknown shipping and total during preview $state', async ({ loading, error, label }) => {
+    mockUseCheckoutPreview.data = undefined;
+    mockUseCheckoutPreview.isLoading = loading;
+    mockUseCheckoutPreview.error = error;
+    mockUseCheckoutState.setSelectedAddressId('addr-1');
+    mockUseCheckoutState.setPaymentMethod('stripe_checkout');
+    renderWithNav(<CheckoutPage />);
+    await screen.findByText('3. Resumo do Pedido');
+
+    for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
+      const section = within(summary);
+      expect(section.getByText(/^subtotal bruto$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
+      expect(section.getByText(/^frete$/i).closest('div')).toHaveTextContent(label);
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(label);
+    }
+    expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
+    expect(mockCheckoutApi.checkout).not.toHaveBeenCalled();
+  });
+
+  it('shows a real zero total and free shipping when the preview returns them', async () => {
+    mockUseCheckoutPreview.data = {
+      vendorGroups: [{ ...mockPreviewVendorGroup1, subtotal: 0 }],
+      discountAmount: 59.98,
+      totalAmount: 0,
+    };
+    renderWithNav(<CheckoutPage />);
+    await screen.findByText('3. Resumo do Pedido');
+    for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
+      const section = within(summary);
+      expect(section.getByText(/^frete$/i).closest('div')).toHaveTextContent('free');
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*0,00/);
+    }
   });
 
   it('shows payment selection with radio buttons', async () => {
@@ -861,7 +934,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(sidebarSummary).toBeInTheDocument();
     
     // Query within sidebar for totals - use more specific matchers
-    expect(within(sidebarSummary).getByText(/^subtotal$/i)).toBeInTheDocument();
+    expect(within(sidebarSummary).getByText(/^subtotal bruto$/i)).toBeInTheDocument();
     expect(within(sidebarSummary).getByText(/^total$/i)).toBeInTheDocument();
     expect(within(sidebarSummary).getByText(/2 items no pedido/i)).toBeInTheDocument();
   });
