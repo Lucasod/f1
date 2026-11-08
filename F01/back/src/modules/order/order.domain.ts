@@ -41,6 +41,31 @@ export enum FinancialStatus {
 
 export const VALID_FINANCIAL_STATUSES: FinancialStatus[] = Object.values(FinancialStatus);
 
+export enum DisputeType {
+  REFUND = 'refund',
+  DAMAGE = 'damage',
+  WRONG_ITEM = 'wrong_item'
+}
+
+export const VALID_DISPUTE_TYPES: DisputeType[] = Object.values(DisputeType);
+
+export enum DisputeStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  MEDIATED = 'mediated'
+}
+
+export const VALID_DISPUTE_STATUSES: DisputeStatus[] = Object.values(DisputeStatus);
+
+export enum DisputeResolution {
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  MEDIATED = 'mediated'
+}
+
+export const VALID_DISPUTE_RESOLUTIONS: DisputeResolution[] = Object.values(DisputeResolution);
+
 export enum OrderError {
   ORDER_NOT_FOUND = 'ORDER_NOT_FOUND',
   ORDER_ITEM_NOT_FOUND = 'ORDER_ITEM_NOT_FOUND',
@@ -61,7 +86,12 @@ export enum OrderError {
   INVALID_COMMISSION_PCT = 'INVALID_COMMISSION_PCT',
   ORDER_COMMENT_ALREADY_EXISTS = 'ORDER_COMMENT_ALREADY_EXISTS',
   ORDER_NOT_DELIVERED = 'ORDER_NOT_DELIVERED',
-  INVALID_COMMENT = 'INVALID_COMMENT'
+  INVALID_COMMENT = 'INVALID_COMMENT',
+  DISPUTE_NOT_FOUND = 'DISPUTE_NOT_FOUND',
+  DISPUTE_NOT_PENDING = 'DISPUTE_NOT_PENDING',
+  DISPUTE_ALREADY_RESOLVED = 'DISPUTE_ALREADY_RESOLVED',
+  DISPUTE_INVALID_TYPE = 'DISPUTE_INVALID_TYPE',
+  DISPUTE_UNAUTHORIZED = 'DISPUTE_UNAUTHORIZED'
 }
 
 export interface Address {
@@ -84,6 +114,20 @@ export interface OrderItemData {
   totalPrice: number;
   deliveredAt?: Date;
   deliveredBy?: string;
+  dispute?: DisputeData;
+}
+
+export interface DisputeData {
+  id: string;
+  status: DisputeStatus;
+  type: DisputeType;
+  requestedBy: 'consumer' | 'vendor';
+  orderItemId: string;
+  description: string;
+  createdAt?: Date;
+  resolvedAt?: Date;
+  resolvedBy: 'vendor' | 'admin';
+  resolution: DisputeResolution;
 }
 
 export interface OrderVendorGroupData {
@@ -174,6 +218,7 @@ export class OrderItem {
   public readonly totalPrice: number;
   public deliveredAt?: Date;
   public deliveredBy?: string;
+  public dispute?: Dispute;
 
   private constructor(data: OrderItemData) {
     this.id = data.id;
@@ -185,6 +230,7 @@ export class OrderItem {
     this.totalPrice = data.totalPrice;
     this.deliveredAt = data.deliveredAt ? new Date(data.deliveredAt) : undefined;
     this.deliveredBy = data.deliveredBy;
+    this.dispute = data.dispute ? Dispute.reconstruct(data.dispute) : undefined;
   }
 
   static create(data: Omit<OrderItemData, 'id' | 'totalPrice'>): OrderItem {
@@ -225,7 +271,8 @@ export class OrderItem {
       unitPrice: this.unitPrice,
       totalPrice: this.totalPrice,
       deliveredAt: this.deliveredAt,
-      deliveredBy: this.deliveredBy
+      deliveredBy: this.deliveredBy,
+      dispute: this.dispute ? this.dispute.toDomainData() : undefined
     };
   }
 
@@ -239,6 +286,127 @@ export class OrderItem {
 
   get isDelivered(): boolean {
     return this.deliveredAt !== undefined;
+  }
+}
+
+export class Dispute {
+  public readonly id: string;
+  public status: DisputeStatus;
+  public type: DisputeType;
+  public requestedBy: 'consumer' | 'vendor';
+  public orderItemId: string;
+  public description: string;
+  public readonly createdAt: Date;
+  public resolvedAt?: Date;
+  public resolvedBy: 'vendor' | 'admin';
+  public resolution: DisputeResolution;
+
+  private constructor(data: DisputeData) {
+    this.id = data.id;
+    this.status = data.status;
+    this.type = data.type;
+    this.requestedBy = data.requestedBy;
+    this.orderItemId = data.orderItemId;
+    this.description = data.description;
+    this.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
+    this.resolvedAt = data.resolvedAt ? new Date(data.resolvedAt) : undefined;
+    this.resolvedBy = data.resolvedBy;
+    this.resolution = data.resolution;
+  }
+
+  static create(data: Omit<DisputeData, 'id'>): Dispute {
+    if (!data.orderItemId || data.orderItemId.trim().length === 0) {
+      throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    }
+    if (!data.description || data.description.trim().length === 0) {
+      throw new Error(OrderError.INVALID_COMMENT);
+    }
+    if (!data.requestedBy || !['consumer', 'vendor'].includes(data.requestedBy)) {
+      throw new Error(OrderError.DISPUTE_INVALID_TYPE);
+    }
+    if (!data.type || !Object.values(DisputeType).includes(data.type)) {
+      throw new Error(OrderError.DISPUTE_INVALID_TYPE);
+    }
+
+    const now = new Date();
+    const disputeId = generateId();
+
+    return new Dispute({
+      id: disputeId,
+      status: DisputeStatus.PENDING,
+      type: data.type,
+      requestedBy: data.requestedBy,
+      orderItemId: data.orderItemId,
+      description: data.description,
+      createdAt: now,
+      resolvedAt: undefined,
+      resolvedBy: 'vendor',
+      resolution: DisputeResolution.REJECTED
+    });
+  }
+
+  static reconstruct(data: DisputeData): Dispute {
+    return new Dispute(data);
+  }
+
+  toDomainData(): DisputeData {
+    return {
+      id: this.id,
+      status: this.status,
+      type: this.type,
+      requestedBy: this.requestedBy,
+      orderItemId: this.orderItemId,
+      description: this.description,
+      createdAt: this.createdAt,
+      resolvedAt: this.resolvedAt,
+      resolvedBy: this.resolvedBy,
+      resolution: this.resolution
+    };
+  }
+
+  approve(): void {
+    if (this.status !== DisputeStatus.PENDING) {
+      throw new Error(OrderError.DISPUTE_ALREADY_RESOLVED);
+    }
+    this.status = DisputeStatus.APPROVED;
+    this.resolution = DisputeResolution.APPROVED;
+    this.resolvedAt = new Date();
+    this.resolvedBy = 'vendor';
+  }
+
+  reject(): void {
+    if (this.status !== DisputeStatus.PENDING) {
+      throw new Error(OrderError.DISPUTE_ALREADY_RESOLVED);
+    }
+    this.status = DisputeStatus.REJECTED;
+    this.resolution = DisputeResolution.REJECTED;
+    this.resolvedAt = new Date();
+    this.resolvedBy = 'vendor';
+  }
+
+  mediate(resolution: DisputeResolution): void {
+    if (this.status !== DisputeStatus.PENDING) {
+      throw new Error(OrderError.DISPUTE_ALREADY_RESOLVED);
+    }
+    this.status = DisputeStatus.MEDIATED;
+    this.resolution = resolution;
+    this.resolvedAt = new Date();
+    this.resolvedBy = 'admin';
+  }
+
+  toJSON(): DisputeData {
+    return {
+      id: this.id,
+      status: this.status,
+      type: this.type,
+      requestedBy: this.requestedBy,
+      orderItemId: this.orderItemId,
+      description: this.description,
+      createdAt: this.createdAt,
+      resolvedAt: this.resolvedAt,
+      resolvedBy: this.resolvedBy,
+      resolution: this.resolution
+    };
   }
 }
 

@@ -309,12 +309,12 @@ export function CheckoutPage() {
     { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'You will be redirected to complete payment' },
   ], []);
 
-  const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview && !confirmedQuote && !applyingCoupon && !couponCodes.length && preview.purchasable !== false;
+  const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview && !confirmedQuote && !applyingCoupon && preview.purchasable !== false;
 
   // Handle checkout submit
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return; // Double-click prevention
-    if (confirmedQuote || applyingCoupon || couponCodes.length || preview?.purchasable === false) { setSubmitError('Discounted checkout is not available. This is a quote only.'); return; }
+    if (applyingCoupon || preview?.purchasable === false) { setSubmitError('Discounted checkout is not available. This is a quote only.'); return; }
     if (!validateForm()) return;
     if (!preview) {
       setSubmitError('Order preview unavailable');
@@ -562,7 +562,7 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  {confirmedQuote ? 'Discounted checkout is not available. This is a quote only.' : 'Coupon quotes cannot be purchased. Remove the selection to checkout without a coupon.'}
+                  {confirmedQuote ? 'Finalizar pedido com desconto do cupom.' : 'Selecione um vendedor e um cupom para obter cotação.'}
                 </p>
 
                 {confirmedQuote && (

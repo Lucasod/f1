@@ -34,6 +34,11 @@ export enum PersonRole {
   ADMIN = 'ADMIN'
 }
 
+export enum PermissionLevel {
+  READ = 'read',
+  READ_WRITE = 'read-write'
+}
+
 export interface ContactInfo {
   id: string;
   type: 'email' | 'phone' | 'whatsapp';
@@ -64,6 +69,7 @@ export interface PersonData {
   contactInfos: ContactInfo[];
   addresses: Address[];
   roles?: PersonRole[];
+  permissionLevel?: PermissionLevel;
   credential?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
@@ -84,6 +90,7 @@ export class Person {
   public readonly contactInfos: ContactInfo[];
   public readonly addresses: Address[];
   public readonly roles: PersonRole[];
+  public permissionLevel?: PermissionLevel;
   public readonly credential: string | null;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
@@ -95,6 +102,7 @@ export class Person {
     this.contactInfos = data.contactInfos;
     this.addresses = data.addresses;
     this.roles = data.roles || [];
+    this.permissionLevel = data.permissionLevel ?? PermissionLevel.READ;
     this.credential = data.credential || null;
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
@@ -144,7 +152,7 @@ export class Person {
     return new Person(data);
   }
 
-  addRole(role: PersonRole): void {
+  addRole(role: PersonRole, permissionLevel?: PermissionLevel): void {
     if (this.roles.includes(role)) {
       return;
     }
@@ -158,6 +166,16 @@ export class Person {
     }
 
     this.roles.push(role);
+
+    // Update permissionLevel based on role and provided permissionLevel
+    if (role === PersonRole.ADMIN) {
+      if (permissionLevel !== undefined) {
+        this.permissionLevel = permissionLevel;
+      } else if (this.permissionLevel === undefined) {
+        this.permissionLevel = PermissionLevel.READ;
+      }
+    }
+    // For CONSUMER/VENDOR roles, permissionLevel remains unchanged per CD-059
   }
 
   setCredential(hashedPassword: string): void {

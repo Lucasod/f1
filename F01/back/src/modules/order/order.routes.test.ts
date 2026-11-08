@@ -11,6 +11,8 @@ import {
   InMemoryPaymentRepository,
   Order,
   OrderStatus,
+  DisputeStatus,
+  DisputeType,
 } from './order.domain';
 import { OrderService } from './order.service';
 import { createOrderRoutes } from './order.routes';
@@ -457,4 +459,279 @@ describe('Order comment route', () => {
       .send({ comment: 'hello' })
       .expect(401);
   });
+});
+
+describe('Order dispute route', () => {
+  let app: express.Express;
+  let ownerToken: string;
+  let otherConsumerToken: string;
+  let adminToken: string;
+  let deliveredOrderId: string;
+  let ownerPersonId: string;
+  let personRepository: InMemoryPersonRepository;
+  let orderRepository: InMemoryOrderRepository;
+  let authService: AuthService;
+  const password = process.env.TEST_USER_PASSWORD!;
+
+  beforeEach(async () => {
+    personRepository = new InMemoryPersonRepository();
+    authService = new AuthService(personRepository, 'test-secret-key', '24h');
+    const owner = await authService.register({
+      name: 'Order Owner',
+      taxIdType: 'CPF',
+      taxIdValue: '52998224725',
+      email: 'order-dispute@example.com',
+      password: password,
+      role: PersonRole.CONSUMER,
+    });
+    const otherConsumer = await authService.register({
+      name: 'Other Consumer',
+      taxIdType: 'CPF',
+      taxIdValue: '98765432100',
+      email: 'other-consumer-dispute@example.com',
+      password: password,
+      role: PersonRole.CONSUMER,
+    });
+    const adminPerson = Person.create({
+      name: 'Marketplace Admin',
+      mainInfo: {
+        name: 'Marketplace Admin',
+        taxIdType: 'CNPJ',
+        taxIdValue: '11222333000262',
+      },
+      contactInfos: [{ type: 'email', value: 'admin@example.com', isPrimary: true }],
+      addresses: [],
+    });
+    adminPerson.addRole(PersonRole.ADMIN);
+    adminPerson.setCredential(await hashPassword(password));
+    await personRepository.save(adminPerson);
+
+    ownerToken = owner.tokens.accessToken;
+    ownerPersonId = owner.person.id;
+    otherConsumerToken = otherConsumer.tokens.accessToken;
+    adminToken = (await authService.login({
+      email: 'admin@example.com',
+      password: password,
+    })).tokens.accessToken;
+
+    orderRepository = new InMemoryOrderRepository();
+    const paymentRepository = new InMemoryPaymentRepository();
+    const vendorRepository = new InMemoryVendorRepository();
+
+    const deliveredOrder = Order.create({
+      personId: owner.person.id,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'dispute-product',
+          productName: 'Dispute Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 100,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'delivery-address',
+        street: 'Main Street',
+        number: '1',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    deliveredOrder.markPaymentAuthorized();
+    deliveredOrder.transitionTo(OrderStatus.PROCESSING);
+    deliveredOrder.transitionTo(OrderStatus.SHIPPED);
+    deliveredOrder.transitionTo(OrderStatus.DELIVERED);
+    deliveredOrderId = deliveredOrder.id;
+    await orderRepository.save(deliveredOrder);
+
+    const orderService = new OrderService(
+      orderRepository,
+      paymentRepository,
+      personRepository,
+      vendorRepository,
+      config,
+    );
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1', createOrderRoutes({
+      authService,
+      orderService,
+      personRepo: personRepository,
+      vendorRepo: vendorRepository,
+    }));
+  });
+
+  it('POST initiate dispute by consumer on delivered item → 201', async () => {
+    const res = await request(app)
+      .post(`/api/v1/orders/${deliveredOrderId}/items/${(await orderRepository.findById(deliveredOrderId))?.vendorGroups[0]?.items[0]?.id}/disputes`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ description: 'Item arrived damaged' })
+      .expect(201);
+    expect(res.body.dispute.status).toBe(DisputeStatus.PENDING);
+    expect(res.body.dispute.type).toBe(DisputeType.REFUND);
+    expect(res.body.dispute.requestedBy).toBe('consumer');
+    expect(res.body.dispute.resolution).toBeUndefined();
+  });
+
+  it('POST initiate dispute on non-delivered item → 422', async () => {
+    const pendingOrderId = 'pending-order-dispute';
+    const pendingOrder = Order.create({
+      personId: ownerPersonId,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'pending-dispute-product',
+          productName: 'Pending Dispute Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 50,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'delivery-address',
+        street: 'Main Street',
+        number: '1',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    await orderRepository.save(pendingOrder);
+
+    const res = await request(app)
+      .post(`/api/v1/orders/${pendingOrderId}/items/${(await orderRepository.findById(pendingOrderId))?.vendorGroups[0]?.items[0]?.id}/disputes`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ description: 'Not delivered yet' })
+      .expect(422);
+    expect(res.body.error).toBe('ORDER_NOT_DELIVERED');
+  });
+
+  it('POST initiate dispute by non-owner → 404', async () => {
+    const otherOrderId = 'other-order-dispute';
+    const otherOrder = Order.create({
+      personId: otherConsumerPersonId,
+      vendorGroups: [{
+        vendorId: 'owner-vendor',
+        items: [{
+          productId: 'other-dispute-product',
+          productName: 'Other Dispute Product',
+          vendorId: 'owner-vendor',
+          quantity: 1,
+          unitPrice: 75,
+        }],
+        commissionPct: config.commissionPct,
+      }],
+      shippingAddress: {
+        id: 'delivery-address',
+        street: 'Second Street',
+        number: '2',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+    });
+    await orderRepository.save(otherOrder);
+
+    const res = await request(app)
+      .post(`/api/v1/orders/${otherOrderId}/items/${(await orderRepository.findById(otherOrderId))?.vendorGroups[0]?.items[0]?.id}/disputes`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ description: 'Someone elses dispute' })
+      .expect(404);
+  });
+
+  it('POST approve dispute by vendor → 200', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item arrived damaged', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    const res = await request(app)
+      .post(`/api/v1/disputes/${disputeId}/approve`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    expect(res.body.dispute.status).toBe(DisputeStatus.APPROVED);
+    expect(res.body.dispute.resolution).toBe(DisputeResolution.APPROVED);
+    expect(res.body.dispute.resolvedAt).toBeDefined();
+    expect(res.body.dispute.resolvedBy).toBe('vendor');
+  });
+
+  it('POST reject dispute by vendor → 200', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item wrong product', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    const res = await request(app)
+      .post(`/api/v1/disputes/${disputeId}/reject`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    expect(res.body.dispute.status).toBe(DisputeStatus.REJECTED);
+    expect(res.body.dispute.resolution).toBe(DisputeResolution.REJECTED);
+    expect(res.body.dispute.resolvedAt).toBeDefined();
+    expect(res.body.dispute.resolvedBy).toBe('vendor');
+  });
+
+  it('POST admin mediate dispute → 200', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item arrived damaged', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    // Admin mediates with APPROVED
+    const res = await request(app)
+      .post(`/api/v1/disputes/${disputeId}/admin-mediate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ resolution: 'approved' })
+      .expect(200);
+    expect(res.body.dispute.status).toBe(DisputeStatus.MEDIATED);
+    expect(res.body.dispute.resolution).toBe(DisputeResolution.APPROVED);
+    expect(res.body.dispute.resolvedAt).toBeDefined();
+    expect(res.body.dispute.resolvedBy).toBe('admin');
+  });
+
+  it('POST admin mediate dispute with REJECTED → 200', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item wrong product', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    // Admin mediates with REJECTED
+    const res = await request(app)
+      .post(`/api/v1/disputes/${disputeId}/admin-mediate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ resolution: 'rejected' })
+      .expect(200);
+    expect(res.body.dispute.status).toBe(DisputeStatus.MEDIATED);
+    expect(res.body.dispute.resolution).toBe(DisputeResolution.REJECTED);
+    expect(res.body.dispute.resolvedAt).toBeDefined();
+    expect(res.body.dispute.resolvedBy).toBe('admin');
+  });
+});
 });
