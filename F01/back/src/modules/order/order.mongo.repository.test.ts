@@ -51,7 +51,7 @@ describeIfMongo('MongoOrderRepository Contract Tests', () => {
   });
 
   afterAll(async () => {
-    await db?.admin().command({ dropDatabase: 1 });
+    await db?.dropDatabase();
     await client.close();
   });
 

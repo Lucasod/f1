@@ -47,7 +47,7 @@ describeIfMongo('MongoPayoutRepository Contract Tests', () => {
   });
 
   afterAll(async () => {
-    await client.db(dbNameForDrop).drop();
+    await client.db(dbNameForDrop).dropDatabase();
     await client.close();
   });
 
