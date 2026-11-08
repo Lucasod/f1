@@ -108,7 +108,7 @@ export class CheckoutService {
   }
 
   async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
-    if (couponCodes?.length) throw new CouponError('COUPONS_UNAVAILABLE', 503);
+    if (couponCodes?.length && !this.coupons) throw new CouponError('COUPONS_UNAVAILABLE', 503);
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);
     if (!cart || cart.isEmpty) {

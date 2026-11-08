@@ -138,8 +138,13 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
       if (couponCodes !== undefined && !Array.isArray(couponCodes)) throw new Error('INVALID_COUPON_CODES');
       const parsedCoupons = parseCouponCodes(couponCodes);
       const selections = parseSelections(req.body.couponSelections);
+      // Per CD-050: only block coupons when the coupon service isn't wired up.
+      // When the service is available, the flow proceeds to quoteCart which handles
+      // per-vendor resolution, eligibility validation, and allocateMinorDiscount.
       if ((parsedCoupons?.length ?? 0) > 0 || selections.length > 0) {
-        return res.status(503).json({ error: 'COUPONS_UNAVAILABLE', message: 'Coupon validation and application are temporarily unavailable' });
+        if (!checkoutService['coupons']) {
+          return res.status(503).json({ error: 'COUPONS_UNAVAILABLE', message: 'Coupon validation and application are temporarily unavailable' });
+        }
       }
 
       const consumerId = req.user.sub;
