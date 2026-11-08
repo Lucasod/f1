@@ -497,7 +497,7 @@ export class CheckoutService {
     return this.attemptRepo().acceptIfCurrent(current);
   }
 
-  async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ order: Order; payment: Payment; checkoutUrl: string }> {
+async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ order: Order; payment: Payment; checkoutUrl: string }> {
     const attempt = await this.getAttempt(owner, attemptId);
     if (attempt.state !== 'ACCEPTED' || !attempt.acceptedSnapshot) {
       throw new AttemptError('ATTEMPT_NOT_ACCEPTED', 409, attempt);
@@ -509,10 +509,10 @@ export class CheckoutService {
 
     // Idempotency: reuse existing order/payment for this attempt if present.
     const existingOrders = await this.orderRepo.findByPersonId(owner);
-    const existingOrder = existingOrders.find(o => o.attemptId === attemptId || (attempt.acceptedHash && o.acceptedHash === attempt.acceptedHash));
+    const existingOrder = existingOrders.find(o => o.attemptId === attemptId);
     if (existingOrder) {
       const payments = await this.paymentRepo.findByOrderId(existingOrder.id);
-      const payment = payments[0] ?? await this.paymentRepo.save(Payment.create({ orderId: existingOrder.id, personId: owner, amount: existingOrder.totalAmount, provider: 'stripe' }));
+      const payment = payments[0] ?? await this.paymentRepo.insertForAttempt({ attemptId: attemptId, orderId: existingOrder.id, personId: owner, amount: existingOrder.totalAmount });
       let checkoutUrl = this.extractPersistedCheckoutUrl(payment, existingOrder);
       if (!checkoutUrl) {
         // Try to retrieve the session URL from the provider when supported.
@@ -633,6 +633,9 @@ export class CheckoutService {
         vendorId: g.vendorId,
         items,
         commissionPct: snapshot.commissionBps / 100,
+        subtotal: 0,
+        commissionAmount: 0,
+        vendorNet: 0,
       };
     });
 
@@ -671,26 +674,69 @@ export class CheckoutService {
       }
     });
 
+    // Also set subtotal/commission/vendorNet on vendorGroupsData for persistence
+    vendorGroupsData.forEach((vg, gi) => {
+      const snapGroup = snapshot.groups.find(sg => sg.vendorId === vg.vendorId) ?? snapshot.groups[gi];
+      if (snapGroup) {
+        vg.subtotal = snapGroup.netMinor / 100;
+        vg.commissionAmount = snapGroup.commissionMinor / 100;
+        vg.vendorNet = snapGroup.vendorNetMinor / 100;
+      }
+    });
+
     // Ensure totalAmount matches accepted snapshot netMinor (minor -> major).
     order.totalAmount = snapshot.netMinor / 100;
 
-    const payment = Payment.create({
-      orderId: order.id,
-      personId: owner,
-      amount: order.totalAmount,
-       provider: 'stripe',
-     });
+    // Also set totalPrice on vendorGroupsData items for persistence consistency
+    vendorGroupsData.forEach((vg, gi) => {
+      const snapGroup = snapshot.groups.find(sg => sg.vendorId === vg.vendorId) ?? snapshot.groups[gi];
+      const minors = groupAllocatedMinors[gi] ?? [];
+      vg.items.forEach((item, idx) => {
+        const allocatedMinor = minors[idx];
+        if (typeof allocatedMinor === 'number') {
+          (item as any).totalPrice = allocatedMinor / 100;
+        }
+      });
+    });
 
-    await this.orderRepo.save(order);
-    await this.paymentRepo.save(payment);
+    // Persist order using insertForAttempt (create-only, idempotent with fixed attemptId)
+    const persistedOrder = await this.orderRepo.insertForAttempt({
+      attemptId: attemptId,
+      personId: owner,
+      vendorGroups: vendorGroupsData,
+      shippingAddress: {
+        id: snapshot.address.id,
+        street: snapshot.address.street,
+        number: snapshot.address.number,
+        neighborhood: snapshot.address.neighborhood,
+        city: snapshot.address.city,
+        state: snapshot.address.state,
+        isPrimary: false,
+      },
+      totalAmount: order.totalAmount,
+      financialStatus: FinancialStatus.PENDING,
+    });
+
+    // Persist payment using insertForAttempt (create-only, idempotent with fixed attemptId)
+    const payment = Payment.create({
+      orderId: persistedOrder.id,
+      personId: owner,
+      amount: persistedOrder.totalAmount,
+       provider: 'stripe',
+    });
+    const persistedPayment = await this.paymentRepo.insertForAttempt({ attemptId: attemptId, orderId: persistedOrder.id, personId: owner, amount: persistedOrder.totalAmount });
+
+    // Persist the acceptedHash on the order document for audit/recovery
+    persistedOrder.acceptedHash = attempt.acceptedHash;
+    try { await this.orderRepo.update(persistedOrder); } catch { /* ignore update failure on already-persisted */ }
 
     // Persist session request before calling provider (SESSION_REQUESTED marker via payment providerTransactionId placeholder).
-    const session = await this.paymentProvider.createSession(order, payment);
-    payment.providerTransactionId = session.id;
-    payment.checkoutUrl = session.url;
-    await this.paymentRepo.update(payment);
+    const session = await this.paymentProvider.createSession(persistedOrder, persistedPayment);
+    persistedPayment.providerTransactionId = session.id;
+    persistedPayment.checkoutUrl = session.url;
+    await this.paymentRepo.update(persistedPayment);
 
-    return { order, payment, checkoutUrl: session.url };
+    return { order: persistedOrder, payment: persistedPayment, checkoutUrl: session.url };
   }
 
   private async decrementStock(cart: Cart, decremented: { productId: string; amount: number }[]): Promise<void> {
@@ -718,9 +764,9 @@ export class CheckoutService {
     }
   }
 
-  private async prepareVendorGroups(cart: Cart): Promise<{
+private async prepareVendorGroups(cart: Cart): Promise<{
     vendorId: string;
-    items: { productId: string; productName: string; vendorId: string; quantity: number; unitPrice: number }[];
+    items: { productId: string; productName: string; vendorId: string; quantity: number; unitPrice: number; subtotal?: number; commissionAmount?: number; vendorNet?: number }[];
     commissionPct: number;
   }[]> {
     // Group cart items by vendorId
@@ -759,8 +805,11 @@ export class CheckoutService {
     // Build vendor groups data
     const vendorGroupsData: {
       vendorId: string;
-      items: { productId: string; productName: string; vendorId: string; quantity: number; unitPrice: number }[];
+      items: { productId: string; productName: string; vendorId: string; quantity: number; unitPrice: number; subtotal?: number; commissionAmount?: number; vendorNet?: number }[];
       commissionPct: number;
+      subtotal?: number;
+      commissionAmount?: number;
+      vendorNet?: number;
     }[] = [];
 
     for (const [vendorId, items] of itemsByVendor.entries()) {

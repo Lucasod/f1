@@ -19,6 +19,8 @@ interface ProductDoc {
   searchPending?: boolean;
   searchRetryAt?: Date;
   searchAttempts?: number;
+  reservedBy?: string;
+  reservedQuantity?: number;
 }
 
 function generateId(): string {
@@ -267,6 +269,22 @@ export class MongoProductRepository implements ProductRepository {
     if (result.matchedCount !== 1) await this.rejectUnmatchedMutation(productId);
   }
 
+  async reserveForAttempt(productId: string, attemptId: string, amount: number): Promise<boolean> {
+    const result = await this.productsCollection.updateOne(
+      { _id: productId, quantity: { $gte: amount }, reservedBy: { $ne: attemptId } },
+      { $set: { reservedBy: attemptId, reservedQuantity: amount }, $inc: { quantity: -amount } }
+    );
+    return result.modifiedCount > 0;
+  }
+
+  async releaseForAttempt(productId: string, attemptId: string, amount: number): Promise<boolean> {
+    const result = await this.productsCollection.updateOne(
+      { _id: productId, reservedBy: attemptId, reservedQuantity: { $gte: amount } },
+      { $inc: { quantity: amount, reservedQuantity: -amount }, $set: { reservedBy: amount > 0 ? attemptId : undefined, reservedQuantity: amount > 0 ? amount : undefined } }
+    );
+    return result.modifiedCount > 0;
+  }
+
   // A single document read binds each snapshot to its revision. Reading never acknowledges.
   async readPendingSearchSnapshots(limit = 100, now = new Date(), afterId?: string): Promise<PendingProductSearchSnapshot[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isFinite(now.getTime())) {
@@ -361,7 +379,9 @@ export class MongoProductRepository implements ProductRepository {
       status: doc.status,
       images: doc.images,
       createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt
+      updatedAt: doc.updatedAt,
+      reservedBy: doc.reservedBy,
+      reservedQuantity: doc.reservedQuantity
     });
   }
 }

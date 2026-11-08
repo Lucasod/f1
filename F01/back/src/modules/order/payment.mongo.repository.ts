@@ -22,6 +22,9 @@ interface PaymentDoc {
   createdAt: Date;
   updatedAt: Date;
   checkoutUrl?: string;
+  attemptId?: string;
+  acceptedHash?: string;
+  acceptedSnapshot?: string;
 }
 
 export class MongoPaymentRepository implements PaymentRepository {
@@ -86,6 +89,66 @@ export class MongoPaymentRepository implements PaymentRepository {
     return Payment.reconstruct({
       ...payment.toJSON(),
       updatedAt: now
+    } as any);
+  }
+
+  async insertForAttempt(paymentData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment> {
+    const attemptId = paymentData.attemptId;
+    const fixedId = `attempt:${attemptId}`;
+
+    // Check if a payment with this attemptId already exists
+    const existing = await this.paymentsCollection.findOne({ _id: fixedId });
+    if (existing) {
+      return Payment.reconstruct({
+        ...existing,
+        updatedAt: new Date()
+      } as any);
+    }
+
+    // Create the payment with the fixed ID based on attemptId
+    const now = new Date();
+    const paymentId = fixedId;
+
+    const paymentDoc: PaymentDoc = {
+      _id: fixedId,
+      orderId: paymentData.orderId,
+      personId: paymentData.personId,
+      amount: paymentData.amount,
+      status: PaymentStatus.PENDING,
+      createdAt: now,
+      updatedAt: now,
+      attemptId: attemptId,
+      acceptedHash: undefined,
+      acceptedSnapshot: undefined
+    };
+
+    try {
+      await this.paymentsCollection.insertOne(paymentDoc);
+    } catch (error: any) {
+      // If duplicate key, read existing and return it (idempotent)
+      if (error.code === 11000) {
+        const dup = await this.paymentsCollection.findOne({ _id: fixedId });
+        if (dup) {
+          return Payment.reconstruct({
+            ...dup,
+            updatedAt: new Date()
+          } as any);
+        }
+      }
+      throw error;
+    }
+
+    return Payment.reconstruct({
+      id: fixedId,
+      orderId: paymentData.orderId,
+      personId: paymentData.personId,
+      amount: paymentData.amount,
+      status: PaymentStatus.PENDING,
+      createdAt: now,
+      updatedAt: now,
+      attemptId: attemptId,
+      acceptedHash: undefined,
+      acceptedSnapshot: undefined
     } as any);
   }
 

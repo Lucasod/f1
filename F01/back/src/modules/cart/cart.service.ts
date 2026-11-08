@@ -157,6 +157,8 @@ export class CartService {
   async clearCart(consumerId: string): Promise<void | CartError.CART_CONFLICT> {
     const cart = await this.cartRepo.findById(consumerId);
     if (cart) {
+      // Only clear cart if generation is set (accepted generation)
+      if (!cart.generation) return;
       const snapshot = Cart.reconstruct(cart.toJSON());
       snapshot.clear();
       try {

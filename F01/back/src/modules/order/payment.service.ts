@@ -25,7 +25,8 @@ import {
   OrderError,
   OrderStatus,
   FinancialStatus,
-  OrderVendorGroup
+  OrderVendorGroup,
+  VALID_STATUS_TRANSITIONS
 } from './order.domain';
 
 import type { ProductRepository } from '../product/product.domain';
@@ -265,6 +266,116 @@ export class PaymentService {
         // Advanced/terminal state: do not overwrite.
         return;
       }
+    }
+  }
+
+  /**
+   * Repair order state when payment was captured but order was not updated to PAID.
+   * This handles recovery from partial failures where the payment was persisted
+   * but the order state update was lost or skipped.
+   */
+  async repairCapturedOrder(paymentId: string): Promise<boolean> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) return false;
+    if (payment.status !== PaymentStatus.CAPTURED) return false;
+
+    const order = await this.orderRepo.findById(payment.orderId);
+    if (!order) return false;
+
+    // If order is already in a terminal or advanced state, no repair needed
+    if (order.status === OrderStatus.PAID || order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED) {
+      return true; // already in desired state
+    }
+
+    // Transition order to PAID if it's still PENDING_PAYMENT or PROCESSING
+    if (order.status === OrderStatus.PENDING_PAYMENT) {
+      order.transitionTo(OrderStatus.PAID);
+    } else if (order.status === OrderStatus.PROCESSING) {
+      // PROCESSING -> PAID is allowed when capture confirms payment
+      order.transitionTo(OrderStatus.PAID);
+    } else {
+      // For other states, try the transition and verify
+      const allowedTransitions = VALID_STATUS_TRANSITIONS[order.status];
+      if (allowedTransitions && allowedTransitions.includes(OrderStatus.PAID)) {
+        order.transitionTo(OrderStatus.PAID);
+      } else {
+        return false; // cannot transition from this state
+      }
+    }
+
+    try {
+      await this.orderRepo.update(order);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Repair order state when payment was failed but order was not updated to FAILED_PAYMENT.
+   * This handles recovery from partial failures where the payment was persisted
+   * but the order state update was lost or skipped.
+   */
+  async repairFailedOrder(paymentId: string): Promise<boolean> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) return false;
+    if (![PaymentStatus.FAILED, PaymentStatus.REFUNDED].includes(payment.status)) return false;
+
+    const order = await this.orderRepo.findById(payment.orderId);
+    if (!order) return false;
+
+    // If order is already in a failed or terminal state, no repair needed
+    if (order.status === OrderStatus.FAILED_PAYMENT || order.status === OrderStatus.CANCELLED) {
+      return true; // already in desired state
+    }
+
+    // Transition order to FAILED_PAYMENT if it's in a payable state
+    if (order.status === OrderStatus.PENDING_PAYMENT) {
+      order.markPaymentFailed();
+    } else if (order.status === OrderStatus.PAID) {
+      // PAID -> FAILED_PAYMENT transition is allowed for failed payments
+      order.transitionTo(OrderStatus.FAILED_PAYMENT);
+    } else {
+      const allowedTransitions = VALID_STATUS_TRANSITIONS[order.status];
+      if (allowedTransitions && allowedTransitions.includes(OrderStatus.FAILED_PAYMENT)) {
+        order.transitionTo(OrderStatus.FAILED_PAYMENT);
+      } else {
+        return false;
+      }
+    }
+
+    try {
+      await this.orderRepo.update(order);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Repair order financial status when payment was refunded but order was not updated.
+   * This handles recovery from partial failures where the payment was persisted
+   * but the order financial status update was lost or skipped.
+   */
+  async repairRefundedOrder(paymentId: string): Promise<boolean> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) return false;
+    if (payment.status !== PaymentStatus.REFUNDED) return false;
+
+    const order = await this.orderRepo.findById(payment.orderId);
+    if (!order) return false;
+
+    // Update order financial status based on CD-058
+    // If payment is REFUNDED, financial status should reflect this
+    if (order.financialStatus === FinancialStatus.PAID) {
+      order.financialStatus = FinancialStatus.PARTIALLY_REFUNDED;
+    }
+
+    try {
+      await this.orderRepo.update(order);
+      return true;
+    } catch {
+      return false;
     }
   }
 

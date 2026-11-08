@@ -1,0 +1,565 @@
+import { Db, Collection } from 'mongodb';
+import { 
+  Order, 
+  OrderData, 
+  OrderStatus, 
+  OrderVendorGroupStatus, 
+  FinancialStatus,
+  OrderRepository, 
+  OrderError 
+} from './order.domain';
+
+interface OrderDoc {
+  _id: string;
+  personId: string;
+  status: OrderStatus;
+  vendorGroups: OrderVendorGroupDoc[];
+  shippingAddress: AddressDoc;
+  totalAmount: number;
+  financialStatus: FinancialStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  comment?: string;
+  commentedAt?: Date;
+  commentedBy?: string;
+  attemptId?: string;
+  acceptedHash?: string;
+  acceptedSnapshot?: object;
+}
+
+interface OrderVendorGroupDoc {
+  id: string;
+  orderId: string;
+  vendorId: string;
+  status: OrderVendorGroupStatus;
+  items: OrderItemDoc[];
+  subtotal: number;
+  commissionPct: number;
+  commissionAmount: number;
+  vendorNet: number;
+  transferId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface OrderItemDoc {
+  id: string;
+  productId: string;
+  productName: string;
+  vendorId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  deliveredAt?: Date;
+  deliveredBy?: string;
+}
+
+interface AddressDoc {
+  id: string;
+  street: string;
+  number: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  isPrimary: boolean;
+}
+
+export class MongoOrderRepository implements OrderRepository {
+  private ordersCollection: Collection<OrderDoc>;
+
+  constructor(db: Db) {
+    this.ordersCollection = db.collection<OrderDoc>('orders');
+  }
+
+async save(order: Order): Promise<Order> {
+    const orderId = order.id;
+    const now = new Date();
+
+    const orderDoc: OrderDoc = {
+      _id: orderId,
+      personId: order.personId,
+      status: order.status,
+      vendorGroups: order.vendorGroups.map(vg => ({
+        id: vg.id,
+        orderId: vg.orderId,
+        vendorId: vg.vendorId,
+        status: vg.status,
+        items: vg.items.map(item => ({
+          id: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          deliveredAt: item.deliveredAt,
+          deliveredBy: item.deliveredBy
+        })),
+        subtotal: vg.subtotal,
+        commissionPct: vg.commissionPct,
+        commissionAmount: vg.commissionAmount,
+        vendorNet: vg.vendorNet,
+        transferId: vg.transferId,
+        createdAt: vg.createdAt,
+        updatedAt: vg.updatedAt
+      })),
+      shippingAddress: {
+        id: order.shippingAddress.id,
+        street: order.shippingAddress.street,
+        number: order.shippingAddress.number,
+        neighborhood: order.shippingAddress.neighborhood,
+        city: order.shippingAddress.city,
+        state: order.shippingAddress.state,
+        isPrimary: order.shippingAddress.isPrimary
+      },
+      totalAmount: order.totalAmount,
+      financialStatus: order.financialStatus,
+      createdAt: order.createdAt,
+      updatedAt: now,
+      comment: order.comment,
+      commentedAt: order.commentedAt,
+      commentedBy: order.commentedBy,
+      attemptId: order.attemptId,
+      acceptedHash: order.acceptedHash,
+      acceptedSnapshot: order.acceptedSnapshot
+    };
+
+    // CAS-protected, field-scoped conditional updates for delivery states ---
+// The four delivery states (Ready → Accepted → Shipped → Delivered) are
+// protected using compare-and-swap (CAS) patterns via MongoDB conditional
+// $set updates. Each update only matches when the document is in the expected
+// source state, ensuring atomicity and idempotence for concurrent writes.
+// Protection scope per status:
+//   DELIVERED    → idempotent: always matches; no-op if already delivered
+//   SHIPPED      → CAS: only matches if current status is SHIPPED
+//   PROCESSING   → CAS: only matches if current status is PROCESSING
+//   PAID         → CAS: only matches if current status is PAID (allows delivery)
+//   PENDING_PAYMENT → CAS: only matches if current status is PENDING_PAYMENT
+//   Other        → simple update: no delivery protection (existing behavior)
+
+    const status = order.status;
+
+// Build the $set payload (all fields that should be atomically updated)
+    const setPayload = {
+      personId: orderDoc.personId,
+      status: orderDoc.status,
+      vendorGroups: orderDoc.vendorGroups,
+      shippingAddress: orderDoc.shippingAddress,
+      totalAmount: orderDoc.totalAmount,
+      financialStatus: orderDoc.financialStatus,
+      updatedAt: now,
+      comment: orderDoc.comment,
+      commentedAt: orderDoc.commentedAt,
+      commentedBy: orderDoc.commentedBy,
+      attemptId: orderDoc.attemptId,
+      acceptedHash: orderDoc.acceptedHash,
+      acceptedSnapshot: orderDoc.acceptedSnapshot
+    };
+
+    // Determine the filter: CAS-protected when the status is a delivery state,
+    // simple filter otherwise. The filter ensures that only one concurrent writer
+    // in the expected state can succeed; others get matchedCount = 0.
+    let filter: any;
+
+    if (status === OrderStatus.DELIVERED) {
+      // Idempotent: always matches; concurrent writes are harmless no-ops
+      filter = { _id: orderId };
+    } else if (status === OrderStatus.SHIPPED) {
+      // CAS: only succeed if document is currently SHIPPED
+      filter = { _id: orderId, status: OrderStatus.SHIPPED };
+    } else if (status === OrderStatus.PROCESSING) {
+      // CAS: only succeed if document is currently PROCESSING
+      filter = { _id: orderId, status: OrderStatus.PROCESSING };
+    } else if (status === OrderStatus.PAID) {
+      // CAS: only succeed if document is currently PAID; allows delivery marking
+      filter = { _id: orderId, status: OrderStatus.PAID };
+    } else if (status === OrderStatus.PENDING_PAYMENT) {
+      // CAS: only succeed if document is currently PENDING_PAYMENT
+      filter = { _id: orderId, status: OrderStatus.PENDING_PAYMENT };
+    } else {
+      // CANCELLED, FAILED_PAYMENT, and other statuses: simple update without
+      // status filter (preserves existing transition behavior)
+      filter = { _id: orderId };
+    }
+      // Delivered state: only update if already delivered (idempotent)
+      filter = { _id: orderId };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    } else if (status === OrderStatus.SHIPPED) {
+      // Shipped state: conditional update only if current status is SHIPPED
+      filter = { _id: orderId, status: OrderStatus.SHIPPED };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    } else if (status === OrderStatus.PROCESSING) {
+      // Processing state: conditional update only if current status is PROCESSING
+      // or allow transition from PROCESSING → SHIPPED via conditionalAcceptedUpdate
+      filter = { _id: orderId, status: OrderStatus.PROCESSING };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    } else if (status === OrderStatus.PAID) {
+      // Paid state: conditional update only if current status is PAID
+      // (allows delivery marking while in PAID state)
+      filter = { _id: orderId, status: OrderStatus.PAID };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    } else if (status === OrderStatus.PENDING_PAYMENT) {
+      // Pending payment state: conditional update only if current status is PENDING_PAYMENT
+      filter = { _id: orderId, status: OrderStatus.PENDING_PAYMENT };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    } else {
+      // Other statuses (CANCELLED, FAILED_PAYMENT): simple update without status filter
+      filter = { _id: orderId };
+      update = {
+        $set: {
+          personId: orderDoc.personId,
+          status: orderDoc.status,
+          vendorGroups: orderDoc.vendorGroups,
+          shippingAddress: orderDoc.shippingAddress,
+          totalAmount: orderDoc.totalAmount,
+          financialStatus: orderDoc.financialStatus,
+          updatedAt: now,
+          comment: orderDoc.comment,
+          commentedAt: orderDoc.commentedAt,
+          commentedBy: orderDoc.commentedBy,
+          attemptId: orderDoc.attemptId,
+          acceptedHash: orderDoc.acceptedHash,
+          acceptedSnapshot: orderDoc.acceptedSnapshot
+        }
+      };
+    }
+
+    const result = await this.ordersCollection.updateOne(
+      filter,
+      { $set: setPayload },
+      { upsert: false }
+    );
+
+    if (result.matchedCount === 0) {
+      // CAS did not match — another concurrent writer changed the state.
+      // Re-read the current order and return it so the caller can retry.
+      const existing = await this.ordersCollection.findOne({ _id: orderId });
+      if (existing) {
+        return Order.reconstruct({
+          ...existing,
+          updatedAt: now
+        } as any);
+      }
+      throw new Error(OrderError.ORDER_NOT_FOUND);
+    }
+
+    return Order.reconstruct({
+      ...order.toJSON(),
+      updatedAt: now
+    } as any);
+  }
+
+  async insertForAttempt(orderData: { attemptId: string; personId: string; vendorGroups: any; shippingAddress: any; totalAmount: number; financialStatus: FinancialStatus }): Promise<Order> {
+    const attemptId = orderData.attemptId;
+    const fixedId = `attempt:${attemptId}`;
+
+    // Check if an order with this attemptId already exists
+    const existing = await this.ordersCollection.findOne({ _id: fixedId });
+    if (existing) {
+      return Order.reconstruct({
+        ...existing,
+        updatedAt: new Date()
+      } as any);
+    }
+
+    // Create the order with the fixed ID based on attemptId
+    const now = new Date();
+    const orderId = fixedId;
+
+    const orderDoc: OrderDoc = {
+      _id: fixedId,
+      personId: orderData.personId,
+      status: OrderStatus.PENDING_PAYMENT,
+      vendorGroups: orderData.vendorGroups.map((vg: any) => ({
+        id: vg.id,
+        orderId: fixedId,
+        vendorId: vg.vendorId,
+        status: OrderVendorGroupStatus.PENDING,
+        items: vg.items.map((item: any) => ({
+          id: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.unitPrice * item.quantity,
+          deliveredAt: item.deliveredAt,
+          deliveredBy: item.deliveredBy
+        })),
+        subtotal: vg.subtotal,
+        commissionPct: vg.commissionPct,
+        commissionAmount: vg.commissionAmount,
+        vendorNet: vg.vendorNet,
+        transferId: vg.transferId,
+        createdAt: vg.createdAt,
+        updatedAt: vg.updatedAt
+      })),
+      shippingAddress: {
+        id: orderData.shippingAddress.id,
+        street: orderData.shippingAddress.street,
+        number: orderData.shippingAddress.number,
+        neighborhood: orderData.shippingAddress.neighborhood,
+        city: orderData.shippingAddress.city,
+        state: orderData.shippingAddress.state,
+        isPrimary: orderData.shippingAddress.isPrimary || false
+      },
+      totalAmount: orderData.totalAmount,
+      financialStatus: orderData.financialStatus,
+      createdAt: now,
+      updatedAt: now,
+      comment: undefined,
+      commentedAt: undefined,
+      commentedBy: undefined,
+      attemptId: attemptId,
+      acceptedHash: undefined,
+      acceptedSnapshot: undefined
+    };
+
+    try {
+      await this.ordersCollection.insertOne(orderDoc);
+    } catch (error: any) {
+      // If duplicate key, read existing and return it (idempotent)
+      if (error.code === 11000) {
+        const dup = await this.ordersCollection.findOne({ _id: fixedId });
+        if (dup) {
+          return Order.reconstruct({
+            ...dup,
+            updatedAt: new Date()
+          } as any);
+        }
+      }
+      throw error;
+    }
+
+    return Order.reconstruct({
+      id: fixedId,
+      personId: orderData.personId,
+      status: OrderStatus.PENDING_PAYMENT,
+      vendorGroups: orderData.vendorGroups.map((vg: any) => ({
+        id: vg.id,
+        orderId: fixedId,
+        vendorId: vg.vendorId,
+        status: OrderVendorGroupStatus.PENDING,
+        items: vg.items.map((item: any) => ({
+          id: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.unitPrice * item.quantity
+        })),
+        subtotal: vg.subtotal,
+        commissionPct: vg.commissionPct,
+        commissionAmount: vg.commissionAmount,
+        vendorNet: vg.vendorNet
+      })),
+      shippingAddress: {
+        id: orderData.shippingAddress.id,
+        street: orderData.shippingAddress.street,
+        number: orderData.shippingAddress.number,
+        neighborhood: orderData.shippingAddress.neighborhood,
+        city: orderData.shippingAddress.city,
+        state: orderData.shippingAddress.state,
+        isPrimary: orderData.shippingAddress.isPrimary || false
+      },
+      totalAmount: orderData.totalAmount,
+      financialStatus: orderData.financialStatus,
+      createdAt: now,
+      updatedAt: now,
+      comment: undefined,
+      commentedAt: undefined,
+      commentedBy: undefined,
+      attemptId: attemptId,
+      acceptedHash: undefined,
+      acceptedSnapshot: undefined
+    });
+  }
+
+  async findById(id: string): Promise<Order | null> {
+    const orderDoc = await this.ordersCollection.findOne({ _id: id });
+
+    if (!orderDoc) {
+      return null;
+    }
+
+    return this.mapToOrder(orderDoc);
+  }
+
+  async findByPersonId(personId: string): Promise<Order[]> {
+    const orders = await this.ordersCollection
+      .find({ personId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return orders.map(doc => this.mapToOrder(doc));
+  }
+
+  async findByStatus(status: OrderStatus): Promise<Order[]> {
+    const orders = await this.ordersCollection
+      .find({ status })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return orders.map(doc => this.mapToOrder(doc));
+  }
+
+  async findAll(): Promise<Order[]> {
+    const orders = await this.ordersCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return orders.map(doc => this.mapToOrder(doc));
+  }
+
+  async findByCommentedBy(personId: string): Promise<Order[]> {
+    const orders = await this.ordersCollection
+      .find({ commentedBy: personId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return orders.map(doc => this.mapToOrder(doc));
+  }
+
+  async update(order: Order): Promise<Order> {
+    // Reuse save logic which handles upserts
+    return this.save(order);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.ordersCollection.deleteOne({ _id: id });
+  }
+
+  private mapToOrder(doc: OrderDoc): Order {
+    const orderData: OrderData = {
+      id: doc._id,
+      personId: doc.personId,
+      status: doc.status,
+      vendorGroups: doc.vendorGroups.map(vg => ({
+        id: vg.id,
+        orderId: vg.orderId,
+        vendorId: vg.vendorId,
+        status: vg.status,
+        items: vg.items.map(item => ({
+          id: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          deliveredAt: item.deliveredAt,
+          deliveredBy: item.deliveredBy
+        })),
+        subtotal: vg.subtotal,
+        commissionPct: vg.commissionPct,
+        commissionAmount: vg.commissionAmount,
+        vendorNet: vg.vendorNet,
+        transferId: vg.transferId,
+        createdAt: vg.createdAt,
+        updatedAt: vg.updatedAt
+      })),
+      shippingAddress: {
+        id: doc.shippingAddress.id,
+        street: doc.shippingAddress.street,
+        number: doc.shippingAddress.number,
+        neighborhood: doc.shippingAddress.neighborhood,
+        city: doc.shippingAddress.city,
+        state: doc.shippingAddress.state,
+        isPrimary: doc.shippingAddress.isPrimary
+      },
+      totalAmount: doc.totalAmount,
+      financialStatus: doc.financialStatus,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      comment: doc.comment,
+      commentedAt: doc.commentedAt,
+      commentedBy: doc.commentedBy,
+      attemptId: doc.attemptId,
+      acceptedHash: doc.acceptedHash
+    };
+
+    return Order.reconstruct(orderData);
+  }
+}

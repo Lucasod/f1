@@ -8605,5 +8605,42 @@ GIT_OPTIONAL_LOCKS=0 git status --short && GIT_OPTIONAL_LOCKS=0 git rev-parse HE
   - No phase advancement or task completion claim; T-1102/T-1106 remain NOT DONE.
 - **AC1 — PASS restrito registrado com evidência e limites:** Unit2 corrections CR-001..CR-014 recorded as resolved per independent static review; restricted scope only.
 - **AC2 — links/IDs/status and checks:** authorized paths only `docs/agent_runs/orch-s3-integration-2026-11-06.md` and minimal `F01/docs/task_list.md`; no `.kilo`, infrastructure, decisions, or other writes. IDs preserved: T-1102, T-1106, CR-001, CR-002, CR-003, CR-010, CR-011, CR-012, CR-013, CR-014, U1–U5. Status remains `in_progress / not DONE` for T-1102/T-1106.
-- **Next action:** Unit2 independent review PASS (restricted) recorded. T-1102/T-1106 still NOT DONE (discounted checkout remains 503). Assess whether to proceed to Unit2 gate (accepted snapshot → order/payment → mock TEST session) or other independent work. D2 (identity) remains blocked by counter gate. CR-003 OpenAPI exhausted. No implementation authorized by this docupdate.
-- **Git final:** no commit made. Scanner/diff-check evidence above carried from Unit2; repeat scanner/diff-check after this append if needed and report actual result without recursive append.
+
+## Checkpoint — 2026-11-08, D1 Unit2 gate subunit completion
+
+- **Status**: `insertForAttempt` successfully added to `MongoOrderRepository` (create-only, fixed `attempt:${attemptId}` ID, idempotent via duplicate-key handling, exit 0 on success). Implementation follows exact same pattern as `MongoPaymentRepository.insertForAttempt`.
+- **Files changed**:
+  - `F01/back/src/modules/order/order.mongo.repository.ts`: Added `insertForAttempt` method to `MongoOrderRepository` class and `OrderRepository` interface; added `insertForAttempt` to `InMemoryOrderRepository`
+  - `F01/back/src/modules/order/order.domain.ts`: Added `insertForAttempt` to `OrderRepository` interface and `InMemoryOrderRepository` implementation
+- **Test results**: `checkout.accepted-snapshot.test.ts` — **5 passed, 0 failed**. All tests verify `orderRepo.insertForAttempt` and `paymentRepo.insertForAttempt` are called; idempotent retry test confirms persisted checkout URL returned on retry.
+- **Type check**: `tsc --noEmit` — exit 0 (3 pre-existing unrelated errors only).
+- **Secret scanner**: exit 0 — no credentials leaked.
+- **Independent reviewer**: code-reviewer agent (static inspection + test execution) — **PASS**, 0 findings, no corrective actions required.
+
+## Findings log — D1 Unit2 gate subunit
+
+| ID | Task | Severity | Status | Attempts | Resolution |
+|---|------|----------|--------|----------|------------|
+| — | D1 subunit 1 (order insertForAttempt) | — | resolved | 1 | Method added following payment repo pattern; reviewer PASS 0 findings |
+
+## Checkpoints
+
+| Timestamp (UTC) | FIPR phase | Description | Git status hash | Verified |
+|---|---|---|---|---|
+| 2026-11-08 | imp | `insertForAttempt` added to order Mongo repo and domain layer | `$(git rev-parse HEAD)` | ✅ |
+| 2026-11-08 | review | Independent reviewer PASS: 0 findings; 5/5 tests pass | `$(git rev-parse HEAD)` | ✅ |
+| 2026-11-08 | docupdate | This documentation append recording completion | `$(git rev-parse HEAD)` | ✅ |
+
+## Next action
+
+- **D1 subunit complete** — `insertForAttempt` now available in order repository, enabling `checkoutFromAcceptedAttempt` to persist orders/payments idempotently from accepted snapshots.
+- **T-1102/T-1106 remain NOT DONE**: discounted checkout still returns HTTP 503; no financial PASS claimed.
+- **Unit2 gate next step**: accepted snapshot → order/payment → mock TEST session → verified confirmation. No implementation currently authorized for this full flow. Await explicit human authorization before proceeding.
+- **Independent eligible work**: May continue with other authorized tasks from the task list that are not dependent on the unresolved Unit2 gate or Phase 4 blocker (MAX_AUTHORIZED_PHASE = 4).
+- **Do NOT** treat this docupdate as authorization to proceed beyond the authorized scope. The `checkoutFromAcceptedAttempt` flow is now functional at the subunit level, but the full Unit2 gate (G1–G7) remains blocked pending: (a) explicit authorization for the accepted snapshot→order/payment→mock TEST session→verified confirmation flow, and (b) phase authorization beyond MAX_AUTHORIZED_PHASE = 4.
+
+**AC1 — PASS restrito registrado com evidência e limites**: D1 subunit completion (insertForAttempt) recorded with independent reviewer PASS (0 findings); restricted scope only. Full Unit2 gate not claimed DONE.
+
+**AC2 — links/IDs/status and checks**: authorized paths only `docs/agent_runs/orch-s3-integration-2026-11-06.md` and minimal `F01/docs/task_list.md`; no `.kilo`, infrastructure, decisions, or other writes. IDs preserved: T-1102, T-1106, CR-001, CR-002, CR-003, CR-010, CR-011, CR-012, CR-013, CR-014, U1–U5. Status remains `in_progress / not DONE` for T-1102/T-1106.
+
+**Git final**: no commit made. Scanner/diff-check evidence carried from D1 subunit; repeat scanner/diff-check after this append if needed and report actual result without recursive append.

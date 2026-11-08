@@ -52,8 +52,8 @@ describe('checkout accepted snapshot gate', () => {
     };
     await attemptRepo.createOrRead(attempt as any);
 
-    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn() } as any;
-    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn() } as any;
+    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn(), insertForAttempt: vi.fn(async (o: any) => { o.id = 'order-test-' + Math.random().toString(36).slice(2, 10); return o; }) } as any;
+    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn(), insertForAttempt: vi.fn(async (p: any) => { p.id = 'pay-test-' + Math.random().toString(36).slice(2, 10); return p; }) } as any;
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
@@ -70,8 +70,8 @@ describe('checkout accepted snapshot gate', () => {
     expect(result.order).toBeDefined();
     expect(result.payment).toBeDefined();
     expect(result.checkoutUrl).toContain('stripe.test');
-    expect(orderRepo.save).toHaveBeenCalled();
-    expect(paymentRepo.save).toHaveBeenCalled();
+    expect(orderRepo.insertForAttempt).toHaveBeenCalled();
+    expect(paymentRepo.insertForAttempt).toHaveBeenCalled();
   });
 
   it('allocates remainder segments so vendor-group subtotal/commission match snapshot exactly (netMinor=1000, quantity=3)', async () => {
@@ -118,8 +118,8 @@ describe('checkout accepted snapshot gate', () => {
     };
     await attemptRepo.createOrRead(attempt as any);
 
-    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn() } as any;
-    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn() } as any;
+    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn(), insertForAttempt: vi.fn(async (o: any) => { o.id = 'order-test-' + Math.random().toString(36).slice(2, 10); return o; }) } as any;
+    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn(), insertForAttempt: vi.fn(async (p: any) => { p.id = 'pay-test-' + Math.random().toString(36).slice(2, 10); return p; }) } as any;
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
@@ -344,8 +344,8 @@ describe('checkout accepted snapshot gate', () => {
     };
     await attemptRepo.createOrRead(attempt as any);
 
-    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn() } as any;
-    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn() } as any;
+    const orderRepo = { save: vi.fn(async (o: any) => o), findByPersonId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (o: any) => o), delete: vi.fn(), insertForAttempt: vi.fn(async (o: any) => { o.id = 'order-test-' + Math.random().toString(36).slice(2, 10); return o; }) } as any;
+    const paymentRepo = { save: vi.fn(async (p: any) => p), findByOrderId: vi.fn(async () => []), findById: vi.fn(async () => null), update: vi.fn(async (p: any) => p), delete: vi.fn(), insertForAttempt: vi.fn(async (p: any) => { p.id = 'pay-test-' + Math.random().toString(36).slice(2, 10); return p; }) } as any;
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;

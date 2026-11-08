@@ -12,6 +12,8 @@ export function createStripeWebhookHandler(
   cartService: CartService,
   transferService: TransferService
 ): RequestHandler {
+  const processedEventIds = new Set<string>();
+
   return async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {
@@ -44,8 +46,8 @@ export function createStripeWebhookHandler(
           if (!stripeTransferId) {
             return res.status(200).json({ received: true });
           }
-// Look up the corresponding Transfer by stripeTransferId
-const transfer = await (transferService as any).findByStripeTransferId(stripeTransferId);
+          // Look up the corresponding Transfer by stripeTransferId
+          const transfer = await (transferService as any).findByStripeTransferId(stripeTransferId);
           // Update transfer status if found; if not found, log and continue
           // (webhook may arrive before DB entry is created or in edge cases)
           if (transfer) {
@@ -69,6 +71,29 @@ const transfer = await (transferService as any).findByStripeTransferId(stripeTra
     if (!paymentId) {
       return res.status(200).json({ received: true });
     }
+    const stripeEventId = event.id;
+
+    // Webhook event correlation / idempotency check:
+    // If this Stripe event ID has already been processed for this payment,
+    // skip re-processing immediately. This protects against duplicate webhook
+    // deliveries and enables retry/recovery.
+    // Uses an in-memory Set for same-process duplicate detection, and also
+    // checks the payment's stored eventId for persistence-enabled correlation.
+    if (paymentId && stripeEventId) {
+      // In-memory Set fast path for duplicate deliveries within same process
+      if (processedEventIds.has(stripeEventId)) {
+        return res.status(200).json({ received: true });
+      }
+      // Check if the payment already has this eventId stored (persistent correlate)
+      const existingPayment = await paymentService.getPaymentById(paymentId);
+      if (existingPayment && existingPayment.eventId === stripeEventId) {
+        // Mark as processed in-memory so subsequent deliveries in this session are also caught
+        processedEventIds.add(stripeEventId);
+        return res.status(200).json({ received: true });
+      }
+      // First time seeing this event for this payment - mark in-memory
+      processedEventIds.add(stripeEventId);
+    }
 
     // Idempotency check: if payment already in final state, skip re-processing
     // This protects against duplicate webhook deliveries
@@ -88,6 +113,21 @@ const transfer = await (transferService as any).findByStripeTransferId(stripeTra
           return res.status(400).json({ error: 'STRIPE_PAYMENT_INTENT_MISSING' });
         }
         const payment = await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
+        // Persist the Stripe event ID on the payment for webhook event correlation / retry/recovery
+        // Best-effort: update the payment's eventId field if not already set
+        try {
+          const existing = await paymentService.getPaymentById(paymentId);
+          if (existing && !existing.eventId && event.id) {
+            // @ts-expectError - eventId is readonly but we set it for correlation persistence
+            ;(existing as any).eventId = event.id;
+            // Re-save the payment to persist the eventId
+            if (paymentService['paymentRepo'] && typeof paymentService['paymentRepo'].save === 'function') {
+              paymentService['paymentRepo'].save(existing).catch(() => void 0);
+            }
+          }
+        } catch {
+          /* Best-effort; do not fail the webhook delivery if saving fails. */
+        }
         // Clear cart only after effective payment confirmation (CAPTURED)
         // Await the (async) clearCart so failures are observed and handled (CD-059 / cart consistency).
         await cartService.clearCart(payment.personId);

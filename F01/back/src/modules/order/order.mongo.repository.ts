@@ -239,6 +239,73 @@ export class MongoOrderRepository implements OrderRepository {
     await this.ordersCollection.deleteOne({ _id: id });
   }
 
+  async insertForAttempt(insertData: { attemptId: string; personId: string; vendorGroups: any; shippingAddress: any; totalAmount: number; financialStatus: FinancialStatus }): Promise<Order> {
+    const attemptId = insertData.attemptId;
+    const personId = insertData.personId;
+    const vendorGroups = insertData.vendorGroups;
+    const shippingAddress = insertData.shippingAddress;
+    const totalAmount = insertData.totalAmount;
+    const financialStatus = insertData.financialStatus;
+
+    const fixedId = `attempt:${attemptId}`;
+
+    // Check if already exists → return existing (idempotent)
+    const existing = await this.ordersCollection.findOne({ _id: fixedId });
+    if (existing) {
+      return Order.reconstruct({
+        ...existing,
+        updatedAt: new Date()
+      } as any);
+    }
+
+    // Create the order with the fixed ID based on attemptId
+    const now = new Date();
+
+    const orderDoc: OrderDoc = {
+      _id: fixedId,
+      personId,
+      status: OrderStatus.PENDING_PAYMENT,
+      vendorGroups,
+      shippingAddress,
+      totalAmount,
+      financialStatus,
+      createdAt: now,
+      updatedAt: now,
+      attemptId,
+      acceptedHash: undefined
+    };
+
+    try {
+      await this.ordersCollection.insertOne(orderDoc);
+    } catch (error: any) {
+      // If duplicate key, read existing and return it (idempotent)
+      if (error.code === 11000) {
+        const dup = await this.ordersCollection.findOne({ _id: fixedId });
+        if (dup) {
+          return Order.reconstruct({
+            ...dup,
+            updatedAt: new Date()
+          } as any);
+        }
+      }
+      throw error;
+    }
+
+    return Order.reconstruct({
+      id: fixedId,
+      personId,
+      status: OrderStatus.PENDING_PAYMENT,
+      vendorGroups,
+      shippingAddress,
+      totalAmount,
+      financialStatus,
+      createdAt: now,
+      updatedAt: now,
+      attemptId,
+      acceptedHash: undefined
+    } as any);
+  }
+
   private mapToOrder(doc: OrderDoc): Order {
     const orderData: OrderData = {
       id: doc._id,

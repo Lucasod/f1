@@ -50,6 +50,8 @@ export interface ProductData {
   images?: string[];
   createdAt?: Date;
   updatedAt?: Date;
+  reservedBy?: string;
+  reservedQuantity?: number;
 }
 
 export interface CategoryData {

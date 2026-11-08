@@ -816,11 +816,27 @@ export interface OrderRepository {
   findByCommentedBy?(personId: string): Promise<Order[]>;
   update(order: Order): Promise<Order>;
   delete(id: string): Promise<void>;
+  insertForAttempt(insertData: { attemptId: string; personId: string; vendorGroups: any; shippingAddress: any; totalAmount: number; financialStatus: FinancialStatus }): Promise<Order>;
 }
 
 export class InMemoryOrderRepository implements OrderRepository {
   private orders: Map<string, Order> = new Map();
   private personIndex: Map<string, Set<string>> = new Map();
+
+  async insertForAttempt(insertData: { attemptId: string; personId: string; vendorGroups: any; shippingAddress: any; totalAmount: number; financialStatus: FinancialStatus }): Promise<Order> {
+    const { attemptId, personId, vendorGroups, shippingAddress, totalAmount, financialStatus } = insertData;
+    const order = Order.create({
+      personId,
+      vendorGroups,
+      shippingAddress,
+      attemptId,
+      acceptedHash: undefined
+    });
+    order.financialStatus = financialStatus;
+    order.totalAmount = totalAmount;
+    this.orders.set(`attempt:${attemptId}`, order);
+    return order;
+  }
   private statusIndex: Map<OrderStatus, Set<string>> = new Map();
 
   async save(order: Order): Promise<Order> {
@@ -947,12 +963,34 @@ export interface PaymentRepository {
   findByPersonId(personId: string): Promise<Payment[]>;
   update(payment: Payment): Promise<Payment>;
   delete(id: string): Promise<void>;
+  insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment>;
 }
 
 export class InMemoryPaymentRepository implements PaymentRepository {
   private payments: Map<string, Payment> = new Map();
   private orderIndex: Map<string, Set<string>> = new Map();
   private personIndex: Map<string, Set<string>> = new Map();
+
+  async insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment> {
+    const { attemptId, orderId, personId, amount } = insertData;
+    const fixedId = `attempt:${attemptId}`;
+    const existing = this.payments.get(fixedId);
+    if (existing) {
+      return existing;
+    }
+    const now = new Date();
+    const payment = Payment.reconstruct({
+      id: fixedId,
+      orderId,
+      personId,
+      amount,
+      status: PaymentStatus.PENDING,
+      createdAt: now,
+      updatedAt: now
+    } as PaymentData);
+    this.payments.set(fixedId, payment);
+    return payment;
+  }
 
   async save(payment: Payment): Promise<Payment> {
     this.payments.set(payment.id, payment);
