@@ -13,6 +13,7 @@ import {
 } from '../order/order.domain';
 import { CartRepository, Cart, CartItem } from '../cart/cart.domain';
 import { ProductRepository } from '../product/product.domain';
+import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { PersonRepository } from '../person/person.domain';
 import { CartService } from '../cart/cart.service';
@@ -67,6 +68,7 @@ export class CheckoutService {
   private readonly cartService: CartService;
   private readonly config: typeof import('../../config').config;
   private readonly paymentProvider: CheckoutPaymentProvider;
+  private readonly searchIndex?: ElasticsearchProductIndex;
 
   constructor(
     orderRepo: OrderRepository,
@@ -78,7 +80,8 @@ export class CheckoutService {
     cartService: CartService,
     config: typeof import('../../config').config,
     paymentProvider: CheckoutPaymentProvider,
-    categoryRepo?: import('../product/product.domain').CategoryRepository
+    categoryRepo?: import('../product/product.domain').CategoryRepository,
+    searchIndex?: ElasticsearchProductIndex
   ) {
     this.orderRepo = orderRepo;
     this.paymentRepo = paymentRepo;
@@ -90,6 +93,7 @@ export class CheckoutService {
     this.config = config;
     this.paymentProvider = paymentProvider;
     this.categoryRepo = categoryRepo;
+    this.searchIndex = searchIndex;
   }
 
   /**
@@ -273,6 +277,16 @@ export class CheckoutService {
       for (const entry of decremented) {
         try {
           await this.productRepo.incrementStock(entry.productId, entry.amount);
+          if (this.searchIndex) {
+            try {
+              const product = await this.productRepo.findById(entry.productId);
+              if (product) {
+                await this.searchIndex.indexProduct(product);
+              }
+            } catch (indexError) {
+              console.warn('Elasticsearch product indexing failed for product', entry.productId, indexError);
+            }
+          }
         } catch (restoreError) {
           failures.push(entry.productId);
           console.error('Stock rollback failed for product', entry.productId, restoreError);
@@ -521,6 +535,16 @@ export class CheckoutService {
         throw new Error(OrderError.INSUFFICIENT_STOCK);
       }
       decremented.push({ productId, amount });
+      if (this.searchIndex) {
+        try {
+          const product = await this.productRepo.findById(productId);
+          if (product) {
+            await this.searchIndex.indexProduct(product);
+          }
+        } catch (error) {
+          console.warn('Elasticsearch product indexing failed for product', productId, error);
+        }
+      }
     }
   }
 

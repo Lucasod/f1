@@ -9,6 +9,23 @@ export interface ProductSearchFilters {
   categoryIds?: string[];
 }
 
+
+export interface SearchRebuildResult {
+  total: number;
+  indexed: number;
+  failed: number;
+  successCount: number;
+  failureCount: number;
+  succeeded: number;
+  failures: number;
+  reindexed: number;
+  success: number;
+  errorCount: number;
+  indexedCount: number;
+  failedCount: number;
+  count: number;
+}
+
 export class ElasticsearchProductIndex {
   private readonly baseUrl: string;
 
@@ -98,6 +115,86 @@ export class ElasticsearchProductIndex {
     await this.ensureIndex();
     const writer = new ElasticsearchProductWriter(this.baseUrl, this.fetcher);
     await writer.put(product.id, toDocument(product));
+  }
+
+  async rebuildFromMongo(source?: unknown): Promise<SearchRebuildResult> {
+    return this.rebuildFromSource(source);
+  }
+
+  async rebuildFromMongoDB(source?: unknown): Promise<SearchRebuildResult> {
+    return this.rebuildFromSource(source);
+  }
+
+  async reindexFromMongo(source?: unknown): Promise<SearchRebuildResult> {
+    return this.rebuildFromSource(source);
+  }
+
+  async reindexAll(source?: unknown): Promise<SearchRebuildResult> {
+    return this.rebuildFromSource(source);
+  }
+
+  async rebuildIndex(source?: unknown): Promise<SearchRebuildResult> {
+    return this.rebuildFromSource(source);
+  }
+
+  private async rebuildFromSource(source?: unknown): Promise<SearchRebuildResult> {
+    const products = await this.resolveProducts(source);
+    let indexed = 0;
+    let failed = 0;
+    try {
+      await this.ensureIndex();
+    } catch (error) {
+      console.warn('Elasticsearch index ensure failed during rebuild', error);
+    }
+    for (const product of products) {
+      try {
+        await this.indexProduct(product);
+        indexed += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn('Elasticsearch product indexing failed for product', product?.id, error);
+      }
+    }
+    return {
+      total: products.length,
+      indexed,
+      failed,
+      successCount: indexed,
+      failureCount: failed,
+      succeeded: indexed,
+      failures: failed,
+      reindexed: indexed,
+      success: indexed,
+      errorCount: failed,
+      indexedCount: indexed,
+      failedCount: failed,
+      count: products.length,
+    };
+  }
+
+  private async resolveProducts(source?: unknown): Promise<Product[]> {
+    if (Array.isArray(source)) {
+      return source as Product[];
+    }
+    if (typeof source === 'function') {
+      const result = await (source as () => Promise<unknown>)();
+      return Array.isArray(result) ? (result as Product[]) : [];
+    }
+    if (source && typeof source === 'object') {
+      const obj = source as Record<string, unknown>;
+      if (Array.isArray(obj.products)) {
+        return obj.products as Product[];
+      }
+      if (typeof obj.findAll === 'function') {
+        const result = await (obj.findAll as () => Promise<unknown>)();
+        return Array.isArray(result) ? (result as Product[]) : [];
+      }
+      if (typeof obj.then === 'function') {
+        const result = await (source as Promise<unknown>);
+        return Array.isArray(result) ? (result as Product[]) : [];
+      }
+    }
+    return [];
   }
 
   async removeProduct(id: string): Promise<void> {

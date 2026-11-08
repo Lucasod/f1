@@ -75,7 +75,11 @@ export function requireAnyRole(roles: PersonRole[]) {
 }
 
 export function requireConsumer() {
-  return requireRole(PersonRole.CONSUMER);
+  // CD-002: a Person may be both Consumer and Vendor simultaneously.
+  // CD-059: ownership-based isolation is enforced elsewhere; a Vendor acting
+  // as a buyer (from another store) must be allowed to perform consumer
+  // operations such as checkout.
+  return requireRole(PersonRole.CONSUMER, PersonRole.VENDOR);
 }
 
 export function requireVendor() {

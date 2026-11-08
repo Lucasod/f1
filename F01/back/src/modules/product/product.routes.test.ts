@@ -965,10 +965,11 @@ describe('Product Routes', () => {
 
       expect(response.status).toBe(204);
 
-      // Verify product is deleted
+      // Verify product is inactivated (soft delete) rather than removed
       const getResponse = await request(app)
         .get(`/api/v1/products/${productId}`);
-      expect(getResponse.status).toBe(404);
+      expect(getResponse.status).toBe(200);
+      expect(getResponse.body.product.status).toBe('inactive');
     });
 
     it('should return 403 for other vendor (ownership violation)', async () => {

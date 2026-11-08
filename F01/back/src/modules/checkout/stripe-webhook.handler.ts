@@ -89,7 +89,8 @@ const transfer = await (transferService as any).findByStripeTransferId(stripeTra
         }
         const payment = await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
         // Clear cart only after effective payment confirmation (CAPTURED)
-        cartService.clearCart(payment.personId);
+        // Await the (async) clearCart so failures are observed and handled (CD-059 / cart consistency).
+        await cartService.clearCart(payment.personId);
         // After successful payment capture, create the transfer for each vendor group
         // Note: transfer creation is triggered separately; this is just the payment confirmation
       } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {

@@ -638,6 +638,15 @@ export function createProductRoutes({ authService, productService, personRepo, v
     }
   }) as RequestHandler);
 
+  // Rebuild Elasticsearch index from MongoDB source of truth (CR006)
+  router.post('/reindex', authMw as RequestHandler, requireAdmin as RequestHandler, (async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await productService.rebuildFromMongo());
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
   // Multer error handler - registered at router level to catch all multer errors (CR-006)
   router.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
     if (err && (err as any).name === 'MulterError') {

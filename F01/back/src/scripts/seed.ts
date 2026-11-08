@@ -442,7 +442,34 @@ export async function saveSeedProductIfAbsent(productRepo: Pick<ProductRepositor
   }
 }
 
-export async function runDevelopmentSeed(repositories: SeedRepositories): Promise<void> {
+function resolveSeedSearchIndex(repositories: any, candidate: any): any {
+  if (candidate && typeof candidate === 'object' && typeof candidate.indexProduct === 'function') {
+    return candidate;
+  }
+  if (candidate && typeof candidate === 'object' && candidate.searchIndex && typeof candidate.searchIndex.indexProduct === 'function') {
+    return candidate.searchIndex;
+  }
+  if (repositories && repositories.searchIndex && typeof repositories.searchIndex.indexProduct === 'function') {
+    return repositories.searchIndex;
+  }
+  return undefined;
+}
+
+async function reindexSeededProducts(products: Product[], searchIndex: any): Promise<void> {
+  if (!searchIndex || typeof searchIndex.indexProduct !== 'function') {
+    return;
+  }
+  for (const product of products) {
+    try {
+      await searchIndex.indexProduct(product);
+    } catch (error) {
+      console.warn('Elasticsearch product indexing failed for product', product.id, error);
+    }
+  }
+}
+
+export async function runDevelopmentSeed(repositories: SeedRepositories, searchIndexCandidate?: any): Promise<void> {
+  const searchIndex = resolveSeedSearchIndex(repositories, searchIndexCandidate);
   const existingProducts = await repositories.productRepo.findAll();
   if (existingProducts.length > 0) {
     const hasSeedProducts = existingProducts.some(product => PRODUCTS.some(entry => entry.seedIdentity === product.seedIdentity));
@@ -463,7 +490,8 @@ export async function runDevelopmentSeed(repositories: SeedRepositories): Promis
           vendors.set(entry.vendorSlug, vendor.id);
         }
       }
-      await seedProducts(repositories.productRepo, categories, vendors);
+      const seededProducts = await seedProducts(repositories.productRepo, categories, vendors);
+      await reindexSeededProducts(seededProducts, searchIndex);
       return;
     }
     console.log('Product repository not empty, ensuring demo accounts without reseeding catalog');
@@ -471,10 +499,11 @@ export async function runDevelopmentSeed(repositories: SeedRepositories): Promis
     return;
   }
 
-  await runSeed(repositories);
+  await runSeed(repositories, searchIndex);
 }
 
-export async function runSeed(repositories: SeedRepositories): Promise<void> {
+export async function runSeed(repositories: SeedRepositories, searchIndexCandidate?: any): Promise<void> {
+  const searchIndex = resolveSeedSearchIndex(repositories, searchIndexCandidate);
   console.log('🌱 Starting seed process...');
 
   // 1. Validate environment
@@ -601,9 +630,11 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
   // 6. Create products
   console.log('📦 Creating products...');
 
-  await seedProducts(productRepo, categoryMap, vendorSlugToId);
+  const seededProducts = await seedProducts(productRepo, categoryMap, vendorSlugToId);
 
   console.log(`✅ Created ${PRODUCTS.length} products`);
+
+  await reindexSeededProducts(seededProducts, searchIndex);
 
   // 7. Summary
   console.log('\n📊 Seed Summary:');
@@ -614,7 +645,8 @@ export async function runSeed(repositories: SeedRepositories): Promise<void> {
   console.log('\n✨ Seed completed successfully!');
 }
 
-async function seedProducts(productRepo: ProductRepository, categoryMap: Map<string, Category>, vendorSlugToId: Map<string, string>): Promise<void> {
+async function seedProducts(productRepo: ProductRepository, categoryMap: Map<string, Category>, vendorSlugToId: Map<string, string>): Promise<Product[]> {
+  const seeded: Product[] = [];
   for (const prodData of PRODUCTS) {
     const vendorId = vendorSlugToId.get(prodData.vendorSlug);
     if (!vendorId) {
@@ -641,9 +673,16 @@ async function seedProducts(productRepo: ProductRepository, categoryMap: Map<str
     (product as any).id = prodData.id;
 
     await saveSeedProductIfAbsent(productRepo, product);
+    // Seed identity can already belong to a different ID or an edited product.
+    // Read back the authoritative record instead of indexing the fixture.
+    const persisted = (await productRepo.findAll()).filter(item => item.seedIdentity === product.seedIdentity);
+    if (persisted.length !== 1 || persisted[0].vendorId !== product.vendorId) {
+      throw new Error(ProductError.PRODUCT_CONFLICT);
+    }
+    seeded.push(persisted[0]);
     console.log(`  Created product: ${product.name} (${category.name} - ${prodData.vendorSlug})`);
   }
-
+  return seeded;
 }
 
 export {

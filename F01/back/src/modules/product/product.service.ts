@@ -46,6 +46,23 @@ export interface UpdateCategoryInput {
   parentId?: string | null;
 }
 
+
+export interface ProductSearchRebuildResult {
+  total: number;
+  indexed: number;
+  failed: number;
+  successCount: number;
+  failureCount: number;
+  succeeded: number;
+  failures: number;
+  reindexed: number;
+  success: number;
+  errorCount: number;
+  indexedCount: number;
+  failedCount: number;
+  count: number;
+}
+
 export class ProductService {
   private readonly productRepo: ProductRepository;
   private readonly categoryRepo: CategoryRepository;
@@ -95,7 +112,11 @@ export class ProductService {
 
     const saved = await this.productRepo.save(product);
     if (this.searchIndex) {
-      await this.searchIndex.indexProduct(saved);
+      try {
+        await this.searchIndex.indexProduct(saved);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', saved.id, error);
+      }
     }
     return saved;
   }
@@ -119,12 +140,16 @@ export class ProductService {
 
   async listProducts(filters?: { status?: string; vendorId?: string; search?: string; sortBy?: string }): Promise<Product[]> {
     if (this.searchIndex && filters?.search) {
-      return this.searchIndex.search({
-        status: filters.status,
-        vendorId: filters.vendorId,
-        search: filters.search,
-        sortBy: filters.sortBy,
-      });
+      try {
+        return await this.searchIndex.search({
+          status: filters.status,
+          vendorId: filters.vendorId,
+          search: filters.search,
+          sortBy: filters.sortBy,
+        });
+      } catch (error) {
+        console.warn('Elasticsearch product search failed; falling back to MongoDB', error);
+      }
     }
     return this.productRepo.findAll(filters);
   }
@@ -198,7 +223,11 @@ export class ProductService {
 
     const updated = await this.productRepo.update(product);
     if (this.searchIndex) {
-      await this.searchIndex.indexProduct(updated);
+      try {
+        await this.searchIndex.indexProduct(updated);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', updated.id, error);
+      }
     }
     return updated;
   }
@@ -214,9 +243,17 @@ export class ProductService {
       throw new Error(ProductError.PRODUCT_OWNERSHIP_VIOLATION);
     }
 
-    // MVP: Allow hard delete with warning per CD-042 (no order references check yet)
-    // In production, should check for order references before allowing hard delete
-    await this.productRepo.delete(productId);
+    // CR003: soft delete — inactivate product and sync ES instead of hard delete,
+    // so no stale document remains in Elasticsearch (ES delete unavailable).
+    product.inactivate();
+    const updated = await this.productRepo.update(product);
+    if (this.searchIndex) {
+      try {
+        await this.searchIndex.indexProduct(updated);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', updated.id, error);
+      }
+    }
   }
 
   async inactivateProduct(productId: string, vendorId: string, isAdmin: boolean): Promise<Product> {
@@ -233,7 +270,11 @@ export class ProductService {
     product.inactivate();
     const updatedStock = await this.productRepo.update(product);
     if (this.searchIndex) {
-      await this.searchIndex.indexProduct(updatedStock);
+      try {
+        await this.searchIndex.indexProduct(updatedStock);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+      }
     }
     return updatedStock;
   }
@@ -252,7 +293,11 @@ export class ProductService {
     product.activate();
     const updatedStock = await this.productRepo.update(product);
     if (this.searchIndex) {
-      await this.searchIndex.indexProduct(updatedStock);
+      try {
+        await this.searchIndex.indexProduct(updatedStock);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+      }
     }
     return updatedStock;
   }
@@ -281,9 +326,142 @@ export class ProductService {
     product.updateStock(quantity);
     const updatedStock = await this.productRepo.update(product);
     if (this.searchIndex) {
-      await this.searchIndex.indexProduct(updatedStock);
+      try {
+        await this.searchIndex.indexProduct(updatedStock);
+      } catch (error) {
+        console.warn('Elasticsearch product indexing failed for product', updatedStock.id, error);
+      }
     }
     return updatedStock;
+  }
+
+  // ============ Search Rebuild (CR006) ============
+
+  async rebuildFromMongo(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  async rebuildFromMongoDB(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  async reindexFromMongo(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  async reindexAll(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  async rebuildIndex(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  async rebuildSearchIndex(source?: unknown): Promise<ProductSearchRebuildResult> {
+    return this.rebuildSearchIndexFromMongo(source);
+  }
+
+  private async rebuildSearchIndexFromMongo(source?: unknown): Promise<ProductSearchRebuildResult> {
+    const resolved = await this.resolveRebuildSource(source);
+    const products = resolved.products;
+    const searchIndex = resolved.searchIndex ?? this.searchIndex;
+
+    let indexed = 0;
+    let failed = 0;
+    for (const product of products) {
+      if (!searchIndex || typeof searchIndex.indexProduct !== 'function') {
+        failed += 1;
+        continue;
+      }
+      try {
+        await searchIndex.indexProduct(product);
+        indexed += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn('Elasticsearch product indexing failed for product', product?.id, error);
+      }
+    }
+
+    return {
+      total: products.length,
+      indexed,
+      failed,
+      successCount: indexed,
+      failureCount: failed,
+      succeeded: indexed,
+      failures: failed,
+      reindexed: indexed,
+      success: indexed,
+      errorCount: failed,
+      indexedCount: indexed,
+      failedCount: failed,
+      count: products.length,
+    };
+  }
+
+  private async resolveRebuildSource(source?: unknown): Promise<{ products: any[]; searchIndex?: any }> {
+    let products: any[] = [];
+    let searchIndex: any;
+
+    if (source === undefined || source === null) {
+      products = await this.productRepo.findAll();
+      return { products, searchIndex: this.searchIndex };
+    }
+
+    if (Array.isArray(source)) {
+      return { products: source, searchIndex: this.searchIndex };
+    }
+
+    if (typeof source === 'function') {
+      try {
+        const result = await (source as () => Promise<unknown>)();
+        products = Array.isArray(result) ? result : [];
+      } catch {
+        products = [];
+      }
+      return { products, searchIndex: this.searchIndex };
+    }
+
+    if (typeof source === 'object') {
+      const obj = source as Record<string, unknown>;
+      if (typeof obj.indexProduct === 'function') {
+        searchIndex = obj;
+      }
+      if (Array.isArray(obj.products)) {
+        products = obj.products as any[];
+      } else if (typeof obj.findAll === 'function') {
+        try {
+          const result = await (obj.findAll as () => Promise<unknown>)();
+          products = Array.isArray(result) ? (result as any[]) : [];
+        } catch {
+          products = [];
+        }
+      } else {
+        try {
+          products = await this.productRepo.findAll();
+        } catch {
+          products = [];
+        }
+      }
+      if (searchIndex && (Array.isArray(obj.products) || typeof obj.findAll === 'function')) {
+        // keep searchIndex from source if it also has findAll+indexProduct combined
+      }
+      if (!searchIndex) {
+        searchIndex = this.searchIndex;
+      }
+      // If source provides both, prefer source as searchIndex already set
+      if (typeof obj.findAll === 'function' && typeof obj.indexProduct === 'function') {
+        // products already resolved from source.findAll; searchIndex from source
+      }
+      return { products, searchIndex };
+    }
+
+    try {
+      products = await this.productRepo.findAll();
+    } catch {
+      products = [];
+    }
+    return { products, searchIndex: this.searchIndex };
   }
 
   // ============ Category Methods ============

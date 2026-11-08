@@ -132,14 +132,16 @@ function initializeServices(): void {
       stripeClient,
       config.frontendUrl,
       config.stripePaymentMethodConfiguration
-    )
+    ),
+    categoryRepo,
+    searchIndex
   );
   orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
   personService = new PersonService(personRepo);
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 walletService = new WalletService(walletRepo, walletTxRepo);
 financialService = new FinancialService(financialRepo);
-paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService);
+paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex);
   if (transferRepo) {
     transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '');
   }
@@ -160,7 +162,7 @@ async function runDevelopmentSeed(): Promise<void> {
     productRepo,
   };
 
-  await seedDevelopmentData(seedRepos);
+  await seedDevelopmentData(seedRepos, searchIndex);
   console.log('✅ Development seed completed');
 }
 

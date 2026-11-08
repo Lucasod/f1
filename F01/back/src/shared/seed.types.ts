@@ -11,4 +11,5 @@ export interface SeedRepositories {
   vendorRepo: VendorRepository;
   categoryRepo: CategoryRepository;
   productRepo: ProductRepository;
+  searchIndex?: any;
 }

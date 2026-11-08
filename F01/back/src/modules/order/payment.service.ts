@@ -29,6 +29,7 @@ import {
 } from './order.domain';
 
 import type { ProductRepository } from '../product/product.domain';
+import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
 import type { WalletService } from '../wallet/wallet.service';
 import type { FinancialService } from '../financial/financial.service';
 import { FinancialAllocationType } from '../financial/financial.domain';
@@ -65,7 +66,8 @@ export class PaymentService {
     private readonly productRepo?: ProductRepository,
     private readonly walletService?: WalletService,
     private readonly financialService?: FinancialService,
-    private readonly transferRepo?: MongoTransferRepository
+    private readonly transferRepo?: MongoTransferRepository,
+    private readonly searchIndex?: ElasticsearchProductIndex
   ) {}
 
   async createPayment(
@@ -314,6 +316,16 @@ export class PaymentService {
         for (const [productId, amount] of quantities) {
           try {
             await this.productRepo.incrementStock(productId, amount);
+            if (this.searchIndex) {
+              try {
+                const product = await this.productRepo.findById(productId);
+                if (product) {
+                  await this.searchIndex.indexProduct(product);
+                }
+              } catch (indexError) {
+                console.warn('Elasticsearch product indexing failed for product', productId, indexError);
+              }
+            }
           } catch (err) {
             failures.push(err);
             console.error('Failed to restore stock for product', productId, err);

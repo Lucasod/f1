@@ -25,7 +25,7 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
   const router = Router();
 
   const authMw = authMiddleware(authService);
-  const requireConsumer = requireRole(PersonRole.CONSUMER);
+  const requireConsumer = requireRole(PersonRole.CONSUMER, PersonRole.VENDOR);
 
   // GET /checkout/preview - Preview checkout totals (auth required, CONSUMER role)
   router.get('/preview', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
