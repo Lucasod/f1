@@ -103,6 +103,10 @@ describeIfMongo('MongoDB Integration Tests', () => {
     // Product indexes
     await productsCollection.createIndex({ vendorId: 1 });
     await productsCollection.createIndex({ categoryId: 1 });
+    await productsCollection.createIndex(
+      { seedIdentity: 1 },
+      { unique: true, partialFilterExpression: { seedIdentity: { $type: 'string' } } }
+    );
 
     // Create repository instances
     personRepo = new MongoPersonRepository(db);

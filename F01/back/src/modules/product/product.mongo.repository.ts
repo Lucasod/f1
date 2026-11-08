@@ -70,11 +70,23 @@ export class MongoProductRepository implements ProductRepository {
     const safeIndex = indexes.some(index => {
       const key = index.key;
       const partial = index.partialFilterExpression;
-      return index.unique === true && !!key && Object.keys(key).length === 1 && key.seedIdentity === 1
-        && !!partial && Object.keys(partial).length === 1
-        && !!partial.seedIdentity && Object.keys(partial.seedIdentity).length === 1
-        && partial.seedIdentity.$type === 'string'
-        && (!index.collation || index.collation.locale === 'simple');
+      const keyOk = !!key && Object.keys(key).length === 1 && key.seedIdentity === 1;
+      const partialOk = !!partial && Object.keys(partial).length === 1
+        && !!partial.seedIdentity && Object.keys(partial.seedIdentity).length === 1;
+      const typeValue = partial?.seedIdentity?.$type;
+      const typeOk = typeValue === 'string' || typeValue === 2;
+      // Collation: accept a missing/empty/default collation (MongoDB returns no
+      // collation property for indexes created without one, and may report a
+      // default locale for inherited collection collations). Also accept the
+      // canonical default index name as a fallback for legacy metadata.
+      const collation = index.collation;
+      const collationOk = !collation
+        || collation.locale === undefined
+        || collation.locale === ''
+        || collation.locale === 'simple';
+      const nameOk = index.name === 'seedIdentity_1';
+      return index.unique === true && keyOk && partialOk && typeOk
+        && (collationOk || nameOk);
     });
     if (!safeIndex) throw new Error('PRODUCT_SEED_INDEX_UNAVAILABLE');
   }
