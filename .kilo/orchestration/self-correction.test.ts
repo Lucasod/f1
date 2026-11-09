@@ -2,12 +2,12 @@
 // - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
 // - single word for single-concept names (e.g., storage.test.ts)
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SelfCorrectionEngine } from '../src/correction-engine';
+import { SelfCorrectionEngine } from './correction-engine';
 import {
   FailureCategory,
   CorrectionStatus,
   SelfCorrectionConfig,
-} from '../src/types';
+} from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -30,7 +30,7 @@ describe('SelfCorrectionEngine', () => {
   const createValidConfig = (overrides: Partial<SelfCorrectionConfig> = {}): SelfCorrectionConfig => ({
     maxAttemptsPerFailure: 3,
     maxTotalAttempts: 10,
-    allowedCorrectionPaths: ['kilo-orchestration/src/', 'kilo-orchestration/tests/'],
+    allowedCorrectionPaths: ['F01.kilo/orchestration/src/', 'F01.kilo/orchestration/tests/'],
     blockedActions: ['chmod', 'chown', 'git push', 'git commit', 'npm publish'],
     requireReviewFor: ['code-reviewer.md', 'universal-rules.md', 'project-rules.md', 'autonomous-execution.md'],
     ...overrides,
@@ -204,7 +204,7 @@ describe('SelfCorrectionEngine', () => {
 
     it('should allow correction within allowed paths', () => {
       const failure = engine.recordFailure('DETERMINISTIC_TEST_BUILD', 'Test fail', {});
-      const attempt = engine.attemptCorrection(failure.id, 'edit', 'Fix test', 'kilo-orchestration/src/storage.ts');
+      const attempt = engine.attemptCorrection(failure.id, 'edit', 'Fix test', 'F01.kilo/orchestration/src/storage.ts');
       expect(attempt.authorized).toBe(true);
     });
 
@@ -219,7 +219,7 @@ describe('SelfCorrectionEngine', () => {
         failure.id,
         'edit',
         'Change a project decision',
-        'kilo-orchestration/src/../../F01/docs/decisions.md',
+        'F01.kilo/orchestration/src/../../F01/docs/decisions.md',
       )).toThrow('not authorized');
     });
 
@@ -230,7 +230,7 @@ describe('SelfCorrectionEngine', () => {
         failure.id,
         'edit',
         'Sibling traversal',
-        'kilo-orchestration/src/../kilo-orchestration/src/evil.ts',
+        'F01.kilo/orchestration/src/../F01.kilo/orchestration/src/evil.ts',
       )).toThrow('not authorized');
     });
 
@@ -241,14 +241,14 @@ describe('SelfCorrectionEngine', () => {
         failure.id,
         'edit',
         'URL encoded traversal',
-        'kilo-orchestration/src/..%2f..%2fetc%2fpasswd',
+        'F01.kilo/orchestration/src/..%2f..%2fetc%2fpasswd',
       )).toThrow('not authorized');
       // Double URL encoding
       expect(() => engine.attemptCorrection(
         failure.id,
         'edit',
         'Double URL encoded traversal',
-        'kilo-orchestration/src/..%252f..%252fetc%252fpasswd',
+        'F01.kilo/orchestration/src/..%252f..%252fetc%252fpasswd',
       )).toThrow('not authorized');
     });
 
@@ -419,7 +419,7 @@ describe('SelfCorrectionEngine', () => {
 
     it('should authorize edit in allowed path', () => {
       const failure = engine.getFailuresByCategory('DETERMINISTIC_TEST_BUILD')[0];
-      const attempt = engine.attemptCorrection(failure.id, 'edit', 'Fix', 'kilo-orchestration/src/storage.ts');
+      const attempt = engine.attemptCorrection(failure.id, 'edit', 'Fix', 'F01.kilo/orchestration/src/storage.ts');
       expect(attempt.authorized).toBe(true);
     });
 

@@ -6,7 +6,7 @@ import {
   classifyBacklogTasks,
   parseBacklogTasks,
   SequentialTaskOrchestrator,
-} from '../src/agent-orchestrator.js';
+} from './agent-orchestrator.js';
 import type {
   BacklogTask,
   CodeExecutionReport,
@@ -19,8 +19,8 @@ import type {
   ConsolidatedTaskReport,
   DocUpdateReport,
   DocUpdateRequest,
-} from '../src/types.js';
-import { SelfCorrectionEngine } from '../src/correction-engine.js';
+} from './types.js';
+import { SelfCorrectionEngine } from './correction-engine.js';
 
 const task = (overrides: Partial<BacklogTask> = {}): BacklogTask => ({
   taskId: 'T-701',

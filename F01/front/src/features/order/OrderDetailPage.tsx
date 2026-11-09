@@ -5,6 +5,7 @@ import { OrderCommentSection } from './OrderCommentSection';
 import { OrderItemReview } from './OrderReviewSection';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { vendorApi } from '@/shared/api/vendor';
+import { cartApi } from '@/shared/api/cart';
 import {
   Order,
   OrderVendorGroup,
@@ -389,10 +390,26 @@ export function OrderDetailPage() {
     updateOrderStatusMutation.mutate({ orderId, status });
   };
 
-  const handleReorder = () => {
-    // TODO: Implement reorder logic - could navigate to cart with items pre-filled
+const handleReorder = async () => {
+    const order = data?.order;
+    if (!order) return;
+
+    // Add all items from the order to the cart, respecting vendor groups
+    try {
+        await Promise.all(
+            order.vendorGroups.flatMap(vg => vg.items.map(item =>
+                cartApi.addItem({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                })
+            ))
+        );
+    } catch {
+        // If cart API fails, still navigate to cart — user can manage items manually
+    }
+
     navigate('/cart');
-  };
+};
 
   const handleBackToOrders = () => {
     navigate('/orders');

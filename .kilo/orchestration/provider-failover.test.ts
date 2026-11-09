@@ -4,7 +4,7 @@ import {
   classifyFailure,
   FailoverController,
   ProviderDestinationStatus,
-} from '../src/index';
+} from './index';
 
 describe('Provider failover', () => {
   it('six-stage chain exact order', () => {

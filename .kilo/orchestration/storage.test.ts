@@ -2,8 +2,8 @@
 // - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
 // - single word for single-concept names (e.g., storage.test.ts)
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeRunRecord, loadRunRecord, listRunRecords } from '../src/storage';
-import { RunRecord, RunStatus } from '../src/types';
+import { writeRunRecord, loadRunRecord, listRunRecords } from './storage';
+import { RunRecord, RunStatus } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

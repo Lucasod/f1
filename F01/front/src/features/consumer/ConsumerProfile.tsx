@@ -12,6 +12,7 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 
 /**
  * Get contact type label
@@ -196,6 +197,7 @@ export function ConsumerProfile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   const changePasswordMutation = useMutation({
     mutationFn: authApi.changePassword,
@@ -479,59 +481,199 @@ export function ConsumerProfile() {
           </CardContent>
         </Card>
 
+        {/* Addresses Card */}
         <Card variant="bordered" padding="lg">
-          <CardHeader>
-            <CardTitle as="h2">Change Password</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {changePasswordMutation.isError && (
-              <ErrorAlert
-                title="Unable to change password"
-                message={changePasswordMutation.error instanceof Error
-                  ? changePasswordMutation.error.message
-                  : 'Please verify your current password and try again.'}
-              />
-            )}
-            {passwordSuccess && <p role="status" className="text-sm text-green-700">Password changed successfully.</p>}
-            <Input
-              id="current-password"
-              label="Current password"
-              type="password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
-            <Input
-              id="new-password"
-              label="New password"
-              type="password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-            <Input
-              id="confirm-password"
-              label="Confirm new password"
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-            {passwordError && <p role="alert" className="text-sm text-red-600">{passwordError}</p>}
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardTitle as="h2">Addresses</CardTitle>
             <Button
               variant="primary"
-              onClick={handleChangePassword}
-              disabled={changePasswordMutation.isPending}
-              isLoading={changePasswordMutation.isPending}
-              loadingText="Changing..."
+              size="sm"
+              onClick={() => setShowAddAddressForm(true)}
+              leftIcon={<span aria-hidden="true">+</span>}
             >
-              Change Password
+              Add Address
             </Button>
+          </CardHeader>
+          <CardContent>
+            {showAddAddressForm && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
+                <h4 className="font-medium text-gray-900">Add New Address</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Input
+                    id="address-street"
+                    label="Street"
+                    required
+                    value={newAddressForm.street}
+                    onChange={(e) => setNewAddressForm({ ...newAddressForm, street: e.target.value })}
+                    error={addressErrors.street}
+                    placeholder="Rua das Flores"
+                  />
+                  <Input
+                    id="address-number"
+                    label="Number"
+                    required
+                    value={newAddressForm.number}
+                    onChange={(e) => setNewAddressForm({ ...newAddressForm, number: e.target.value })}
+                    error={addressErrors.number}
+                    placeholder="123"
+                  />
+                  <Input
+                    id="address-neighborhood"
+                    label="Neighborhood"
+                    required
+                    value={newAddressForm.neighborhood}
+                    onChange={(e) => setNewAddressForm({ ...newAddressForm, neighborhood: e.target.value })}
+                    error={addressErrors.neighborhood}
+                    placeholder="Centro"
+                  />
+                  <Input
+                    id="address-city"
+                    label="City"
+                    required
+                    value={newAddressForm.city}
+                    onChange={(e) => setNewAddressForm({ ...newAddressForm, city: e.target.value })}
+                    error={addressErrors.city}
+                    placeholder="City"
+                  />
+                  <Select
+                    id="address-state"
+                    label="State"
+                    required
+                    options={BRAZILIAN_STATES.map((s) => ({ value: s, label: s }))}
+                    placeholder="Select state"
+                    value={newAddressForm.state}
+                    onChange={(e) => setNewAddressForm({ ...newAddressForm, state: e.target.value })}
+                    error={addressErrors.state}
+                  />
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer w-full">
+                      <input
+                        type="checkbox"
+                        checked={newAddressForm.isPrimary}
+                        onChange={(e) => setNewAddressForm({ ...newAddressForm, isPrimary: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Set as primary</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddAddressForm(false)} disabled={addAddressMutation.isPending}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleAddAddress} disabled={addAddressMutation.isPending} isLoading={addAddressMutation.isPending} loadingText="Adding...">
+                    Add Address
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {person.addresses.length === 0 && !showAddAddressForm ? (
+              <EmptyState
+                title="No addresses yet"
+                description="Add your delivery addresses for faster checkout."
+                icon={EmptyStateIcons.profile}
+                action={{ label: 'Add Address', onClick: () => setShowAddAddressForm(true) }}
+              />
+            ) : (
+              <div className="space-y-3">
+                {person.addresses.map((address) => (
+                  <div key={address.id} className="flex flex-col sm:flex-row sm:items-start gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium text-gray-900">{address.street}, {address.number}</p>
+                      {address.isPrimary && (
+                        <Badge variant="success" size="sm" dot>
+                          Primary
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600">{address.neighborhood}</p>
+                    <p className="text-sm text-gray-600">{address.city} - {address.state}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        <Button
+          variant="primary"
+          onClick={() => setShowChangePasswordModal(true)}
+          className="mb-4"
+        >
+          Change Password
+        </Button>
+
+        <Modal
+          isOpen={showChangePasswordModal}
+          onClose={() => {
+            setShowChangePasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setPasswordError('');
+            setPasswordSuccess(false);
+          }}
+          title="Change Password"
+          description="Update your account password"
+          size="sm"
+          closeOnEscape
+          closeOnOverlayClick
+        >
+          <Card variant="bordered" padding="lg">
+            <CardHeader>
+              <CardTitle as="h2">Change Password</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {changePasswordMutation.isError && (
+                <ErrorAlert
+                  title="Unable to change password"
+                  message={changePasswordMutation.error instanceof Error
+                    ? changePasswordMutation.error.message
+                    : 'Please verify your current password and try again.'}
+                />
+              )}
+              {passwordSuccess && <p role="status" className="text-sm text-green-700">Password changed successfully.</p>}
+              <Input
+                id="current-password"
+                label="Current password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <Input
+                id="new-password"
+                label="New password"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+              <Input
+                id="confirm-password"
+                label="Confirm new password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+              {passwordError && <p role="alert" className="text-sm text-red-600">{passwordError}</p>}
+              <Button
+                variant="primary"
+                onClick={handleChangePassword}
+                disabled={changePasswordMutation.isPending}
+                isLoading={changePasswordMutation.isPending}
+                loadingText="Changing..."
+              >
+                Change Password
+              </Button>
+            </CardContent>
+          </Card>
+        </Modal>
 
         {/* Contacts Card */}
         <Card variant="bordered" padding="lg">
@@ -654,143 +796,7 @@ export function ConsumerProfile() {
           </CardContent>
         </Card>
 
-        {/* Addresses Card */}
-        <Card variant="bordered" padding="lg">
-          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle as="h2">Addresses</CardTitle>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowAddAddressForm(true)}
-              leftIcon={<span aria-hidden="true">+</span>}
-            >
-              Add Address
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {showAddAddressForm && (
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
-                <h4 className="font-medium text-gray-900">Add New Address</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <Input
-                    id="address-street"
-                    label="Street"
-                    required
-                    value={newAddressForm.street}
-                    onChange={(e) => setNewAddressForm({ ...newAddressForm, street: e.target.value })}
-                    error={addressErrors.street}
-                    placeholder="Rua das Flores"
-                  />
-                  <Input
-                    id="address-number"
-                    label="Number"
-                    required
-                    value={newAddressForm.number}
-                    onChange={(e) => setNewAddressForm({ ...newAddressForm, number: e.target.value })}
-                    error={addressErrors.number}
-                    placeholder="123"
-                  />
-                  <Input
-                    id="address-neighborhood"
-                    label="Neighborhood"
-                    required
-                    value={newAddressForm.neighborhood}
-                    onChange={(e) => setNewAddressForm({ ...newAddressForm, neighborhood: e.target.value })}
-                    error={addressErrors.neighborhood}
-                    placeholder="Centro"
-                  />
-                  <Input
-                    id="address-city"
-                    label="City"
-                    required
-                    value={newAddressForm.city}
-                    onChange={(e) => setNewAddressForm({ ...newAddressForm, city: e.target.value })}
-                    error={addressErrors.city}
-                    placeholder="City"
-                  />
-                  <Select
-                    id="address-state"
-                    label="State"
-                    required
-                    options={BRAZILIAN_STATES.map((s) => ({ value: s, label: s }))}
-                    placeholder="Select state"
-                    value={newAddressForm.state}
-                    onChange={(e) => setNewAddressForm({ ...newAddressForm, state: e.target.value })}
-                    error={addressErrors.state}
-                  />
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2 cursor-pointer w-full">
-                      <input
-                        type="checkbox"
-                        checked={newAddressForm.isPrimary}
-                        onChange={(e) => setNewAddressForm({ ...newAddressForm, isPrimary: e.target.checked })}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">Set as primary</span>
-                    </label>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="ghost" size="sm" onClick={() => setShowAddAddressForm(false)} disabled={addAddressMutation.isPending}>
-                    Cancel
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handleAddAddress} disabled={addAddressMutation.isPending} isLoading={addAddressMutation.isPending} loadingText="Adding...">
-                    Add Address
-                  </Button>
-                </div>
-              </div>
-            )}
 
-            {person.addresses.length === 0 && !showAddAddressForm ? (
-              <EmptyState
-                title="No addresses yet"
-                description="Add your delivery addresses for faster checkout."
-                icon={EmptyStateIcons.profile}
-                action={{ label: 'Add Address', onClick: () => setShowAddAddressForm(true) }}
-              />
-            ) : (
-              <div className="space-y-3">
-                {person.addresses.map((address) => (
-                  <div key={address.id} className="flex flex-col sm:flex-row sm:items-start gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-gray-900">{address.street}, {address.number}</p>
-                        {address.isPrimary && (
-                          <Badge variant="success" size="sm" dot>
-                            Primary
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">{address.neighborhood}</p>
-                      <p className="text-sm text-gray-600">{address.city} - {address.state}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                      {!address.isPrimary && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handlePrimaryAddressChange(address.id)}
-                          disabled={updateAddressesMutation.isPending}
-                        >
-                          Set Primary
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveAddress(address.id)}
-                        className="text-red-600 hover:text-red-900 hover:bg-red-50"
-                        disabled={removeAddressMutation.isPending}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </main>
   );

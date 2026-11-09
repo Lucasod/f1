@@ -1,23 +1,23 @@
 # Guidelines — Code Orchestrator (FIRD)
 
-**Documento:** `.kilo/fird/guidelines-orchestrator.md`
+**Documento:** `F01.kilo/fird/guidelines-orchestrator.md`
 **Versão:** 1.0 (Cycle C2 — Etapa C)
 **Status:** Rascunho para revisão (C4). Documentação FIRD — Grupo A.
-**Autoridade:** Orientações operacionais do papel **Orchestra** (`code-orchestrator`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
+**Autoridade:** Orientações operacionais do papel **Orchestra** (`code-orchestrator`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `F01.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
 
 **Referências autoritativas:**
-- `.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
-- `.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
-- `.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
-- `.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
-- `.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
-- `.kilo/agents/code-orchestrator.md` — orquestrador: delegação, integração de revisão, FIPR, matriz de responsabilidade.
+- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
+- `F01.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
+- `F01.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
+- `F01.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
+- `F01.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
+- `F01.kilo/agents/code-orchestrator.md` — orquestrador: delegação, integração de revisão, FIPR, matriz de responsabilidade.
 
 ---
 
 ## 1. Propósito e escopo
 
-Este documento fornece orientações práticas para o papel **Orchestra** (`code-orchestrator`): planejamento de tarefas, delegação, coordenação de TDD e revisão independente. Complementa (não substitui) o contrato de delegação (`.kilo/fird/contratos-delegacao.md`) e o contrato de execução autônoma (`.kilo/rules/autonomous-execution.md`).
+Este documento fornece orientações práticas para o papel **Orchestra** (`code-orchestrator`): planejamento de tarefas, delegação, coordenação de TDD e revisão independente. Complementa (não substitui) o contrato de delegação (`F01.kilo/fird/contratos-delegacao.md`) e o contrato de execução autônoma (`F01.kilo/rules/autonomous-execution.md`).
 
 **Em escopo (in-scope):**
 - Seleção e validação de tarefas elegíveis.
@@ -30,7 +30,7 @@ Este documento fornece orientações práticas para o papel **Orchestra** (`code
 **Fora de escopo (out-of-scope):**
 - Implementação direta de código (delegar ao Developer).
 - Revisão independente (delegar ao Reviewer).
-- Modificação de `.kilo/agents/code-developer.md` ou `code-reviewer.md` (ciclos C3/C4).
+- Modificação de `F01.kilo/agents/code-developer.md` ou `code-reviewer.md` (ciclos C3/C4).
 - Modificação de `F01/` (Marketplace — requer avaliação de impacto).
 - Operações destrutivas (commit, push, merge, deploy).
 
@@ -130,7 +130,7 @@ A requisição de revisão (§4 do contrato) deve conter os mesmos 9 elementos d
 
 ### 5.1 Delegação Orchestra → Developer
 
-Usar o formato §3 do contrato (`.kilo/fird/contratos-delegacao.md`). Elementos obrigatórios (9): Run ID, Task ID, Scope, Base Reference, Changed Files, Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (preenchido pelo Reviewer).
+Usar o formato §3 do contrato (`F01.kilo/fird/contratos-delegacao.md`). Elementos obrigatórios (9): Run ID, Task ID, Scope, Base Reference, Changed Files, Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (preenchido pelo Reviewer).
 
 **Regras:**
 - O Developer executa somente o escopo delegado.
@@ -145,7 +145,7 @@ Usar o formato §4 do contrato. A revisão é autorizada somente para a tarefa i
 
 ### 5.3 Matriz de responsabilidade
 
-Ver seção "Responsibility Matrix and Delegation Routing" em `.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
+Ver seção "Responsibility Matrix and Delegation Routing" em `F01.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
 
 | Papel | Agente | Permissões-chave | Função |
 |---|---|---|---|
@@ -157,7 +157,7 @@ Ver seção "Responsibility Matrix and Delegation Routing" em `.kilo/agents/code
 
 ## 6. Evidência e limites
 
-Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit code, resumo da saída, caminhos de arquivo e (quando aplicável) linhas. Nunca inventar resultados. Segredos nunca aparecem em evidência (`.kilo/rules/secrets-protection.md`).
+Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit code, resumo da saída, caminhos de arquivo e (quando aplicável) linhas. Nunca inventar resultados. Segredos nunca aparecem em evidência (`F01.kilo/rules/secrets-protection.md`).
 
 **O que as verificações provam:** apenas o que foi executado e observado no escopo. `PASS` não garante ausência total de defeitos. Verificações de configuração/frontmatter/allowlists não provam enforcement de runtime real (classificar como `NÃO VERIFICADO`).
 
@@ -174,14 +174,14 @@ Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit c
 
 ## 8. Referências cruzadas
 
-- `.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
-- `.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
-- `.kilo/agents/code-developer.md` — developer.
-- `.kilo/agents/code-reviewer.md` — reviewer.
-- `.kilo/rules/autonomous-execution.md` — execução autônoma.
-- `.kilo/rules/universal-rules.md` — baseline de engenharia.
-- `.kilo/rules/project-rules.md` — regras do projeto.
-- `.kilo/rules/secrets-protection.md` — proteção de segredos.
+- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
+- `F01.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
+- `F01.kilo/agents/code-developer.md` — developer.
+- `F01.kilo/agents/code-reviewer.md` — reviewer.
+- `F01.kilo/rules/autonomous-execution.md` — execução autônoma.
+- `F01.kilo/rules/universal-rules.md` — baseline de engenharia.
+- `F01.kilo/rules/project-rules.md` — regras do projeto.
+- `F01.kilo/rules/secrets-protection.md` — proteção de segredos.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md` — run record do Cycle C1.
 - `docs/agent_runs/orch-etapa-c-c2-2026-11-04.md` — run record do Cycle C2.
 
@@ -189,4 +189,4 @@ Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit c
 
 *Guidelines criadas no Cycle C2 (Etapa C). Consumidas pelo papel Orchestra. Alterações requerem revisão independente e rastreabilidade a run record e decisões.*
 filePath">
-/home/workstation/source/f1/.kilo/fird/guidelines-orchestrator.md
+/home/workstation/source/f1/F01.kilo/fird/guidelines-orchestrator.md

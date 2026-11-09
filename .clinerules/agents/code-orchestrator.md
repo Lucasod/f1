@@ -180,7 +180,7 @@ Request `code-reviewer` via `task` tool for completed implementation units:
 Use `kilo-orchestration` module's `SelfCorrectionEngine`:
 - Classify failures: `TRANSIENT`, `DETERMINISTIC_TEST_BUILD`, `CONFIGURATION`, `PERSISTENCE_INTEGRITY`, `PERMISSION_POLICY`, `UNKNOWN`
 - Track attempts per finding (max 3) and total attempts (max 10)
-- Only authorize corrections within allowed paths (`kilo-orchestration/src/`, `kilo-orchestration/tests/`)
+- Only authorize corrections within allowed paths (`F01.kilo/orchestration/src/`, `F01.kilo/orchestration/tests/`)
 - Block actions: `chmod`, `chown`, `git push`, `git commit`, `npm publish`, `docker push`
 - Require review for: `code-reviewer.md`, rule files, and execution contracts
 - Never grant self new permissions or modify allowlists to pass tests

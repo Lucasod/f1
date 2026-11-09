@@ -24,5 +24,6 @@ test-storage/uploads/products/
 .env
 .env.*
 !.env.example
+.kilo/skills/
 F01/back/test-storage-cleanup/uploads/products/vendor1/product1/main.jpg
 F01/back/test-storage-cleanup/uploads/products/vendor1/product1/gallery/01.jpg

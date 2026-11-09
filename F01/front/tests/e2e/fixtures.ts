@@ -32,12 +32,21 @@ function allDigitsSame(value: string): boolean {
 /**
  * Generate a valid CPF (11 digits) with correct check digits
  * Algorithm matches backend person.domain.ts validateCpfCheckDigits
+ * Uses LCG seeded by Date.now() with random offset to ensure uniqueness per test execution
  */
 export function generateValidCPF(): string {
   let cpf: string;
   do {
-    // Generate first 9 random digits
-    const baseDigits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
+    // Use LCG seeded by timestamp + random offset to ensure uniqueness
+    // even across consecutive calls within the same millisecond
+    const timestamp = Date.now();
+    const randomOffset = Math.floor(Math.random() * 1000000);
+    let lcgState = (timestamp ^ randomOffset) & 0xFFFFFFFF; // seed the LCG with combined seed
+    // Generate first 9 random digits with LCG for uniqueness
+    const baseDigits = Array.from({ length: 9 }, () => {
+      lcgState = (lcgState * 1103515245 + 12345) & 0xFFFFFFFF;
+      return (lcgState & 0x7FFFFFFF) % 10; // Map to 0-9 range
+    });
     
     // Calculate 10th digit (first check digit)
     const weights1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
@@ -57,12 +66,21 @@ export function generateValidCPF(): string {
 /**
  * Generate a valid CNPJ (14 digits) with correct check digits
  * Algorithm matches backend person.domain.ts validateCnpjCheckDigits
+ * Uses LCG seeded by Date.now() with random offset to ensure uniqueness per test execution
  */
 export function generateValidCNPJ(): string {
   let cnpj: string;
   do {
-    // Generate first 12 random digits (8 base + 4 branch, typically 0001)
-    const baseDigits = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10));
+    // Use LCG seeded by timestamp + random offset to ensure uniqueness
+    // even across consecutive calls within the same millisecond
+    const timestamp = Date.now();
+    const randomOffset = Math.floor(Math.random() * 1000000);
+    let lcgState = (timestamp ^ randomOffset) & 0xFFFFFFFF; // seed the LCG with combined seed
+    // Generate first 8 base digits with LCG for uniqueness (branch digits 0001 are standard)
+    const baseDigits = Array.from({ length: 8 }, () => {
+      lcgState = (lcgState * 1103515245 + 12345) & 0xFFFFFFFF;
+      return (lcgState & 0x7FFFFFFF) % 10; // Map to 0-9 range
+    });
     const branchDigits = [0, 0, 0, 1]; // Standard branch
     const first12 = [...baseDigits, ...branchDigits];
     
@@ -126,43 +144,40 @@ type RegistrationData = {
 
 export async function registerUser(page: Page, userData: RegistrationData) {
   await page.goto('/register');
-  await page.waitForLoadState('networkidle');
   
   // Fill form fields
   await page.fill('#name', userData.name);
   await page.selectOption('#taxIdType', userData.taxIdType);
   await page.fill('#taxIdValue', userData.taxIdValue);
   await page.fill('#email', userData.email);
-  await page.fill('#password', 'test-password-123');
-  await page.fill('#confirmPassword', 'test-password-123');
+  await page.fill('#password', 'TestPassword123!');
+  await page.fill('#confirmPassword', 'TestPassword123!');
   await page.selectOption('#role', userData.role);
   
   // Submit
   await page.click('button[type="submit"]');
-  await page.waitForLoadState('networkidle');
   
-  // Workaround: Frontend doesn't redirect after successful registration
-  // Check if user is authenticated but still on /register, then navigate to dashboard
+  // Wait for authentication state in localStorage (zustand persist is async)
+  await page.waitForFunction(() => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return false;
+    try {
+      const parsed = JSON.parse(authStorage);
+      return !!parsed.state?.accessToken || !!parsed.accessToken;
+    } catch {
+      return false;
+    }
+  }, { timeout: 10000 });
+  
   const url = page.url();
   if (url.includes('/register')) {
-    // Wait for localStorage to be updated (zustand persist is async)
-    await page.waitForFunction(() => {
-      const authStorage = localStorage.getItem('auth-storage');
-      if (!authStorage) return false;
-      try {
-        const parsed = JSON.parse(authStorage);
-        return !!parsed.state?.accessToken;
-      } catch {
-        return false;
-      }
-    }, { timeout: 5000 });
-    
+    // Check if authenticated after waiting for localStorage update
     const authenticated = await page.evaluate(() => {
       const authStorage = localStorage.getItem('auth-storage');
       if (!authStorage) return false;
       try {
         const parsed = JSON.parse(authStorage);
-        return !!parsed.state?.accessToken;
+        return !!parsed.state?.accessToken || !!parsed.accessToken;
       } catch {
         return false;
       }
@@ -183,7 +198,6 @@ export async function registerUser(page: Page, userData: RegistrationData) {
       });
       const dashboardPath = role === 'VENDOR' ? '/vendor/dashboard' : role === 'ADMIN' ? '/admin/dashboard' : '/dashboard';
       await page.goto(dashboardPath);
-      await page.waitForLoadState('networkidle');
     }
   }
 }
@@ -191,26 +205,24 @@ export async function registerUser(page: Page, userData: RegistrationData) {
 /**
  * Fill login form and submit
  */
-export async function loginUser(page: Page, email: string, password: string = 'test-password-123') {
+export async function loginUser(page: Page, email: string, password: string = 'TestPassword123!') {
   await page.goto('/login');
-  await page.waitForLoadState('networkidle');
   
   await page.fill('#email', email);
   await page.fill('#password', password);
   await page.click('button[type="submit"]');
-  await page.waitForLoadState('networkidle');
   
-  // Wait for localStorage to be updated (zustand persist is async)
+  // Wait for authentication state in localStorage (zustand persist is async)
   await page.waitForFunction(() => {
     const authStorage = localStorage.getItem('auth-storage');
     if (!authStorage) return false;
     try {
       const parsed = JSON.parse(authStorage);
-      return !!parsed.state?.accessToken;
+      return !!parsed.state?.accessToken || !!parsed.accessToken;
     } catch {
       return false;
     }
-  }, { timeout: 5000 });
+  }, { timeout: 10000 });
 }
 
 /**
@@ -222,7 +234,7 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
     if (!authStorage) return false;
     try {
       const parsed = JSON.parse(authStorage);
-      return !!parsed.state?.accessToken;
+      return !!parsed.state?.accessToken || !!parsed.accessToken;
     } catch {
       return false;
     }

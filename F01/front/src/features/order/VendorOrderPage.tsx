@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVendorOrderGroups, useOrderMutations } from './useOrder';
 import {
+  orderApi,
   OrderVendorGroup,
   OrderVendorGroupStatus,
   VendorOrderGroupsParams,
@@ -225,16 +226,33 @@ export function VendorOrderPage() {
   const totalPages = Math.ceil(totalGroups / DEFAULT_PAGE_SIZE);
 
   // Map orderId to financialStatus for guard checks
-  const orderFinancialStatusMap = useMemo(() => {
+  const [orderFinancialStatusMap, setOrderFinancialStatusMap] = useState<Record<string, string | undefined>>(() => {
     const map: Record<string, string | undefined> = {};
-    // Fetch order details for each unique orderId to get financialStatus
     const orderIds = [...new Set(vendorGroups.map((vg) => vg.orderId))];
     orderIds.forEach((orderId) => {
-      // TODO: Use proper order API call to fetch financialStatus
-      // For now, set as undefined - will be enhanced with actual fetch
-      map[orderId] = undefined;
+      map[orderId] = 'pending_payment';
     });
     return map;
+  });
+
+  useEffect(() => {
+    const orderIds = [...new Set(vendorGroups.map((vg) => vg.orderId))];
+    orderIds.forEach((orderId) => {
+      orderApi.getById(orderId)?.then(
+        ({ order }) => {
+          setOrderFinancialStatusMap((prev) => ({
+            ...prev,
+            [orderId]: order.financialStatus,
+          }));
+        },
+        (error) => {
+          setOrderFinancialStatusMap((prev) => ({
+            ...prev,
+            [orderId]: 'pending_payment',
+          }));
+        }
+      );
+    });
   }, [vendorGroups]);
 
   const handleUpdateStatus = (ovgId: string, status: OrderVendorGroupStatus) => {
@@ -242,11 +260,29 @@ export function VendorOrderPage() {
     // The API expects orderId and ovgId. We need to find the orderId from the vendorGroup.
     const vendorGroup = vendorGroups.find((vg) => vg.id === ovgId);
     if (vendorGroup) {
-      updateVendorGroupStatusMutation.mutate({
-        orderId: vendorGroup.orderId,
-        ovgId,
-        status,
-      });
+      updateVendorGroupStatusMutation.mutate(
+        {
+          orderId: vendorGroup.orderId,
+          ovgId,
+          status,
+        },
+        {
+          onError: (error: any) => {
+            if (error instanceof OrderApiException && error.status === 409) {
+              const message =
+                error.message || 'Status de pagamento inválido';
+              alert(
+                `Não é possível preparar este pedido: ` + message +
+                  `. O pagamento deve ser confirmado antes de mudar o status para PREPARANDO.`
+              );
+            } else if (error instanceof Error) {
+              alert(`Erro ao atualizar status: ${error.message}`);
+            } else {
+              alert('Erro inesperado ao atualizar o status do pedido.');
+            }
+          },
+        }
+      );
     }
   };
 

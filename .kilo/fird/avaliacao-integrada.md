@@ -1,6 +1,6 @@
 # Avaliação Integrada — Etapa C (Ciclos C1–C5)
 
-**Documento:** `.kilo/fird/avaliacao-integrada.md`
+**Documento:** `F01.kilo/fird/avaliacao-integrada.md`
 **Data:** 2026-11-04
 **Run ID:** `orch-etapa-c-c5-2026-11-04`
 **Task ID:** `C5-T001`
@@ -26,14 +26,14 @@ A Etapa C (FIRD — delegação padronizada entre `code-orchestrator`, `code-dev
 
 | # | Arquivo | Ciclo | Grupo | Tipo | Status |
 |---|---|---|---|---|---|
-| 1 | `.kilo/fird/contratos-delegacao.md` | C1 | A (docs FIRD) | Criado | ✅ Presente (547 linhas) |
-| 2 | `.kilo/agents/code-orchestrator.md` | C2 | C (compartilhado) | Modificado (+seção matriz) | ✅ Presente |
-| 3 | `.kilo/rules/autonomous-execution.md` | C2 | C (compartilhado) | Modificado (allowlist corrigida) | ✅ Presente |
-| 4 | `.kilo/fird/guidelines-orchestrator.md` | C2 | A (docs FIRD) | Criado | ✅ Presente (~192 linhas) |
-| 5 | `.kilo/agents/code-developer.md` | C3 | C (compartilhado) | Modificado (+seção coerência) | ✅ Presente |
-| 6 | `.kilo/fird/guidelines-developer.md` | C3 | A (docs FIRD) | Criado | ✅ Presente (~264 linhas) |
-| 7 | `.kilo/agents/code-reviewer.md` | C4 | C (compartilhado) | Modificado (+seção coerência) | ✅ Presente |
-| 8 | `.kilo/fird/guidelines-reviewer.md` | C4 | A (docs FIRD) | Criado | ✅ Presente (~329 linhas) |
+| 1 | `F01.kilo/fird/contratos-delegacao.md` | C1 | A (docs FIRD) | Criado | ✅ Presente (547 linhas) |
+| 2 | `F01.kilo/agents/code-orchestrator.md` | C2 | C (compartilhado) | Modificado (+seção matriz) | ✅ Presente |
+| 3 | `F01.kilo/rules/autonomous-execution.md` | C2 | C (compartilhado) | Modificado (allowlist corrigida) | ✅ Presente |
+| 4 | `F01.kilo/fird/guidelines-orchestrator.md` | C2 | A (docs FIRD) | Criado | ✅ Presente (~192 linhas) |
+| 5 | `F01.kilo/agents/code-developer.md` | C3 | C (compartilhado) | Modificado (+seção coerência) | ✅ Presente |
+| 6 | `F01.kilo/fird/guidelines-developer.md` | C3 | A (docs FIRD) | Criado | ✅ Presente (~264 linhas) |
+| 7 | `F01.kilo/agents/code-reviewer.md` | C4 | C (compartilhado) | Modificado (+seção coerência) | ✅ Presente |
+| 8 | `F01.kilo/fird/guidelines-reviewer.md` | C4 | A (docs FIRD) | Criado | ✅ Presente (~329 linhas) |
 
 ### 2.2 Run records (C1–C4)
 
@@ -49,7 +49,7 @@ A Etapa C (FIRD — delegação padronizada entre `code-orchestrator`, `code-dev
 | # | Arquivo | Tipo | Status |
 |---|---|---|---|
 | 9 | `docs/agent_runs/orch-etapa-c-c5-2026-11-04.md` | Criado | ✅ Presente |
-| 10 | `.kilo/fird/avaliacao-integrada.md` | Criado (este documento) | ✅ Presente |
+| 10 | `F01.kilo/fird/avaliacao-integrada.md` | Criado (este documento) | ✅ Presente |
 
 **Total Etapa C:** 8 artefatos primários + 4 run records (C1–C4) + 2 arquivos (C5) = 14 arquivos. A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como inventário preliminar; o inventário final efetivo é o acima, com 8 artefatos primários (4 Grupo A + 4 Grupo C).
 
@@ -81,9 +81,9 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 
 ## 3. Verificação dos 9 elementos de delegação
 
-**Fonte:** `.kilo/fird/contratos-delegacao.md` §2 (Elementos 1–9).
+**Fonte:** `F01.kilo/fird/contratos-delegacao.md` §2 (Elementos 1–9).
 
-**Comando:** `grep -n '### Elemento' .kilo/fird/contratos-delegacao.md`
+**Comando:** `grep -n '### Elemento' F01.kilo/fird/contratos-delegacao.md`
 **Exit code:** 0
 **Saída (resumo):** 9 headings `### Elemento N — <nome>` (linhas 67, 77, 87, 100, 111, 120, 133, 142, 155).
 
@@ -112,17 +112,17 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 
 | Referência (caminho) | Existe? | Observação |
 |---|---|---|
-| `.kilo/fird/contratos-delegacao.md` | ✅ | Fonte única do formato de delegação. |
-| `.kilo/fird/guidelines-orchestrator.md` | ✅ | Criado C2. |
-| `.kilo/fird/guidelines-developer.md` | ✅ | Criado C3. |
-| `.kilo/fird/guidelines-reviewer.md` | ✅ | Criado C4. |
-| `.kilo/agents/code-orchestrator.md` | ✅ | Modificado C2. |
-| `.kilo/agents/code-developer.md` | ✅ | Modificado C3. |
-| `.kilo/agents/code-reviewer.md` | ✅ | Modificado C4. |
-| `.kilo/rules/autonomous-execution.md` | ✅ | Modificado C2. |
-| `.kilo/rules/universal-rules.md` | ✅ | Inalterado (referência). |
-| `.kilo/rules/project-rules.md` | ✅ | Inalterado (referência). |
-| `.kilo/rules/secrets-protection.md` | ✅ | Inalterado (referência). |
+| `F01.kilo/fird/contratos-delegacao.md` | ✅ | Fonte única do formato de delegação. |
+| `F01.kilo/fird/guidelines-orchestrator.md` | ✅ | Criado C2. |
+| `F01.kilo/fird/guidelines-developer.md` | ✅ | Criado C3. |
+| `F01.kilo/fird/guidelines-reviewer.md` | ✅ | Criado C4. |
+| `F01.kilo/agents/code-orchestrator.md` | ✅ | Modificado C2. |
+| `F01.kilo/agents/code-developer.md` | ✅ | Modificado C3. |
+| `F01.kilo/agents/code-reviewer.md` | ✅ | Modificado C4. |
+| `F01.kilo/rules/autonomous-execution.md` | ✅ | Modificado C2. |
+| `F01.kilo/rules/universal-rules.md` | ✅ | Inalterado (referência). |
+| `F01.kilo/rules/project-rules.md` | ✅ | Inalterado (referência). |
+| `F01.kilo/rules/secrets-protection.md` | ✅ | Inalterado (referência). |
 | `docs/agent_runs/orch-etapa-c-2026-11-04.md` | ✅ | Run record C1. |
 | `docs/agent_runs/orch-etapa-c-c2-2026-11-04.md` | ✅ | Run record C2. |
 | `docs/agent_runs/orch-etapa-c-c3-2026-11-04.md` | ✅ | Run record C3. |
@@ -140,14 +140,14 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 
 ## 5. Verificação dos agentes (seções evoluídas)
 
-**Comando:** `grep -n 'RESPONSIBILITY MATRIX\|DELEGATION CONTRACT COHERENCE' .kilo/agents/*.md`
+**Comando:** `grep -n 'RESPONSIBILITY MATRIX\|DELEGATION CONTRACT COHERENCE' F01.kilo/agents/*.md`
 **Exit code:** 0.
 
 | Arquivo | Seção evoluída requerida | Presente? | Linha | Ciclo |
 |---|---|---|---|---|
-| `.kilo/agents/code-orchestrator.md` | "Responsibility Matrix and Delegation Routing (C-REV-014 / C-REV-014A)" | ✅ | 247 | C2 |
-| `.kilo/agents/code-developer.md` | "Delegation Contract Coherence (C-REV-003)" | ✅ | 167 | C3 |
-| `.kilo/agents/code-reviewer.md` | "Delegation Contract Coherence (C-REV-003 / C-REV-014 / C-REV-014A)" | ✅ | 509 | C4 |
+| `F01.kilo/agents/code-orchestrator.md` | "Responsibility Matrix and Delegation Routing (C-REV-014 / C-REV-014A)" | ✅ | 247 | C2 |
+| `F01.kilo/agents/code-developer.md` | "Delegation Contract Coherence (C-REV-003)" | ✅ | 167 | C3 |
+| `F01.kilo/agents/code-reviewer.md` | "Delegation Contract Coherence (C-REV-003 / C-REV-014 / C-REV-014A)" | ✅ | 509 | C4 |
 
 **Frontmatter (permissões) inalterado pelos ciclos C2–C4:** verificado — orchestrator `edit: deny`, `bash: deny`, `task: allow (developer/reviewer)`; developer `edit: allow`, `bash: allow`, `task: deny`; reviewer `edit: deny`, `bash: deny`, `task: deny`. (Apenas seções de corpo foram adicionadas; frontmatter não modificado, conforme run records C2/C3/C4.)
 
@@ -159,11 +159,11 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 
 **Correção (C2, per C-REV-001/C-REV-011):** remover a inconsistência em que `code-orchestrator` aparecia com `bash: allow`. O frontmatter atual do orchestrator tem `bash: deny` (verificado na Seção 5). O texto de `autonomous-execution.md` (linha 29) foi corrigido para refletir que o `task` tool do orchestrator permite apenas `code-developer` e `code-reviewer`, e que `edit`/`bash` são negados.
 
-**Comando:** `sed -n '29p' .kilo/rules/autonomous-execution.md`
+**Comando:** `sed -n '29p' F01.kilo/rules/autonomous-execution.md`
 **Exit code:** 0
-**Saída:** `- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlists differ by agent: the general `code` agent (kilo.jsonc) allows `code-reviewer` and `code-orchestrator`, while the `code-orchestrator` agent (`.kilo/agents/code-orchestrator.md`) allows `code-developer` and `code-reviewer`. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.`
+**Saída:** `- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlists differ by agent: the general `code` agent (kilo.jsonc) allows `code-reviewer` and `code-orchestrator`, while the `code-orchestrator` agent (`F01.kilo/agents/code-orchestrator.md`) allows `code-developer` and `code-reviewer`. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.`
 
-**Comando:** `grep -n '^  bash:' .kilo/agents/code-orchestrator.md`
+**Comando:** `grep -n '^  bash:' F01.kilo/agents/code-orchestrator.md`
 **Exit code:** 0
 **Saída:** `  bash: deny`
 
@@ -175,9 +175,9 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 
 | Arquivo | Existe? | Versão (cabeçalho) | Referencia contrato? | Coerente com agent file? |
 |---|---|---|---|---|
-| `.kilo/fird/guidelines-orchestrator.md` | ✅ | 1.0 (C2) | ✅ `.kilo/fird/contratos-delegacao.md` | ✅ Matriz §5.3 idêntica. |
-| `.kilo/fird/guidelines-developer.md` | ✅ | 1.0 (C3) | ✅ `.kilo/fird/contratos-delegacao.md` | ✅ Matriz §5.3 idêntica. |
-| `.kilo/fird/guidelines-reviewer.md` | ✅ | 1.0 (C4) | ✅ `.kilo/fird/contratos-delegacao.md` | ✅ Matriz §6.3 idêntica. |
+| `F01.kilo/fird/guidelines-orchestrator.md` | ✅ | 1.0 (C2) | ✅ `F01.kilo/fird/contratos-delegacao.md` | ✅ Matriz §5.3 idêntica. |
+| `F01.kilo/fird/guidelines-developer.md` | ✅ | 1.0 (C3) | ✅ `F01.kilo/fird/contratos-delegacao.md` | ✅ Matriz §5.3 idêntica. |
+| `F01.kilo/fird/guidelines-reviewer.md` | ✅ | 1.0 (C4) | ✅ `F01.kilo/fird/contratos-delegacao.md` | ✅ Matriz §6.3 idêntica. |
 
 **Verificação de coerência de conteúdo:** todos os três guidelines (a) referenciam o contrato como fonte única (single source of truth) e não o reproduzem integralmente; (b) incluem seções de planejamento, TDD/revisão, delegação, evidência/limites, tratamento de erros, operações proibidas e gatilho de docupdate; (c) citam as mesmas 4 conclusões de verdicto (`PASS`/`CORRECTIONS_NEEDED`/`INCONCLUSIVE`/`BLOCKED`) e os mesmos limites de tentativas (3 por finding, 10 totais).
 
@@ -195,7 +195,7 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
 | C-REV-014 | Escopo de delegação não fechado; dependências não explicitadas. | C2 (matriz §3, scope boundaries); C4 | `code-orchestrator.md` §"Responsibility Matrix"; `code-reviewer.md` | ✅ Endereçado |
 | C-REV-014A | Critérios de aceite aspiracionais; verdicto sem evidência. | C2, C4 (verdict format, evidence) | `contratos-delegacao.md` §5.2, §6, §7; agent files | ✅ Endereçado |
 | C-REV-015 | Referências a decisões não confirmadas. | C1 (Elemento 7, validação) | `contratos-delegacao.md` §2 Elemento 7; §9; §14 | ✅ Endereçado |
-| C-REV-001 / C-REV-011 | Allowlist inconsistente (orchestrator `bash: allow`). | C2 (autonomous-execution.md linha 29; frontmatter) | `autonomous-execution.md` §"Runtime limits"; `.kilo/agents/code-orchestrator.md` | ✅ Endereçado (corrigido) |
+| C-REV-001 / C-REV-011 | Allowlist inconsistente (orchestrator `bash: allow`). | C2 (autonomous-execution.md linha 29; frontmatter) | `autonomous-execution.md` §"Runtime limits"; `F01.kilo/agents/code-orchestrator.md` | ✅ Endereçado (corrigido) |
 
 **Limitação (registrada em C4):** C-REV-001 e C-REV-011 não possuem registro formal como definição C-REV em documento do repositório; são referenciados como limitação em avaliacao-integrada.md e nos run records C4/C5/CLOSE-02, mas a definição formal existe apenas no run record C2. C-REV-015 é documentado em `contratos-delegacao.md` §14 mas não referenciado nos ciclos C3/C4. Esta avaliação não altera essa situação (fora do escopo C5).
 
@@ -259,11 +259,11 @@ Tabela consolidada de todos os findings de revisão (CR-*) dos ciclos C1–C5, c
 
 ## 9. Resultado do scan de secrets
 
-**Comando:** `bash scripts/scan-secrets.sh docs/agent_runs/orch-etapa-c-c5-2026-11-04.md .kilo/fird/avaliacao-integrada.md`
+**Comando:** `bash scripts/scan-secrets.sh docs/agent_runs/orch-etapa-c-c5-2026-11-04.md F01.kilo/fird/avaliacao-integrada.md`
 **Exit code:** 0
 **Saída:** (clean — nenhum finding; scanner reportou apenas os caminhos dos arquivos, sem valores)
 
-**Verificação adicional (todos os entregáveis Etapa C):** `bash scripts/scan-secrets.sh .kilo/fird/contratos-delegacao.md .kilo/fird/guidelines-orchestrator.md .kilo/fird/guidelines-developer.md .kilo/fird/guidelines-reviewer.md .kilo/fird/avaliacao-integrada.md docs/agent_runs/orch-etapa-c-2026-11-04.md docs/agent_runs/orch-etapa-c-c2-2026-11-04.md docs/agent_runs/orch-etapa-c-c3-2026-11-04.md docs/agent_runs/orch-etapa-c-c4-2026-11-04.md docs/agent_runs/orch-etapa-c-c5-2026-11-04.md .kilo/agents/code-orchestrator.md .kilo/agents/code-developer.md .kilo/agents/code-reviewer.md .kilo/rules/autonomous-execution.md`
+**Verificação adicional (todos os entregáveis Etapa C):** `bash scripts/scan-secrets.sh F01.kilo/fird/contratos-delegacao.md F01.kilo/fird/guidelines-orchestrator.md F01.kilo/fird/guidelines-developer.md F01.kilo/fird/guidelines-reviewer.md F01.kilo/fird/avaliacao-integrada.md docs/agent_runs/orch-etapa-c-2026-11-04.md docs/agent_runs/orch-etapa-c-c2-2026-11-04.md docs/agent_runs/orch-etapa-c-c3-2026-11-04.md docs/agent_runs/orch-etapa-c-c4-2026-11-04.md docs/agent_runs/orch-etapa-c-c5-2026-11-04.md F01.kilo/agents/code-orchestrator.md F01.kilo/agents/code-developer.md F01.kilo/agents/code-reviewer.md F01.kilo/rules/autonomous-execution.md`
 **Exit code:** 0
 **Saída:** (clean)
 
@@ -326,7 +326,7 @@ Registro consolidado das execuções do `scripts/scan-secrets.sh` durante a Etap
 ## 12. Próximos passos
 
 1. **Revisão independente:** solicitar `code-reviewer` para C5-T001 (escopo: os 2 arquivos criados) para validar o veredito `PASS` e a rastreabilidade.
-2. **docupdate pós-PASS:** após verdicto `PASS` do Reviewer, marcar C5 como concluído no run record e atualizar `.kilo/fird/` se necessário.
+2. **docupdate pós-PASS:** após verdicto `PASS` do Reviewer, marcar C5 como concluído no run record e atualizar `F01.kilo/fird/` se necessário.
 3. **Encerramento da Etapa C:** com C1–C5 concluídos, a Etapa C pode ser encerrada. Próximas etapas (se houver) requerem autorização humana explícita (autonomous-execution.md §"Start and scope").
 4. **Formalização de C-REV (opcional, futuro):** se um relatório formal de revisão C-REV for commitado, atualizar referências em `contratos-delegacao.md` §14 (já previsto no contrato).
 5. **Runtime verification (futuro):** se houver autorização humana, validar enforcement real de permissões em runtime (atualmente `NÃO VERIFICADO`).
@@ -335,10 +335,10 @@ Registro consolidado das execuções do `scripts/scan-secrets.sh` durante a Etap
 
 ## Referências
 
-- `.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única).
-- `.kilo/fird/guidelines-orchestrator.md`, `guidelines-developer.md`, `guidelines-reviewer.md`.
-- `.kilo/agents/code-orchestrator.md`, `code-developer.md`, `code-reviewer.md`.
-- `.kilo/rules/autonomous-execution.md`, `universal-rules.md`, `project-rules.md`, `secrets-protection.md`.
+- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única).
+- `F01.kilo/fird/guidelines-orchestrator.md`, `guidelines-developer.md`, `guidelines-reviewer.md`.
+- `F01.kilo/agents/code-orchestrator.md`, `code-developer.md`, `code-reviewer.md`.
+- `F01.kilo/rules/autonomous-execution.md`, `universal-rules.md`, `project-rules.md`, `secrets-protection.md`.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md`, `orch-etapa-c-c2-2026-11-04.md`, `orch-etapa-c-c3-2026-11-04.md`, `orch-etapa-c-c4-2026-11-04.md`, `orch-etapa-c-c5-2026-11-04.md`.
 - Decisão `orchestra_gate_evidence_classification` (runtime `NÃO VERIFICADO`).
 - Decisão `MP-ETAPA-C-07` (fechamento residual da Etapa C).
@@ -364,7 +364,7 @@ Registro consolidado das execuções do `scripts/scan-secrets.sh` durante a Etap
 
 **Limitações preservadas:** runtime enforcement `NÃO VERIFICADO`; C-REV-001/C-REV-011 sem formalização em documento; C-REV-015 não referenciado em C3/C4; sem testes executáveis (tarefa documental).
 
-**Secret scan (CLOSE-02):** executado sobre `.kilo/fird/avaliacao-integrada.md` e `docs/agent_runs/orch-etapa-c-close-02-2026-11-04.md` → exit 0 (clean). Ver run record CLOSE-02.
+**Secret scan (CLOSE-02):** executado sobre `F01.kilo/fird/avaliacao-integrada.md` e `docs/agent_runs/orch-etapa-c-close-02-2026-11-04.md` → exit 0 (clean). Ver run record CLOSE-02.
 
 **Próxima ação:** revisão independente (code-reviewer) da CLOSE-02-T001; após PASS, docupdate e encerramento.
 

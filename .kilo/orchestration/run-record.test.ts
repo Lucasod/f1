@@ -2,7 +2,7 @@
 // - kebab-case for multi-word names (e.g., agent-orchestrator.test.ts, run-record.test.ts, self-correction.test.ts)
 // - single word for single-concept names (e.g., storage.test.ts)
 import { describe, it, expect } from 'vitest';
-import { validateRunRecord, createRunRecord, RunStatus } from '../src/index';
+import { validateRunRecord, createRunRecord, RunStatus } from './index';
 
 describe('Run Record Contract', () => {
   const validBaseRecord = {

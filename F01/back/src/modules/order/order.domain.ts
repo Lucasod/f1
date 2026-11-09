@@ -707,6 +707,9 @@ export class Order {
                statuses.every(s => s === OrderVendorGroupStatus.SHIPPED || s === OrderVendorGroupStatus.DELIVERED)) {
       this.transitionTo(OrderStatus.SHIPPED);
     } else if (statuses.some(s => s === OrderVendorGroupStatus.PREPARING || s === OrderVendorGroupStatus.SHIPPED || s === OrderVendorGroupStatus.DELIVERED)) {
+      if (this.financialStatus !== FinancialStatus.PAID) {
+        throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+      }
       this.transitionTo(OrderStatus.PROCESSING);
     } else if (statuses.every(s => s === OrderVendorGroupStatus.CANCELLED)) {
       this.transitionTo(OrderStatus.CANCELLED);

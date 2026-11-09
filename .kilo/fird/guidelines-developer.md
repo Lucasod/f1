@@ -1,23 +1,23 @@
 # Guidelines — Code Developer (FIRD)
 
-**Documento:** `.kilo/fird/guidelines-developer.md`
+**Documento:** `F01.kilo/fird/guidelines-developer.md`
 **Versão:** 1.0 (Cycle C3 — Etapa C)
 **Status:** Rascunho para revisão (C4). Documentação FIRD — Grupo A.
-**Autoridade:** Orientações operacionais do papel **Developer** (`code-developer`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
+**Autoridade:** Orientações operacionais do papel **Developer** (`code-developer`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `F01.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
 
 **Referências autoritativas:**
-- `.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
-- `.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
-- `.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
-- `.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
-- `.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
-- `.kilo/agents/code-developer.md` — developer: execução escopada, TDD, relatório de evidência.
+- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
+- `F01.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
+- `F01.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
+- `F01.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
+- `F01.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
+- `F01.kilo/agents/code-developer.md` — developer: execução escopada, TDD, relatório de evidência.
 
 ---
 
 ## 1. Propósito e escopo
 
-Este documento fornece orientações práticas para o papel **Developer** (`code-developer`): entendimento de escopo, planejamento, TDD, evidência, revisão independente e tratamento de erros. Complementa (não substitui) o contrato de delegação (`.kilo/fird/contratos-delegacao.md`), o contrato de execução autônoma (`.kilo/rules/autonomous-execution.md`) e o agent file (`.kilo/agents/code-developer.md`).
+Este documento fornece orientações práticas para o papel **Developer** (`code-developer`): entendimento de escopo, planejamento, TDD, evidência, revisão independente e tratamento de erros. Complementa (não substitui) o contrato de delegação (`F01.kilo/fird/contratos-delegacao.md`), o contrato de execução autônoma (`F01.kilo/rules/autonomous-execution.md`) e o agent file (`F01.kilo/agents/code-developer.md`).
 
 **Em escopo (in-scope):**
 - Validação de entrada da delegação (run record, base commit, paths).
@@ -142,7 +142,7 @@ A requisição de revisão (contrato §4) deve conter os mesmos 9 elementos da d
 
 ### 5.1 Uso do contrato de delegação
 
-O Developer recebe delegação no formato §3 do contrato (`.kilo/fird/contratos-delegacao.md`). Deve ecoar o escopo (§2.2 deste documento) e validar entrada (§2.1).
+O Developer recebe delegação no formato §3 do contrato (`F01.kilo/fird/contratos-delegacao.md`). Deve ecoar o escopo (§2.2 deste documento) e validar entrada (§2.1).
 
 **Regras:**
 - O Developer executa somente o escopo delegado.
@@ -158,7 +158,7 @@ Elementos obrigatórios (9): Run ID, Task ID, Scope, Base Reference, Changed Fil
 
 ### 5.3 Matriz de responsabilidade
 
-Ver seção "Responsibility Matrix and Delegation Routing" em `.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
+Ver seção "Responsibility Matrix and Delegation Routing" em `F01.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
 
 | Papel | Agente | Permissões-chave | Função |
 |---|---|---|---|
@@ -170,7 +170,7 @@ Ver seção "Responsibility Matrix and Delegation Routing" em `.kilo/agents/code
 
 ## 6. Evidência e limites
 
-Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit code, resumo da saída, caminhos de arquivo e (quando aplicável) linhas. Nunca inventar resultados. Segredos nunca aparecem em evidência (`.kilo/rules/secrets-protection.md`).
+Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit code, resumo da saída, caminhos de arquivo e (quando aplicável) linhas. Nunca inventar resultados. Segredos nunca aparecem em evidência (`F01.kilo/rules/secrets-protection.md`).
 
 **O que as verificações provam:** apenas o que foi executado e observado no escopo. `PASS` não garante ausência total de defeitos. Verificações de configuração/frontmatter/allowlists não provam enforcement de runtime real (classificar como `NÃO VERIFICADO`).
 
@@ -221,7 +221,7 @@ Toda afirmação de verificação DEVE ser acompanhada de: comando exato, exit c
 
 ## 8. Operações proibidas (resumo)
 
-O Developer NÃO pode, sem autorização explícita (contrato §8.2; `.kilo/agents/code-developer.md` §"DELEGATION CONTRACT COHERENCE" §4):
+O Developer NÃO pode, sem autorização explícita (contrato §8.2; `F01.kilo/agents/code-developer.md` §"DELEGATION CONTRACT COHERENCE" §4):
 
 - Commit, push, merge, rebase, publicação, release.
 - Alterar dados operacionais ou sistemas externos.
@@ -247,14 +247,14 @@ O Developer NÃO pode, sem autorização explícita (contrato §8.2; `.kilo/agen
 
 ## 10. Referências cruzadas
 
-- `.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
-- `.kilo/agents/code-developer.md` — developer (inclui DELEGATION CONTRACT COHERENCE).
-- `.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
-- `.kilo/agents/code-reviewer.md` — reviewer.
-- `.kilo/rules/autonomous-execution.md` — execução autônoma.
-- `.kilo/rules/universal-rules.md` — baseline de engenharia.
-- `.kilo/rules/project-rules.md` — regras do projeto.
-- `.kilo/rules/secrets-protection.md` — proteção de segredos.
+- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
+- `F01.kilo/agents/code-developer.md` — developer (inclui DELEGATION CONTRACT COHERENCE).
+- `F01.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
+- `F01.kilo/agents/code-reviewer.md` — reviewer.
+- `F01.kilo/rules/autonomous-execution.md` — execução autônoma.
+- `F01.kilo/rules/universal-rules.md` — baseline de engenharia.
+- `F01.kilo/rules/project-rules.md` — regras do projeto.
+- `F01.kilo/rules/secrets-protection.md` — proteção de segredos.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md` — run record do Cycle C1.
 - `docs/agent_runs/orch-etapa-c-c2-2026-11-04.md` — run record do Cycle C2.
 - `docs/agent_runs/orch-etapa-c-c3-2026-11-04.md` — run record deste ciclo (C3).

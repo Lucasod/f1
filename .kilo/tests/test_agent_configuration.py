@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-AGENT_DIR = ROOT / ".kilo/agents"
+AGENT_DIR = ROOT / "F01.kilo/agents"
 if not AGENT_DIR.exists():
-    AGENT_DIR = ROOT / ".kilo/agent"
+    AGENT_DIR = ROOT / "F01.kilo/agent"
 
 
 def parse_frontmatter(agent_file: Path) -> dict | None:
@@ -52,20 +52,20 @@ class AgentConfigurationTests(unittest.TestCase):
     def test_kilojsonc_includes_required_rules(self):
         """kilo.jsonc must reference project rules and autonomous execution contract."""
         instructions = self.kilo_config.get("instructions", [])
-        self.assertIn(".kilo/rules/project-rules.md", instructions)
-        self.assertIn(".kilo/rules/autonomous-execution.md", instructions)
+        self.assertIn("F01.kilo/rules/project-rules.md", instructions)
+        self.assertIn("F01.kilo/rules/autonomous-execution.md", instructions)
 
     def test_project_has_only_core_agents(self):
         """The project must keep only the three core agents required for implementation and review."""
         self.assertEqual(set(self.agent_frontmatters), {"code-developer", "code-reviewer", "code-orchestrator"})
         for removed_name in ("docs-specialist", "frontend-specialist", "test-engineer"):
             self.assertNotIn(removed_name, self.agent_frontmatters)
-            self.assertFalse((ROOT / ".kilo/agents" / f"{removed_name}.md").exists())
+            self.assertFalse((ROOT / "F01.kilo/agents" / f"{removed_name}.md").exists())
 
     def test_core_skills_are_removed(self):
         """Specialist skills were consolidated into the core developer and must no longer exist as separate skills."""
-        self.assertFalse((ROOT / ".kilo/skills/frontend-design").exists())
-        self.assertFalse((ROOT / ".kilo/skills/mongodb-schema-design").exists())
+        self.assertFalse((ROOT / "F01.kilo/skills/frontend-design").exists())
+        self.assertFalse((ROOT / "F01.kilo/skills/mongodb-schema-design").exists())
 
     def test_code_agent_delegation_allowlist(self):
         """Primary `code` agent may only delegate to code-reviewer and code-orchestrator."""
@@ -167,7 +167,7 @@ class AgentConfigurationTests(unittest.TestCase):
 
     def test_orchestration_rules_define_bounded_review_and_resume(self):
         """Autonomous execution contract must define key terms."""
-        rules = (ROOT / ".kilo/rules/autonomous-execution.md").read_text()
+        rules = (ROOT / "F01.kilo/rules/autonomous-execution.md").read_text()
         for required_term in (
             "autonomous execution",
             "CORRECTIONS_NEEDED",
@@ -184,16 +184,16 @@ class AgentConfigurationTests(unittest.TestCase):
 
     def test_secrets_protection_rule_exists(self):
         """secrets-protection.md must exist as a mandatory rule file."""
-        self.assertTrue((ROOT / ".kilo/rules/secrets-protection.md").is_file())
+        self.assertTrue((ROOT / "F01.kilo/rules/secrets-protection.md").is_file())
 
     def test_secrets_protection_in_kilo_instructions(self):
         """secrets-protection.md must be listed in kilo.jsonc instructions."""
         instructions = self.kilo_config.get("instructions", [])
-        self.assertIn(".kilo/rules/secrets-protection.md", instructions)
+        self.assertIn("F01.kilo/rules/secrets-protection.md", instructions)
 
     def test_secrets_protection_contains_key_phrases(self):
         """secrets-protection.md must contain mandatory key phrases."""
-        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        content = (ROOT / "F01.kilo/rules/secrets-protection.md").read_text()
         for phrase in ("Never display", "cat .env", "printenv", "precedence", "rotation"):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, content)
@@ -201,13 +201,13 @@ class AgentConfigurationTests(unittest.TestCase):
     def test_rules_reference_secrets_protection(self):
         """universal-rules.md and project-rules.md must reference secrets-protection."""
         for rule_file in ("universal-rules.md", "project-rules.md"):
-            content = (ROOT / ".kilo/rules" / rule_file).read_text()
+            content = (ROOT / "F01.kilo/rules" / rule_file).read_text()
             self.assertIn("secrets-protection.md", content)
 
 
     def test_secrets_protection_section_headings(self):
         """secrets-protection.md must contain the required section headings."""
-        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        content = (ROOT / "F01.kilo/rules/secrets-protection.md").read_text()
         for heading in (
             "Core Prohibitions",
             "Diagnostics",
@@ -221,7 +221,7 @@ class AgentConfigurationTests(unittest.TestCase):
 
     def test_secrets_protection_taxonomy_categories(self):
         """Secret Taxonomy must list the required categories."""
-        content = (ROOT / ".kilo/rules/secrets-protection.md").read_text()
+        content = (ROOT / "F01.kilo/rules/secrets-protection.md").read_text()
         for category in (
             "API keys",
             "Tokens",
@@ -241,14 +241,14 @@ class AgentConfigurationTests(unittest.TestCase):
 
     def test_autonomous_execution_references_secrets_protection(self):
         """autonomous-execution.md must cross-reference secrets-protection.md."""
-        content = (ROOT / ".kilo/rules/autonomous-execution.md").read_text()
+        content = (ROOT / "F01.kilo/rules/autonomous-execution.md").read_text()
         self.assertIn("secrets-protection.md", content)
         self.assertIn("## Secrets Protection", content)
 
     def test_agents_reference_secrets_protection(self):
         """Each core agent must cross-reference secrets-protection.md."""
         for agent in ("code-orchestrator", "code-developer", "code-reviewer"):
-            content = (ROOT / ".kilo/agents" / f"{agent}.md").read_text()
+            content = (ROOT / "F01.kilo/agents" / f"{agent}.md").read_text()
             with self.subTest(agent=agent):
                 self.assertIn("secrets-protection.md", content)
                 self.assertIn("Secrets Protection", content)

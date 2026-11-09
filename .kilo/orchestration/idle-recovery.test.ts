@@ -9,7 +9,7 @@ import {
   type IdleQueueSnapshot,
   type IdleQueueProbe,
   type Clock,
-} from '../src/idle-recovery.js';
+} from './idle-recovery.js';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';

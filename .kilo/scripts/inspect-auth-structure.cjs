@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 let ts;
 try {
-  ts = require('../F01/front/node_modules/typescript');
+  ts = require('../../front/node_modules/typescript');
 } catch {
   if (require.main === module) {
     process.stderr.write('Inspection unavailable; TypeScript dependency could not be loaded.\n');

@@ -8,7 +8,7 @@ import {
   ReferenceType,
   Wallet,
   Transaction,
-} from '../src/wallet.domain.ts';
+} from './wallet.domain.ts';
 
 // -- Wallet contract tests --
 

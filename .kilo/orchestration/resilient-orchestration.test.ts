@@ -19,10 +19,10 @@ import {
   getSchedulableTasks,
   hasReadyIndependent,
   isMissionTerminated,
-} from '../src/resilient-orchestration.js';
-import { SequentialTaskOrchestrator } from '../src/agent-orchestrator.js';
-import { loadCheckpoint } from '../src/continuity-checkpoint.js';
-import { classifyFailure } from '../src/provider-failover.js';
+} from './resilient-orchestration.js';
+import { SequentialTaskOrchestrator } from './agent-orchestrator.js';
+import { loadCheckpoint } from './continuity-checkpoint.js';
+import { classifyFailure } from './provider-failover.js';
 import type {
   AgentDelegationPort,
   BacklogTask,
@@ -30,8 +30,8 @@ import type {
   CodeReviewReport,
   ProviderDestination,
   TaskDelegationRequest,
-} from '../src/types.js';
-import type { TaskEntry } from '../src/task-state.js';
+} from './types.js';
+import type { TaskEntry } from './task-state.js';
 
 function makeTask(overrides: Partial<BacklogTask> = {}): BacklogTask {
   return {

@@ -31,6 +31,7 @@ export function ProductForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -225,6 +226,7 @@ export function ProductForm() {
           setUploadingImages(false);
         }
       }
+      setSuccessMessage('Product saved successfully');
       navigate('/vendor/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error saving product');
@@ -276,6 +278,12 @@ export function ProductForm() {
           dismissible
           className="mb-6"
         />
+      )}
+
+      {successMessage && (
+        <div className="bg-green-50 border-l-4 border-green-500 text-green-900 p-4 rounded mb-6" role="status">
+          <p className="font-medium">{successMessage}</p>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} noValidate className="space-y-6">

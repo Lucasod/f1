@@ -125,16 +125,31 @@ describe('ConsumerProfile', () => {
     renderProfile();
     await screen.findByText('Consumer Example');
 
+    let changePasswordButtons = screen.getAllByRole('button', { name: 'Change Password' });
+
+    // Open the change password modal (first button is outside the modal)
+    fireEvent.click(changePasswordButtons[0]);
+
+    // Fill in the password fields inside the modal
     fireEvent.change(screen.getByLabelText('Current password'), { target: { value: CURRENT_PASSWORD_FIXTURE } });
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: NEW_PASSWORD_FIXTURE } });
     fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: DIFFERENT_PASSWORD_FIXTURE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
+
+    // Click Change Password inside the modal - should show validation error
+    // (second button is inside the modal portal)
+    changePasswordButtons = screen.getAllByRole('button', { name: 'Change Password' });
+    await waitFor(() => expect(changePasswordButtons[1]).toBeInTheDocument());
+    fireEvent.click(changePasswordButtons[1]);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('New passwords do not match');
     expect(authApi.changePassword).not.toHaveBeenCalled();
 
+    // Change confirm password to match
     fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: NEW_PASSWORD_FIXTURE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
+
+// Click Change Password inside the modal - should succeed
+    await waitFor(() => expect(changePasswordButtons[1]).toBeInTheDocument());
+    fireEvent.click(changePasswordButtons[1]);
 
     expect(await screen.findByRole('status')).toHaveTextContent('Password changed successfully.');
     expect(vi.mocked(authApi.changePassword).mock.calls[0]?.[0]).toEqual({

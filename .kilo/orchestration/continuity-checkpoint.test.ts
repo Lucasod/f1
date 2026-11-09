@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { writeCheckpoint, loadCheckpoint, safeToAutoReplay, NON_IDEMPOTENT_OPS, ContinuityCheckpoint } from '../src/index';
+import { writeCheckpoint, loadCheckpoint, safeToAutoReplay, NON_IDEMPOTENT_OPS, ContinuityCheckpoint } from './index';
 import { mkdtemp, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';

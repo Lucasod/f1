@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { transitionTask, canTransition, hasReadyIndependentTasks, isGlobalCompletion, shouldPause, terminationInvariant, TaskState } from '../src/index';
+import { transitionTask, canTransition, hasReadyIndependentTasks, isGlobalCompletion, shouldPause, terminationInvariant, TaskState } from './index';
 
 describe('Task state machine', () => {
   it('valid transitions', () => {
