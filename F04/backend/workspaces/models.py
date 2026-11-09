@@ -1,12 +1,18 @@
 from django.db import models
+from django_multitenant.mixins import TenantModelMixin
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
 
 User = get_user_model()
 
 
-class Workspace(models.Model):
+class Workspace(TenantModelMixin, models.Model):
     """A workspace (company) isolation boundary."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     name = models.CharField("name", max_length=100)
 
@@ -25,8 +31,13 @@ class Workspace(models.Model):
         return self.name
 
 
-class Project(models.Model):
+class Project(TenantModelMixin, models.Model):
     """A project within a workspace, with a unique uppercase key and one initial board."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     KEY_VALIDATOR = RegexValidator(
         regex=r"^[A-Z][A-Z0-9]{1,9}$",
@@ -99,8 +110,13 @@ class Project(models.Model):
         super().save(*args, **kwargs)
 
 
-class Membership(models.Model):
+class Membership(TenantModelMixin, models.Model):
     """User membership in a workspace with a role."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     ROLE_CHOICES = [
         ("owner", "owner"),
@@ -145,8 +161,13 @@ class Membership(models.Model):
         return self.role == "member"
 
 
-class Board(models.Model):
+class Board(TenantModelMixin, models.Model):
     """A board within a project (one-to-one in MVP)."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     project = models.OneToOneField(
         Project,
@@ -178,8 +199,13 @@ class Board(models.Model):
         return self.workflow_statuses.count() >= 20
 
 
-class WorkflowStatus(models.Model):
+class WorkflowStatus(TenantModelMixin, models.Model):
     """A status within a board's workflow, with directed transitions."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     STATUS_CHOICES = [
         ("to_do", "To do"),
@@ -207,8 +233,13 @@ class WorkflowStatus(models.Model):
         return f"{self.board.project.key}-{self.board.name}: {self.name}"
 
 
-class Sprint(models.Model):
+class Sprint(TenantModelMixin, models.Model):
     """A sprint within a project workspace."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     STATUS_CHOICES = [
         ("planned", "Planned"),
@@ -243,8 +274,13 @@ class Sprint(models.Model):
         return f"{self.project.key}-{self.name}"
 
 
-class Issue(models.Model):
+class Issue(TenantModelMixin, models.Model):
     """An issue within a board, with workflow transition support."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
 
     PRIORITY_CHOICES = [
         ("low", "low"),
