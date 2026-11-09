@@ -302,6 +302,217 @@ export async function expectRedirectedToLogin(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
+/**
+ * Backend API base URL. The Vite dev server proxies /api to localhost:3000,
+ * but page.request() does not go through the browser proxy, so we call the
+ * backend directly.
+ */
+export const API_BASE_URL = 'http://localhost:3000';
+
+/**
+ * Extract the access token from localStorage (auth-storage or accessToken key).
+ */
+export async function getAuthToken(page: Page): Promise<string | null> {
+  return await page.evaluate(() => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return null;
+    try {
+      const parsed = JSON.parse(authStorage);
+      return parsed.state?.accessToken ?? parsed.accessToken ?? null;
+    } catch {
+      return null;
+    }
+  });
+}
+
+/**
+ * Make an authenticated API request to the backend.
+ * Automatically injects the Bearer token from localStorage if not provided.
+ */
+export async function apiFetch(
+  page: Page,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  token?: string | null
+): Promise<Response> {
+  const authToken = token ?? (await getAuthToken(page));
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+  // Use method-specific calls with `data` (Playwright auto-serializes JSON
+  // and sets Content-Type) because page.request.fetch with `body` is not
+  // reliably parsed by Express's json() middleware.
+  if (method === 'GET') {
+    return page.request.get(url, { headers });
+  }
+  if (method === 'DELETE') {
+    return page.request.delete(url, { headers });
+  }
+  if (method === 'POST') {
+    return page.request.post(url, { headers, data: body });
+  }
+  if (method === 'PATCH') {
+    return page.request.patch(url, { headers, data: body });
+  }
+  throw new Error(`Unsupported HTTP method: ${method}`);
+}
+
+/**
+ * Add a delivery address for the authenticated user via the backend API.
+ * Returns the created address (with id) or null on failure.
+ */
+export async function addAddress(page: Page, addressData: {
+  street: string;
+  number: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  isPrimary?: boolean;
+}): Promise<{ id: string; street: string; number: string; neighborhood: string; city: string; state: string; isPrimary: boolean } | null> {
+  const response = await apiFetch(page, 'POST', '/api/v1/person/me/addresses', addressData);
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.warn(`Add address failed (${response.status}): ${errorText}`);
+    return null;
+  }
+  const data = await response.json();
+  return data?.person?.addresses?.[0] ?? data?.address ?? null;
+}
+
+/**
+ * Get an order by ID via the backend API.
+ * Returns the order object or null on failure.
+ */
+export async function getOrder(page: Page, orderId: string): Promise<any | null> {
+  const response = await apiFetch(page, 'GET', `/api/v1/orders/${orderId}`);
+  if (!response.ok) {
+    return null;
+  }
+  const data = await response.json();
+  return data?.order ?? null;
+}
+
+/**
+ * Get all orders for the authenticated user via the backend API.
+ * Returns the orders array or null on failure.
+ */
+export async function listOrders(page: Page): Promise<any[] | null> {
+  const response = await apiFetch(page, 'GET', '/api/v1/orders');
+  if (!response.ok) {
+    return null;
+  }
+  const data = await response.json();
+  return data?.orders ?? null;
+}
+
+/**
+ * Attempt to simulate payment confirmation for an order.
+ * Since real Stripe is not available (no STRIPE_SECRET_KEY, no webhook
+ * signature), this tries the available approaches and reports what worked.
+ *
+ * Approaches attempted (in order):
+ * 1. Create a payment record via POST /api/v1/payments (sets PENDING payment)
+ * 2. Query payment state via GET /api/v1/payments/order/:orderId
+ * 3. Attempt webhook POST /api/v1/webhooks/stripe (will fail without signature)
+ *
+ * Returns an object describing which steps succeeded.
+ */
+export interface PaymentSimulationResult {
+  paymentCreated: boolean;
+  paymentStatus?: string;
+  webhookAttempted: boolean;
+  webhookSucceeded: boolean;
+  orderStatus?: string;
+  error?: string;
+}
+
+export async function simulatePayment(
+  page: Page,
+  orderId: string,
+  amount: number
+): Promise<PaymentSimulationResult> {
+  const result: PaymentSimulationResult = {
+    paymentCreated: false,
+    webhookAttempted: false,
+    webhookSucceeded: false,
+  };
+
+  // Step 1: Create a payment record for the order
+  try {
+    const createResp = await apiFetch(page, 'POST', '/api/v1/payments', {
+      orderId,
+      amount,
+      provider: 'stripe',
+    });
+    if (createResp.ok) {
+      const data = await createResp.json();
+      result.paymentCreated = true;
+      result.paymentStatus = data?.payment?.status;
+    } else {
+      const errorText = await createResp.text().catch(() => '');
+      result.error = `Create payment failed (${createResp.status}): ${errorText}`;
+    }
+  } catch (error) {
+    result.error = `Create payment exception: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  // Step 2: Query payment state for the order
+  try {
+    const paymentsResp = await apiFetch(page, 'GET', `/api/v1/payments/order/${orderId}`);
+    if (paymentsResp.ok) {
+      const paymentsData = await paymentsResp.json();
+      const payments = paymentsData?.payments ?? [];
+      if (payments.length > 0) {
+        result.paymentStatus = payments[0].status;
+      }
+    }
+  } catch {
+    // Ignore - payment query is best-effort
+  }
+
+  // Step 3: Attempt webhook (will fail without STRIPE_WEBHOOK_SECRET + signature)
+  try {
+    result.webhookAttempted = true;
+    const webhookResp = await page.request.post(`${API_BASE_URL}/api/v1/webhooks/stripe`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': 't=1234567890,v1=fakesignaturefortesting',
+      },
+      data: {
+        id: 'evt_test_simulated',
+        type: 'checkout.session.completed',
+        data: { object: { id: `cs_test_${orderId}`, payment_status: 'paid' } },
+      },
+    });
+    result.webhookSucceeded = webhookResp.ok();
+    if (!webhookResp.ok()) {
+      // Expected without real Stripe config
+      result.error = (result.error ? result.error + '; ' : '') +
+        `Webhook failed (${webhookResp.status()}): expected without Stripe configured`;
+    }
+  } catch (error) {
+    result.webhookAttempted = true;
+    result.webhookSucceeded = false;
+    result.error = (result.error ? result.error + '; ' : '') +
+      `Webhook exception: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  // Step 4: Check current order status
+  try {
+    const order = await getOrder(page, orderId);
+    if (order) {
+      result.orderStatus = order.status;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return result;
+}
+
 // Extended test type with fixtures
 type AuthFixtures = {
   consumerEmail: string;

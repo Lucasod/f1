@@ -12,7 +12,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 1
 }
 
-SCANNER="$REPO_ROOT/scripts/scan-secrets.sh"
+SCANNER="$REPO_ROOT/.kilo/scripts/scan-secrets.sh"
 if [ ! -x "$SCANNER" ]; then
   # fall back to bash invocation
   if [ ! -f "$SCANNER" ]; then

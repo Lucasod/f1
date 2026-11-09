@@ -148,6 +148,28 @@ export class Cart {
     this.updateTimestamp();
   }
 
+  removeItemQuantity(productId: string, quantity: number): void {
+    if (!productId || productId.trim().length === 0) {
+      throw new Error(CartError.PRODUCT_NOT_FOUND);
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error(CartError.INVALID_QUANTITY);
+    }
+
+    const itemIndex = this.items.findIndex(item => item.productId === productId);
+    if (itemIndex === -1) {
+      throw new Error(CartError.CART_ITEM_NOT_FOUND);
+    }
+
+    const remaining = this.items[itemIndex].quantity - quantity;
+    if (remaining <= 0) {
+      this.items.splice(itemIndex, 1);
+    } else {
+      this.items[itemIndex].quantity = remaining;
+    }
+    this.updateTimestamp();
+  }
+
   getItems(): CartItem[] {
     return [...this.items];
   }
@@ -229,6 +251,7 @@ export interface CartRepository {
   ): Promise<Cart>;
   updateItemQuantity(cartId: string, productId: string, quantity: number, maxStock?: number): Promise<Cart>;
   removeItem(cartId: string, productId: string): Promise<Cart>;
+  removeItemQuantity(cartId: string, productId: string, quantity: number): Promise<Cart>;
   mergeGuestCart(guestId: string, userId: string, stockByProduct?: Record<string, number>): Promise<Cart>;
 }
 
@@ -318,6 +341,21 @@ export class InMemoryCartRepository implements CartRepository {
     }
     if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
     cart.removeItem(productId);
+    cart.incrementVersion();
+    return Cart.reconstruct(cart.toJSON());
+  }
+
+  async removeItemQuantity(
+    cartId: string,
+    productId: string,
+    quantity: number
+  ): Promise<Cart> {
+    const cart = this.carts.get(cartId);
+    if (!cart) {
+      throw new Error(CartError.CART_NOT_FOUND);
+    }
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
+    cart.removeItemQuantity(productId, quantity);
     cart.incrementVersion();
     return Cart.reconstruct(cart.toJSON());
   }

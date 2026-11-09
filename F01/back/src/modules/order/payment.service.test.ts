@@ -701,4 +701,57 @@ describe('Payment Service', () => {
       await expect(svc.failPayment(payment.id)).rejects.toThrow(OrderError.STOCK_ROLLBACK_FAILED);
     });
   });
+
+  describe('repairFailedOrder', () => {
+    it('transitions order to FAILED_PAYMENT and returns true when payment FAILED and order PENDING_PAYMENT', async () => {
+      const payment = await createTestPayment();
+      await paymentService.failPayment(payment.id);
+
+      // Simulate partial failure: order reverted to PENDING_PAYMENT while payment stays FAILED
+      const order = await orderRepo.findById(testOrder.id);
+      order!.transitionTo(OrderStatus.PENDING_PAYMENT);
+      await orderRepo.update(order!);
+
+      const result = await paymentService.repairFailedOrder(payment.id);
+
+      expect(result).toBe(true);
+      const updatedOrder = await orderRepo.findById(testOrder.id);
+      expect(updatedOrder!.status).toBe(OrderStatus.FAILED_PAYMENT);
+    });
+
+    it('returns false when payment is CAPTURED (not failed)', async () => {
+      const payment = await createCapturedPayment();
+
+      const result = await paymentService.repairFailedOrder(payment.id);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('repairCapturedOrder', () => {
+    it('transitions order to PAID and returns true when payment CAPTURED and order PENDING_PAYMENT', async () => {
+      const payment = await createCapturedPayment();
+
+      // Simulate partial failure: order reverted to PENDING_PAYMENT while payment stays CAPTURED
+      const order = await orderRepo.findById(testOrder.id);
+      order!.status = OrderStatus.PENDING_PAYMENT;
+      await orderRepo.update(order!);
+
+      const result = await paymentService.repairCapturedOrder(payment.id);
+
+      expect(result).toBe(true);
+      const updatedOrder = await orderRepo.findById(testOrder.id);
+      expect(updatedOrder!.status).toBe(OrderStatus.PAID);
+    });
+
+    it('returns true when order is already PAID (already desired state)', async () => {
+      const payment = await createCapturedPayment();
+
+      const result = await paymentService.repairCapturedOrder(payment.id);
+
+      expect(result).toBe(true);
+      const updatedOrder = await orderRepo.findById(testOrder.id);
+      expect(updatedOrder!.status).toBe(OrderStatus.PAID);
+    });
+  });
 });

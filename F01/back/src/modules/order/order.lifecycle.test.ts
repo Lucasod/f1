@@ -12,6 +12,8 @@ import {
   Order,
   OrderStatus,
   OrderVendorGroupStatus,
+  FinancialStatus,
+  OrderError,
 } from './order.domain';
 import { OrderService } from './order.service';
 import { createOrderRoutes } from './order.routes';
@@ -323,5 +325,270 @@ describe('Order lifecycle transitions and ownership', () => {
 
     expect(response.body.vendorGroups).toHaveLength(1);
     expect(response.body.vendorGroups[0].vendorId).toBe(vendorId);
+  });
+
+  describe('LC-17: fulfillment chain and payment prerequisite', () => {
+    it('completes full fulfillment chain when order is PAID first (PENDING → CONFIRMED → PREPARING → SHIPPED → DELIVERED)', async () => {
+      // Order must be PAID before vendor groups can advance the order to PROCESSING
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: OrderStatus.PAID })
+        .expect(200);
+
+      // PENDING -> CONFIRMED: OVG confirm does not require payment, order stays PAID
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.CONFIRMED })
+        .expect(200);
+
+      const afterConfirm = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(afterConfirm.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.CONFIRMED);
+      expect(afterConfirm.body.order.status).toBe(OrderStatus.PAID);
+
+      // CONFIRMED -> PREPARING: allowed because order is PAID, order moves to PROCESSING
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.PREPARING })
+        .expect(200);
+
+      const afterPreparing = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(afterPreparing.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.PREPARING);
+      expect(afterPreparing.body.order.status).toBe(OrderStatus.PROCESSING);
+
+      // PREPARING -> SHIPPED: order moves to SHIPPED
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.SHIPPED })
+        .expect(200);
+
+      const afterShipped = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(afterShipped.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.SHIPPED);
+      expect(afterShipped.body.order.status).toBe(OrderStatus.SHIPPED);
+
+      // SHIPPED -> DELIVERED: order moves to DELIVERED
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.DELIVERED })
+        .expect(200);
+
+      const afterDelivered = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(afterDelivered.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.DELIVERED);
+      expect(afterDelivered.body.order.status).toBe(OrderStatus.DELIVERED);
+      expect(afterDelivered.body.order.financialStatus).toBe(FinancialStatus.PAID);
+    });
+
+    it('rejects OVG CONFIRMED -> PREPARING when order is not PAID (409, INVALID_STATUS_TRANSITION)', async () => {
+      // OVG can be confirmed even when the order is not paid
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.CONFIRMED })
+        .expect(200);
+
+      const orderBefore = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(orderBefore.body.order.status).toBe(OrderStatus.PENDING_PAYMENT);
+      expect(orderBefore.body.order.financialStatus).toBe(FinancialStatus.PENDING);
+
+      // Advancing to PREPARING must be rejected: PAID is a prerequisite for PROCESSING
+      const response = await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.PREPARING })
+        .expect(409);
+      expect(response.body.error).toBe(OrderError.INVALID_STATUS_TRANSITION);
+
+      // Order must not advance to PROCESSING
+      const orderAfter = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(orderAfter.body.order.status).toBe(OrderStatus.PENDING_PAYMENT);
+    });
+
+    it('allows OVG CONFIRMED -> PREPARING when order is PAID (200, order -> PROCESSING)', async () => {
+      // Set order to PAID first
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: OrderStatus.PAID })
+        .expect(200);
+
+      // Confirm OVG
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.CONFIRMED })
+        .expect(200);
+
+      // Advance to PREPARING: allowed because order is PAID
+      const response = await request(app)
+        .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.PREPARING })
+        .expect(200);
+      expect(response.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.PREPARING);
+
+      const orderAfter = await request(app)
+        .get(`/api/v1/orders/${orderId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(orderAfter.body.order.status).toBe(OrderStatus.PROCESSING);
+      expect(orderAfter.body.order.financialStatus).toBe(FinancialStatus.PAID);
+    });
+  });
+
+  describe('LC-18: multi-vendor order integrity', () => {
+    const createMultiVendorOrder = async (): Promise<Order> => {
+      const order = Order.create({
+        personId: ownerPersonId,
+        vendorGroups: [
+          {
+            vendorId: vendorId,
+            items: [
+              {
+                productId: 'mv-product-a',
+                productName: 'Product A',
+                vendorId: vendorId,
+                quantity: 1,
+                unitPrice: 10,
+              },
+            ],
+            commissionPct: config.commissionPct,
+          },
+          {
+            vendorId: otherVendorId,
+            items: [
+              {
+                productId: 'mv-product-b',
+                productName: 'Product B',
+                vendorId: otherVendorId,
+                quantity: 1,
+                unitPrice: 20,
+              },
+            ],
+            commissionPct: config.commissionPct,
+          },
+        ],
+        shippingAddress: {
+          id: 'multi-vendor-address',
+          street: 'Multi Vendor Street',
+          number: '1',
+          neighborhood: 'Centro',
+          city: 'São Paulo',
+          state: 'SP',
+          isPrimary: true,
+        },
+      });
+      await orderRepository.save(order);
+      return order;
+    };
+
+    const setOrderPaid = async (orderId: string) => {
+      await request(app)
+        .patch(`/api/v1/orders/${orderId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: OrderStatus.PAID })
+        .expect(200);
+    };
+
+    const deliverOVG = async (orderId: string, vendorGroupId: string, token: string) => {
+      for (const status of [
+        OrderVendorGroupStatus.CONFIRMED,
+        OrderVendorGroupStatus.PREPARING,
+        OrderVendorGroupStatus.SHIPPED,
+        OrderVendorGroupStatus.DELIVERED,
+      ]) {
+        await request(app)
+          .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ status })
+          .expect(200);
+      }
+    };
+
+    const getVendorGroupId = (order: Order, vendorId: string): string =>
+      order.vendorGroups.find((vg) => vg.vendorId === vendorId)!.id;
+
+    it('ensures each vendor only processes their own OVG', async () => {
+      const order = await createMultiVendorOrder();
+      const vendorAGroupId = getVendorGroupId(order, vendorId);
+
+      // Vendor A confirms their own OVG → 200
+      const confirmResponse = await request(app)
+        .patch(`/api/v1/orders/${order.id}/vendor-groups/${vendorAGroupId}/status`)
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({ status: OrderVendorGroupStatus.CONFIRMED })
+        .expect(200);
+      expect(confirmResponse.body.order.vendorGroups[0].status).toBe(OrderVendorGroupStatus.CONFIRMED);
+
+      // Vendor B attempting to confirm vendor A's OVG → 403
+      await request(app)
+        .patch(`/api/v1/orders/${order.id}/vendor-groups/${vendorAGroupId}/status`)
+        .set('Authorization', `Bearer ${otherVendorToken}`)
+        .send({ status: OrderVendorGroupStatus.CONFIRMED })
+        .expect(403);
+    });
+
+    it('treats partially delivered multi-vendor order as not fully delivered', async () => {
+      const order = await createMultiVendorOrder();
+      const vendorAGroupId = getVendorGroupId(order, vendorId);
+      const vendorBGroupId = getVendorGroupId(order, otherVendorId);
+
+      await setOrderPaid(order.id);
+
+      // Vendor A delivers their OVG; vendor B's OVG stays PENDING
+      await deliverOVG(order.id, vendorAGroupId, vendorToken);
+
+      const response = await request(app)
+        .get(`/api/v1/orders/${order.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      expect(response.body.order.status).not.toBe(OrderStatus.DELIVERED);
+      expect(
+        response.body.order.vendorGroups.find((vg) => vg.vendorId === otherVendorId)!.status
+      ).toBe(OrderVendorGroupStatus.PENDING);
+    });
+
+    it('marks order as DELIVERED when all vendor groups are DELIVERED', async () => {
+      const order = await createMultiVendorOrder();
+      const vendorAGroupId = getVendorGroupId(order, vendorId);
+      const vendorBGroupId = getVendorGroupId(order, otherVendorId);
+
+      await setOrderPaid(order.id);
+
+      await deliverOVG(order.id, vendorAGroupId, vendorToken);
+      await deliverOVG(order.id, vendorBGroupId, otherVendorToken);
+
+      const response = await request(app)
+        .get(`/api/v1/orders/${order.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      expect(response.body.order.status).toBe(OrderStatus.DELIVERED);
+      expect(
+        response.body.order.vendorGroups.every((vg) => vg.status === OrderVendorGroupStatus.DELIVERED)
+      ).toBe(true);
+    });
   });
 });

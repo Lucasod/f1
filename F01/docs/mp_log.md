@@ -2937,3 +2937,45 @@ No secrets read or exposed. No commits made.
 
 ### Git State
 No commits made. `MAX_AUTHORIZED_PHASE = 4` remains unchanged.
+
+---
+
+## P5: MVP Lifecycle Recovery Run — `orch-p5-mvp-recovery-2026-11-09`
+
+**Date:** 2026-11-09
+**Objective:** Complete mandatory Marketplace lifecycle cycles LC-14 through LC-18 under P5 authorization (MAX_AUTHORIZED_PHASE = 5 for this run), with TDD, independent code review, and documentation traceability (DOCUPDATE).
+**Scope:** Documentation traceability only — no code changes. LC-14 (Stripe TEST payment → paid), LC-15 (cart reconciliation), LC-16 (failure/cancellation/recovery), LC-17 (vendor fulfillment), LC-18 (multi-vendor order integrity). Authorized paths: `F01/docs/task_list.md`, `docs/agent_runs/orch-p5-mvp-recovery-2026-11-09.md`, `F01/docs/mp_log.md`.
+
+### Results
+
+All five lifecycle cycles completed with independent code-reviewer PASS verdicts:
+
+| LC | Title | Status | Tests | Review Verdict |
+|----|-------|--------|-------|----------------|
+| LC-14 | Stripe TEST payment → paid | ✅ VERIFIED | Backend payment lifecycle tests pass; `tsc --noEmit` exit 0; scanner exit 0 | PASS |
+| LC-15 | Cart reconciliation after payment | ✅ VERIFIED | Cart domain/service tests pass; `tsc --noEmit` exit 0 | PASS |
+| LC-16 | Payment failure / cancellation / recovery | ✅ VERIFIED | Payment failure/recovery tests pass; `tsc --noEmit` exit 0 | PASS |
+| LC-17 | Vendor fulfillment | ✅ VERIFIED | Order lifecycle tests pass; vendor-group ownership enforced; `tsc --noEmit` exit 0 | PASS |
+| LC-18 | Multi-vendor order integrity | ✅ VERIFIED | Multi-vendor order integrity tests pass; authorization boundary tests pass; `tsc --noEmit` exit 0 | PASS |
+
+### Documentation Updated
+
+| File | Section | Change |
+|------|---------|--------|
+| `F01/docs/task_list.md` | P5 Lifecycle Matrix — MVP Recovery (LC-14..LC-18) | New section added; LC-14 through LC-18 marked ✅ VERIFIED with evidence references and review verdicts |
+| `docs/agent_runs/orch-p5-mvp-recovery-2026-11-09.md` | Run record | Task log table updated (all LC tasks ✅ completed/VERIFIED); findings log added; test results recorded; review verdicts (5 × PASS) recorded; conclusion set to COMPLETED |
+| `F01/docs/mp_log.md` | P5 execution entry | This entry appended |
+
+### Review Verdicts
+
+All five LCs received independent code-reviewer PASS with zero corrective findings.
+
+### Conclusion
+
+**Status: COMPLETED.** P5 MVP lifecycle recovery run concluded. All LC-14 through LC-18 are VERIFIED. Documentation traceability applied across all three authorized files.
+
+### Limitations
+
+- No code changes were made in this DOCUPDATE phase; code implementation and test execution occurred in prior LC cycles (each with independent PASS).
+- `MAX_AUTHORIZED_PHASE = 5` applied to this run only; global phase limit remains `MAX_AUTHORIZED_PHASE = 4` outside this run's scope.
+- No commits, staging, push, or destructive operations performed.

@@ -325,6 +325,69 @@ describe('Cart Service', () => {
     });
   });
 
+  describe('removeItemQuantity', () => {
+    const consumerId = 'consumer-1';
+    const productId = 'product-1';
+    const vendorId = 'vendor-1';
+    const price = 100;
+
+    const validProduct = Product.create({
+      vendorId,
+      categoryId: 'category-1',
+      name: 'Test Product',
+      description: 'Test Description',
+      price,
+      quantity: 10,
+      status: ProductStatus.ACTIVE,
+    });
+    validProduct.id = productId;
+
+    const validVendor = Vendor.create({
+      personId: 'person-1',
+      storeName: 'Test Store',
+      slug: 'test-store',
+      commissionPct: 10,
+    });
+    validVendor.id = vendorId;
+
+    it('should reduce item quantity through repository', async () => {
+      const cart = Cart.create(consumerId);
+      cart.addItem(productId, vendorId, 5, price);
+      await cartRepo.save(cart);
+
+      mockProductRepo.findById.mockResolvedValue(validProduct);
+      mockVendorRepo.findById.mockResolvedValue(validVendor);
+
+      const updatedCart = await cartService.removeItemQuantity(consumerId, productId, 2);
+
+      expect(updatedCart.items).toHaveLength(1);
+      expect(updatedCart.getItem(productId)!.quantity).toBe(3);
+      expect(updatedCart.totalItems).toBe(3);
+    });
+
+    it('should remove item entirely when remaining quantity is 0', async () => {
+      const cart = Cart.create(consumerId);
+      cart.addItem(productId, vendorId, 2, price);
+      await cartRepo.save(cart);
+
+      mockProductRepo.findById.mockResolvedValue(validProduct);
+      mockVendorRepo.findById.mockResolvedValue(validVendor);
+
+      const updatedCart = await cartService.removeItemQuantity(consumerId, productId, 2);
+
+      expect(updatedCart.items).toHaveLength(0);
+      expect(updatedCart.isEmpty).toBe(true);
+    });
+
+    it('should throw CART_NOT_FOUND when cart does not exist', async () => {
+      mockProductRepo.findById.mockResolvedValue(validProduct);
+      mockVendorRepo.findById.mockResolvedValue(validVendor);
+
+      await expect(cartService.removeItemQuantity('non-existent-consumer', productId, 1))
+        .rejects.toThrow(CartError.CART_NOT_FOUND);
+    });
+  });
+
   describe('getCart', () => {
     const consumerId = 'consumer-1';
 

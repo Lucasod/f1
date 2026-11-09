@@ -264,6 +264,88 @@ describe('Cart Domain', () => {
       });
     });
 
+    describe('removeItemQuantity', () => {
+      it('should reduce quantity without removing item when remaining > 0', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 5, 29.99);
+
+        cart.removeItemQuantity('prod-1', 2);
+
+        expect(cart.items).toHaveLength(1);
+        expect(cart.items[0].productId).toBe('prod-1');
+        expect(cart.items[0].quantity).toBe(3);
+        expect(cart.totalItems).toBe(3);
+      });
+
+      it('should remove item entirely when remaining quantity is exactly 0', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 2, 29.99);
+
+        cart.removeItemQuantity('prod-1', 2);
+
+        expect(cart.items).toHaveLength(0);
+        expect(cart.isEmpty).toBe(true);
+        expect(cart.totalItems).toBe(0);
+      });
+
+      it('should remove item entirely when removing more than the current quantity', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 2, 29.99);
+
+        cart.removeItemQuantity('prod-1', 5);
+
+        expect(cart.items).toHaveLength(0);
+        expect(cart.isEmpty).toBe(true);
+      });
+
+      it('should preserve other items and post-checkout additions of the same SKU', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 5, 29.99);
+        cart.addItem('prod-2', 'vendor-1', 3, 19.99);
+
+        cart.removeItemQuantity('prod-1', 2);
+
+        expect(cart.items).toHaveLength(2);
+        expect(cart.getItem('prod-1')!.quantity).toBe(3);
+        expect(cart.getItem('prod-2')!.quantity).toBe(3);
+        expect(cart.totalItems).toBe(6);
+      });
+
+      it('should throw on empty productId', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 1, 10);
+
+        expect(() => cart.removeItemQuantity('', 1)).toThrow(CartError.PRODUCT_NOT_FOUND);
+        expect(() => cart.removeItemQuantity('   ', 1)).toThrow(CartError.PRODUCT_NOT_FOUND);
+      });
+
+      it('should throw on invalid quantity (zero, negative, non-integer)', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 1, 10);
+
+        expect(() => cart.removeItemQuantity('prod-1', 0)).toThrow(CartError.INVALID_QUANTITY);
+        expect(() => cart.removeItemQuantity('prod-1', -1)).toThrow(CartError.INVALID_QUANTITY);
+        expect(() => cart.removeItemQuantity('prod-1', 1.5)).toThrow(CartError.INVALID_QUANTITY);
+      });
+
+      it('should throw when item not found', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 1, 10);
+
+        expect(() => cart.removeItemQuantity('prod-999', 1)).toThrow(CartError.CART_ITEM_NOT_FOUND);
+      });
+
+      it('should update timestamp on removeItemQuantity', () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 1, 10);
+        const initialUpdatedAt = cart.updatedAt;
+
+        cart.removeItemQuantity('prod-1', 1);
+
+        expect(cart.updatedAt.getTime()).toBeGreaterThanOrEqual(initialUpdatedAt.getTime());
+      });
+    });
+
     describe('getItems', () => {
       it('should return defensive copy of items', () => {
         const cart = Cart.create('consumer-123');
@@ -541,6 +623,46 @@ describe('Cart Domain', () => {
 
     it('should not throw on delete non-existent cart', async () => {
       await expect(repo.delete('nonexistent')).resolves.not.toThrow();
+    });
+
+    describe('removeItemQuantity', () => {
+      it('should reduce item quantity through repository', async () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 5, 29.99);
+        await repo.save(cart);
+
+        const updated = await repo.removeItemQuantity('consumer-123', 'prod-1', 2);
+
+        expect(updated.items).toHaveLength(1);
+        expect(updated.getItem('prod-1')!.quantity).toBe(3);
+        expect(updated.totalItems).toBe(3);
+      });
+
+      it('should remove item entirely when remaining quantity is 0', async () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 2, 29.99);
+        await repo.save(cart);
+
+        const updated = await repo.removeItemQuantity('consumer-123', 'prod-1', 2);
+
+        expect(updated.items).toHaveLength(0);
+        expect(updated.isEmpty).toBe(true);
+        expect(updated.totalItems).toBe(0);
+      });
+
+      it('should throw CART_NOT_FOUND when cart does not exist', async () => {
+        await expect(repo.removeItemQuantity('nonexistent', 'prod-1', 1))
+          .rejects.toThrow(CartError.CART_NOT_FOUND);
+      });
+
+      it('should throw CART_ITEM_NOT_FOUND when item is not in cart', async () => {
+        const cart = Cart.create('consumer-123');
+        cart.addItem('prod-1', 'vendor-1', 1, 10);
+        await repo.save(cart);
+
+        await expect(repo.removeItemQuantity('consumer-123', 'prod-999', 1))
+          .rejects.toThrow(CartError.CART_ITEM_NOT_FOUND);
+      });
     });
 
     it('should clear all carts', async () => {

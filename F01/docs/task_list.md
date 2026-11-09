@@ -322,6 +322,22 @@ The mission IDs below are traceability labels, not replacements for existing tas
 | MVP-09 | Admin dashboard | T-1104, T-1107 | **PENDING_VALIDATION**; assess existing approved metrics and authorization separately from unresolved Q-003 details; do not treat Q-003 as a blanket blocker. |
 | MVP-10 | Integrated frontend | T-603, T-704, T-705, T-904, T-905, T-906, T-907, T-1005, T-1105, T-1106, T-1107 | **PENDING_VALIDATION**; depends on each underlying API/provider journey. Existing screens or isolated tests alone do not demonstrate complete journeys. |
 
+---
+
+## P5 Lifecycle Matrix — MVP Recovery (LC-14..LC-18)
+
+**Run:** `orch-p5-mvp-recovery-2026-11-09` | **Branch:** `feature/closing-initial-implementation` | **Base:** `aaaf8be000c78efb55b199cdc747ceb4a001cfb9`
+
+| LC | Title | Scope | Status | Evidence / Test Result | Review Verdict |
+|----|-------|-------|--------|------------------------|----------------|
+| LC-14 | Stripe TEST payment → paid | Webhook `checkout.session.completed` → `completeCheckoutPayment` → `capturePayment` → `markCapturedOrderPaid` → order `PAID`; idempotency via `payment.eventId`; `payment_intent.succeeded` handling; no real credentials | ✅ VERIFIED | Stripe webhook handler tests pass; payment service lifecycle tests pass; `tsc --noEmit` exit 0; secrets scanner exit 0 | PASS |
+| LC-15 | Cart reconciliation after payment | `removeItemQuantity` removes only purchased quantity; preserves items added after checkout; guest cart clear/merge post-payment | ✅ VERIFIED | Cart domain/service tests pass; cart reconciliation edge cases covered; `tsc --noEmit` exit 0 | PASS |
+| LC-16 | Payment failure / cancellation / recovery | `failPayment`, `markPaymentFailed`, `repairFailedOrder`, `repairCapturedOrder`, `repairRefundedOrder`; stock rollback compensation; expired/failed webhook handling; cart preserved on failure | ✅ VERIFIED | Payment failure/recovery tests pass; `tsc --noEmit` exit 0 | PASS |
+| LC-17 | Vendor fulfillment | Fulfillment chain PAID→PROCESSING→SHIPPED→DELIVERED; PAID prerequisite for PROCESSING; vendor-group status transitions | ✅ VERIFIED | Order lifecycle tests pass; vendor-group ownership enforcement verified; `tsc --noEmit` exit 0 | PASS |
+| LC-18 | Multi-vendor order integrity | Own Order_Vendor_Group → 200; cross-vendor access → 403; partial vs full delivery distinction; all delivered → ORDER `DELIVERED` | ✅ VERIFIED | Multi-vendor order integrity tests pass; authorization boundary tests pass; `tsc --noEmit` exit 0 | PASS |
+
+**Conclusion:** All five lifecycle cycles (LC-14 through LC-18) completed with independent code-reviewer PASS verdicts. P5 MVP lifecycle recovery run concluded.
+
 ### Next eligible scoped work: T-705 stock ordering (MVP-01)
 
 - **Priority/state:** first candidate, **READY for a scoped audit/fix**, not mission completion. T-702 and T-502 are recorded as completed/covered; CD-013 and FR-PROD-003 define in-stock products before out-of-stock products. S3 and its operational blockers are not prerequisites for this ordering correction.

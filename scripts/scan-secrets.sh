@@ -1,1 +1,0 @@
-/home/workstation/source/f1/.kilo/scripts/scan-secrets.sh

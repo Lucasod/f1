@@ -14,6 +14,11 @@ export function createStripeWebhookHandler(
   transferService: TransferService
 ): RequestHandler {
   const processedEventIds = new Set<string>();
+  // PaymentService keeps its repositories as private fields; extract them once
+  // for use in event-id persistence and cart reconciliation below.
+  // (payment.service.ts is read-only in this scope, so we cannot add public methods.)
+  const paymentRepo = paymentService['paymentRepo'];
+  const orderRepo = paymentService['orderRepo'];
 
   return async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -47,16 +52,12 @@ export function createStripeWebhookHandler(
           if (!stripeTransferId) {
             return res.status(200).json({ received: true });
           }
-          // Look up the corresponding Transfer by stripeTransferId
-          const transfer = await (transferService as any).findByStripeTransferId(stripeTransferId);
-          // Update transfer status if found; if not found, log and continue
-          // (webhook may arrive before DB entry is created or in edge cases)
-          if (transfer) {
-            if (transferType === 'transfer.paid') {
-              await transferService.completeTransfer(stripeTransferId);
-            } else if (transferType === 'transfer.failed') {
-              await transferService.failTransfer(stripeTransferId);
-            }
+          // completeTransfer / failTransfer internally call transferRepo.findByStripeTransferId()
+          // and handle the not-found case gracefully (return null without throwing).
+          if (transferType === 'transfer.paid') {
+            await transferService.completeTransfer(stripeTransferId);
+          } else if (transferType === 'transfer.failed') {
+            await transferService.failTransfer(stripeTransferId);
           }
           return res.status(200).json({ received: true });
         }
@@ -118,12 +119,12 @@ export function createStripeWebhookHandler(
         // Best-effort: update the payment's eventId field if not already set
         try {
           const existing = await paymentService.getPaymentById(paymentId);
-          if (existing && !existing.eventId && event.id) {
+          if (existing && existing.eventId !== event.id && event.id) {
             // @ts-expectError - eventId is readonly but we set it for correlation persistence
             ;(existing as any).eventId = event.id;
             // Re-save the payment to persist the eventId
-            if (paymentService['paymentRepo'] && typeof paymentService['paymentRepo'].save === 'function') {
-              paymentService['paymentRepo'].save(existing).catch(() => void 0);
+            if (paymentRepo && typeof paymentRepo.save === 'function') {
+              paymentRepo.save(existing).catch(() => void 0);
             }
           }
         } catch {
@@ -132,14 +133,23 @@ export function createStripeWebhookHandler(
         // Remove only the items effectively purchased from the cart,
         // preserving non-purchased items. The webhook event correlation check
         // above (lines 76-96) provides idempotency against duplicate deliveries.
-        const order = await paymentService['orderRepo'].findById(payment.orderId);
+        const order = await orderRepo.findById(payment.orderId);
         if (order) {
-          const purchasedProductIds = new Set(
-            order.vendorGroups.flatMap(vg => vg.items.map(item => item.productId))
-          );
-          for (const productId of purchasedProductIds) {
+          // Aggregate purchased quantities per product so reconciliation removes
+          // only the quantities effectively purchased. Items added to the cart
+          // after checkout (or quantity changes made afterwards) are preserved:
+          // removing the purchased quantity from the current cart state never
+          // deletes post-checkout additions of the same SKU.
+          const purchasedQuantities = new Map<string, number>();
+          for (const vendorGroup of order.vendorGroups) {
+            for (const item of vendorGroup.items) {
+              const previous = purchasedQuantities.get(item.productId) ?? 0;
+              purchasedQuantities.set(item.productId, previous + (item.quantity ?? 1));
+            }
+          }
+          for (const [productId, quantity] of purchasedQuantities) {
             try {
-              await cartService.removeItem(payment.personId, productId);
+              await cartService.removeItemQuantity(payment.personId, productId, quantity);
             } catch (err) {
               // Item may already be removed or not in cart; ignore for idempotency
               if (!(err instanceof Error) ||

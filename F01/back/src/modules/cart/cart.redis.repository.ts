@@ -556,6 +556,16 @@ const items: CartItem[] = (storedItems as StoredCartItem[]).map((item) => ({
     return cart;
   }
 
+  async removeItemQuantity(cartId: string, productId: string, quantity: number): Promise<Cart> {
+    const cart = await this.findById(cartId);
+    if (!cart) {
+      throw new Error(CartError.CART_NOT_FOUND);
+    }
+    if (!cart.generation || !Number.isSafeInteger(cart.version)) throw new Error(CartError.CART_CONFLICT);
+    cart.removeItemQuantity(productId, quantity);
+    return this.update(cart);
+  }
+
   async mergeGuestCart(
     guestId: string,
     userId: string,

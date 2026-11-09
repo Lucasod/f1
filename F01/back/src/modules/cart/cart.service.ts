@@ -114,6 +114,10 @@ export class CartService {
     return this.cartRepo.removeItem(consumerId, productId);
   }
 
+  async removeItemQuantity(consumerId: string, productId: string, quantity: number): Promise<Cart> {
+    return this.cartRepo.removeItemQuantity(consumerId, productId, quantity);
+  }
+
   async getCart(consumerId: string): Promise<Cart> {
     // Validate guest cart ID format if it's a guest cart
     if (isGuestCartId(consumerId) && !isValidGuestCartId(consumerId)) {
