@@ -393,4 +393,69 @@ describe('Auth Routes', () => {
       })).resolves.toBeDefined();
     });
   });
+
+  describe('POST /api/v1/auth/logout', () => {
+    let refreshToken: string;
+    let accessToken: string;
+
+    beforeEach(async () => {
+      const registerResponse = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'John Doe',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'john@example.com',
+          password: testValue,
+          role: PersonRole.CONSUMER
+        });
+      accessToken = registerResponse.body.tokens.accessToken;
+      refreshToken = registerResponse.body.tokens.refreshToken;
+    });
+
+    it('should logout and revoke the refresh token (200)', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      expect(response.status).toBe(200);
+
+      // Refresh token should no longer work
+      const refreshResponse = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken });
+      expect(refreshResponse.status).toBe(401);
+      expect(refreshResponse.body.error).toBe('INVALID_TOKEN');
+    });
+
+    it('should return 401 for missing auth token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .send({ refreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 400 for missing refresh token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('MISSING_REFRESH_TOKEN');
+    });
+
+    it('should return 401 for invalid refresh token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken: invalidJwt });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('INVALID_TOKEN');
+    });
+  });
 });

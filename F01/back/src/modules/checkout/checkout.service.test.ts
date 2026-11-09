@@ -6,6 +6,8 @@ import { Vendor, VendorStatus, InMemoryVendorRepository } from '../vendor/vendor
 import { Person, InMemoryPersonRepository, Address } from '../person/person.domain';
 import { Order, OrderStatus, FinancialStatus, Payment, PaymentStatus, OrderError, InMemoryOrderRepository, InMemoryPaymentRepository } from '../order/order.domain';
 import { CartService } from '../cart/cart.service';
+import { CouponService } from '../coupon/coupon.service';
+import { InMemoryCouponRepository, validateTerms } from '../coupon/coupon.domain';
 import { config } from '../../config';
 
 describe('Checkout Service', () => {
@@ -800,5 +802,167 @@ describe('Checkout Service', () => {
       expect(payments).toHaveLength(0);
     });
 
+  describe('previewCheckout with multi-vendor coupons', () => {
+    const vendorId2 = 'vendor-2';
+    const productId2 = 'product-2';
+
+    beforeEach(async () => {
+      const validVendor2 = Vendor.create({
+        personId: 'vendor-person-2',
+        storeName: 'Test Store 2',
+        slug: 'test-store-2',
+        commissionPct: 15,
+      });
+      validVendor2.id = vendorId2;
+      await vendorRepo.save(validVendor2);
+
+      const validProduct2 = Product.create({
+        vendorId: vendorId2,
+        categoryId: 'category-2',
+        name: 'Test Product 2',
+        description: 'Test Description 2',
+        price: 50,
+        quantity: 10,
+        status: ProductStatus.ACTIVE,
+      });
+      validProduct2.id = productId2;
+      await productRepo.save(validProduct2);
+
+      const categoryRepo = {
+        findAll: vi.fn(async () => [{ id: 'category-1', parentId: null }, { id: 'category-2', parentId: null }]),
+      };
+
+      const couponRepo = new InMemoryCouponRepository();
+      const couponProductRepo = {
+        findById: async (id: string) => [validProduct, validProduct2].find(p => p.id === id),
+      };
+      const couponService = new CouponService(
+        couponRepo,
+        vendorRepo as any,
+        couponProductRepo as any,
+        categoryRepo as any,
+        () => new Date('2026-11-08T12:00:00Z')
+      );
+      await couponService.create('vendor-person-1', {
+        code: 'SAVEA', discountType: 'percentBps', value: 1000,
+        startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z',
+      });
+      await couponService.create('vendor-person-2', {
+        code: 'SAVEB', discountType: 'percentBps', value: 1000,
+        startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z',
+      });
+
+      checkoutService = new CheckoutService(
+        orderRepo,
+        paymentRepo,
+        cartRepo,
+        productRepo,
+        vendorRepo,
+        personRepo,
+        cartService,
+        config,
+        { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) },
+        categoryRepo,
+        undefined,
+        couponService
+      );
+    });
+
+    it('should apply one coupon per vendor and compute correct multi-vendor totals', async () => {
+      await cartService.addItem(consumerId, productId, 2); // vendor-1: 2 * 100 = 20000 minor
+      await cartService.addItem(consumerId, productId2, 3); // vendor-2: 3 * 50 = 15000 minor
+
+      const preview = await checkoutService.previewCheckout(consumerId, undefined, [
+        { vendorId: 'vendor-1', code: 'SAVEA' },
+        { vendorId: 'vendor-2', code: 'SAVEB' },
+      ]);
+
+      expect(preview.vendorGroups).toHaveLength(2);
+      expect(preview.grossMinor).toBe(35000);
+      expect(preview.discountMinor).toBe(3500); // 10% of 20000 + 10% of 15000
+      expect(preview.netMinor).toBe(31500);
+      expect(preview.totalAmount).toBe(315);
+      expect(preview.calculationVersion).toBe('coupon-quote-v1');
+      expect(preview.purchasable).toBe(false);
+
+      const vg1 = preview.vendorGroups.find(g => g.id === 'vendor-1')!;
+      expect(vg1.coupon?.code).toBe('SAVEA');
+      expect(vg1.grossMinor).toBe(20000);
+      expect(vg1.eligibleMinor).toBe(20000);
+      expect(vg1.discountMinor).toBe(2000);
+      expect(vg1.netMinor).toBe(18000);
+      expect(vg1.items).toHaveLength(1);
+      expect(vg1.items[0].discountMinor).toBe(2000);
+      expect(vg1.items[0].netMinor).toBe(18000);
+
+      const vg2 = preview.vendorGroups.find(g => g.id === 'vendor-2')!;
+      expect(vg2.coupon?.code).toBe('SAVEB');
+      expect(vg2.grossMinor).toBe(15000);
+      expect(vg2.eligibleMinor).toBe(15000);
+      expect(vg2.discountMinor).toBe(1500);
+      expect(vg2.netMinor).toBe(13500);
+      expect(vg2.items[0].discountMinor).toBe(1500);
+      expect(vg2.items[0].netMinor).toBe(13500);
+    });
+
+    it('should apply a coupon to only one vendor when a single selection is provided', async () => {
+      await cartService.addItem(consumerId, productId, 2);
+      await cartService.addItem(consumerId, productId2, 3);
+
+      const preview = await checkoutService.previewCheckout(consumerId, undefined, [
+        { vendorId: 'vendor-1', code: 'SAVEA' },
+      ]);
+
+      expect(preview.discountMinor).toBe(2000);
+      expect(preview.netMinor).toBe(33000);
+      expect(preview.totalAmount).toBe(330);
+
+      const vg2 = preview.vendorGroups.find(g => g.id === 'vendor-2')!;
+      expect(vg2.coupon).toBeUndefined();
+      expect(vg2.discountMinor).toBe(0);
+      expect(vg2.netMinor).toBe(15000);
+    });
+
+    it('should reject an unknown coupon code', async () => {
+      await cartService.addItem(consumerId, productId, 2);
+      await expect(
+        checkoutService.previewCheckout(consumerId, undefined, [{ vendorId: 'vendor-1', code: 'UNKNOWN' }])
+      ).rejects.toMatchObject({ code: 'INVALID_COUPON' });
+    });
+
+    it('should reject a coupon not active at preview time', async () => {
+      await cartService.addItem(consumerId, productId, 2);
+      const futureClockService = new CouponService(
+        new InMemoryCouponRepository(),
+        vendorRepo as any,
+        { findById: async () => validProduct } as any,
+        { findAll: async () => [{ id: 'category-1', parentId: null }] } as any,
+        () => new Date('2027-01-01T00:00:00Z')
+      );
+      await futureClockService.create('vendor-person-1', {
+        code: 'EXPIRED', discountType: 'percentBps', value: 1000,
+        startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z',
+      });
+      const checkoutExpired = new CheckoutService(
+        orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService, config,
+        { createSession: vi.fn().mockResolvedValue({ id: 's', url: 'u' }) },
+        { findAll: async () => [{ id: 'category-1', parentId: null }] } as any,
+        undefined,
+        futureClockService
+      );
+      await expect(
+        checkoutExpired.previewCheckout(consumerId, undefined, [{ vendorId: 'vendor-1', code: 'EXPIRED' }])
+      ).rejects.toMatchObject({ code: 'COUPON_NOT_ACTIVE' });
+    });
+
+    it('should not create any order or payment during coupon preview', async () => {
+      await cartService.addItem(consumerId, productId, 2);
+      await checkoutService.previewCheckout(consumerId, undefined, [{ vendorId: 'vendor-1', code: 'SAVEA' }]);
+      expect(await orderRepo.findByPersonId(consumerId)).toHaveLength(0);
+      expect(await paymentRepo.findByPersonId(consumerId)).toHaveLength(0);
+      const cart = await cartRepo.findById(consumerId);
+      expect(cart!.isEmpty).toBe(false);
+    });
+  });
   });
 });

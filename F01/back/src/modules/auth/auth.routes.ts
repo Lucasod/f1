@@ -57,8 +57,8 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
             return res.status(409).json({ error: AuthError.EMAIL_ALREADY_EXISTS, message: 'Email already registered' });
           case AuthError.TAX_ID_ALREADY_EXISTS:
             return res.status(409).json({ error: AuthError.TAX_ID_ALREADY_EXISTS, message: 'Tax ID already registered' });
-          case AuthError.WEAK_PASSWORD:
-            return res.status(400).json({ error: AuthError.WEAK_PASSWORD, message: 'Password does not meet requirements' });
+          case AuthError.CREDENTIAL_TOO_WEAK:
+            return res.status(400).json({ error: AuthError.CREDENTIAL_TOO_WEAK, message: 'Password does not meet requirements' });
           case AuthError.INVALID_EMAIL:
             return res.status(400).json({ error: AuthError.INVALID_EMAIL, message: 'Invalid email format' });
           case AuthError.INVALID_TAX_ID:
@@ -115,8 +115,8 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
-          case AuthError.INVALID_TOKEN:
-            return res.status(401).json({ error: AuthError.INVALID_TOKEN, message: 'Invalid refresh token' });
+          case AuthError.INVALID_SESSION:
+            return res.status(401).json({ error: AuthError.INVALID_SESSION, message: 'Invalid refresh token' });
           case AuthError.TOKEN_EXPIRED:
             return res.status(401).json({ error: AuthError.TOKEN_EXPIRED, message: 'Refresh token expired' });
           case AuthError.PERSON_NOT_FOUND:
@@ -144,10 +144,36 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
-          case AuthError.INVALID_CURRENT_PASSWORD:
-            return res.status(400).json({ error: AuthError.INVALID_CURRENT_PASSWORD, message: 'Current password is incorrect' });
-          case AuthError.WEAK_PASSWORD:
-            return res.status(400).json({ error: AuthError.WEAK_PASSWORD, message: 'New password does not meet requirements' });
+          case AuthError.INVALID_CURRENT_CREDENTIAL:
+            return res.status(400).json({ error: AuthError.INVALID_CURRENT_CREDENTIAL, message: 'Current password is incorrect' });
+          case AuthError.CREDENTIAL_TOO_WEAK:
+            return res.status(400).json({ error: AuthError.CREDENTIAL_TOO_WEAK, message: 'New password does not meet requirements' });
+          case AuthError.PERSON_NOT_FOUND:
+            return res.status(404).json({ error: AuthError.PERSON_NOT_FOUND, message: 'User not found' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // POST /api/v1/auth/logout
+  router.post('/logout', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { refreshToken } = req.body as { refreshToken?: string };
+
+      if (!refreshToken) {
+        return res.status(400).json({ error: 'MISSING_REFRESH_TOKEN', message: 'Refresh token is required' });
+      }
+
+      await authService.logout(refreshToken);
+      return res.json({ message: 'LOGGED_OUT' });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case AuthError.INVALID_SESSION:
+            return res.status(401).json({ error: AuthError.INVALID_SESSION, message: 'Invalid refresh token' });
+          case AuthError.TOKEN_EXPIRED:
+            return res.status(401).json({ error: AuthError.TOKEN_EXPIRED, message: 'Refresh token expired' });
           case AuthError.PERSON_NOT_FOUND:
             return res.status(404).json({ error: AuthError.PERSON_NOT_FOUND, message: 'User not found' });
         }

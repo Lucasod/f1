@@ -338,6 +338,22 @@ The mission IDs below are traceability labels, not replacements for existing tas
 
 **Conclusion:** All five lifecycle cycles (LC-14 through LC-18) completed with independent code-reviewer PASS verdicts. P5 MVP lifecycle recovery run concluded.
 
+## Integration States — P5 DOC (2026-11-09)
+
+**Run:** `orch-p5-mvp-recovery-2026-11-09` | **Branch:** `feature/closing-initial-implementation`
+
+State legend:
+- **CONFIGURED:** configuração declarada existente pelo responsável
+- **RUNTIME VERIFIED:** aplicação comprovadamente carrega a configuração
+- **INTEGRATION VERIFIED:** operação real em ambiente de teste aprovada
+- **BLOCKED:** bloqueio demonstrado com evidência técnica
+
+| Integration | State | Evidence | Notes |
+|-------------|-------|----------|-------|
+| Stripe TEST | INTEGRATION VERIFIED | Checkout session created (HTTP 201); webhook → payment CAPTURED + order PAID (AC-1 PASS); idempotency (AC-2 PASS); `payment_intent.succeeded` handling (AC-3 PASS); cart reconciliation (AC-4 PASS); unit tests without credentials (AC-5 PASS: 17/17); Docker backend on port 3000 healthy | Keys updated; webhook + financial flow validation continues |
+| S3 | INTEGRATION VERIFIED | S3StorageAdapter active (AWS_S3_BUCKET=fs01-marketplace-dev-20261105, AWS_REGION=us-east-2); upload HTTP 201; presigned retrieval HTTP 302 to S3; image association to product verified | Existing bucket and region must be reused — no re-creation |
+| AWS | CONFIGURED | Credentials present in Docker container; bucket exists | Existing bucket and region must be reused — no re-creation |
+
 ### Next eligible scoped work: T-705 stock ordering (MVP-01)
 
 - **Priority/state:** first candidate, **READY for a scoped audit/fix**, not mission completion. T-702 and T-502 are recorded as completed/covered; CD-013 and FR-PROD-003 define in-stock products before out-of-stock products. S3 and its operational blockers are not prerequisites for this ordering correction.

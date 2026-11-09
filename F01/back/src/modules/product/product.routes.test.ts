@@ -753,6 +753,192 @@ describe('Product Routes', () => {
     });
   });
 
+  describe('GET /api/v1/products - Catalog sorting, filtering and PDP', () => {
+    let productA: string;
+    let productB: string;
+    let productC: string;
+
+    beforeEach(async () => {
+      const createA = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId,
+          name: 'Alpha Product',
+          description: 'First product',
+          price: 100,
+          quantity: 5,
+          status: ProductStatus.ACTIVE,
+        });
+      productA = createA.body.product.id;
+
+      const createB = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId,
+          name: 'Zeta Product',
+          description: 'Second product',
+          price: 50,
+          quantity: 0,
+          status: ProductStatus.OUT_OF_STOCK,
+        });
+      productB = createB.body.product.id;
+
+      const createC = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId,
+          name: 'Middle Product',
+          description: 'Third product',
+          price: 75,
+          quantity: 12,
+          status: ProductStatus.ACTIVE,
+        });
+      productC = createC.body.product.id;
+    });
+
+    it('should sort products by name ascending', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products?vendorId=${vendor2Id}&sortBy=name`)
+        .expect(200);
+
+      const names = response.body.products
+        .filter((p: any) => p.vendorId === vendor2Id)
+        .map((p: any) => p.name);
+      expect(names).toEqual(['Alpha Product', 'Middle Product', 'Zeta Product']);
+    });
+
+    it('should sort products by price ascending', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products?vendorId=${vendor2Id}&sortBy=price_asc`)
+        .expect(200);
+
+      const prices = response.body.products
+        .filter((p: any) => p.vendorId === vendor2Id)
+        .map((p: any) => p.price);
+      expect(prices).toEqual([50, 75, 100]);
+    });
+
+    it('should sort products by price descending', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products?vendorId=${vendor2Id}&sortBy=price_desc`)
+        .expect(200);
+
+      const prices = response.body.products
+        .filter((p: any) => p.vendorId === vendor2Id)
+        .map((p: any) => p.price);
+      expect(prices).toEqual([100, 75, 50]);
+    });
+
+    it('should sort products by newest first', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products?vendorId=${vendor2Id}&sortBy=newest`)
+        .expect(200);
+
+      const names = response.body.products
+        .filter((p: any) => p.vendorId === vendor2Id)
+        .map((p: any) => p.name);
+      expect(names).toEqual(['Middle Product', 'Zeta Product', 'Alpha Product']);
+    });
+
+    it('should sort products by stock status with in-stock first', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products?vendorId=${vendor2Id}&sortBy=stock_status`)
+        .expect(200);
+
+      const quantities = response.body.products
+        .filter((p: any) => p.vendorId === vendor2Id)
+        .map((p: any) => p.quantity);
+      expect(quantities).toEqual([12, 5, 0]);
+    });
+
+    it('should apply catalog filter showing only active and out_of_stock products', async () => {
+      await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          categoryId,
+          name: 'Inactive Product',
+          description: 'Not for sale',
+          price: 10,
+          quantity: 3,
+          status: ProductStatus.INACTIVE,
+        })
+        .expect(201);
+
+      const response = await request(app)
+        .get('/api/v1/products?catalog=true')
+        .expect(200);
+
+      expect(response.body.products.every((p: any) =>
+        p.status === ProductStatus.ACTIVE || p.status === ProductStatus.OUT_OF_STOCK
+      )).toBe(true);
+      expect(response.body.products.some((p: any) => p.name === 'Inactive Product')).toBe(false);
+    });
+
+    it('should return empty results when no product matches the filter', async () => {
+      const response = await request(app)
+        .get('/api/v1/products?vendorId=nonexistent-vendor-id')
+        .expect(200);
+
+      expect(response.body.products).toEqual([]);
+      expect(response.body.total).toBe(0);
+    });
+
+    it('should include products from descendant categories when filtering by parent category', async () => {
+      const subCategory = await request(app)
+        .post('/api/v1/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Phones',
+          slug: 'phones',
+          parentId: categoryId,
+        });
+      expect(subCategory.status).toBe(201);
+      const subCategoryId = subCategory.body.category.id;
+
+      await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${vendor2Token}`)
+        .send({
+          categoryId: subCategoryId,
+          name: 'Smartphone',
+          description: 'A phone',
+          price: 200,
+          quantity: 5,
+          status: ProductStatus.ACTIVE,
+        })
+        .expect(201);
+
+      const response = await request(app)
+        .get(`/api/v1/products?categoryId=${categoryId}`)
+        .expect(200);
+
+      expect(response.body.products.some((p: any) => p.name === 'Smartphone')).toBe(true);
+    });
+
+    it('PDP should return product details including images', async () => {
+      const response = await request(app)
+        .get(`/api/v1/products/${productA}`)
+        .expect(200);
+
+      expect(response.body.product.id).toBe(productA);
+      expect(response.body.product.name).toBe('Alpha Product');
+      expect(response.body.product.price).toBe(100);
+      expect(Array.isArray(response.body.product.images)).toBe(true);
+    });
+
+    it('should return 404 for PDP of non-existent product', async () => {
+      const response = await request(app)
+        .get('/api/v1/products/non-existent-product-id')
+        .expect(404);
+
+      expect(response.body.error).toBe('PRODUCT_NOT_FOUND');
+    });
+  });
+
   describe('GET /api/v1/products/vendor/me - Get vendor products', () => {
     let productId: string;
 

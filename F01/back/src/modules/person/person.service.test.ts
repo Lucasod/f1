@@ -375,4 +375,86 @@ describe('Person Service', () => {
         .rejects.toThrow(PersonError.EMAIL_REQUIRED);
     });
   });
+
+  describe('Role exclusivity (Person.addRole)', () => {
+    it('should reject adding CONSUMER role to a person with ADMIN role (Admin cannot buy)', async () => {
+      const person = Person.create({
+        name: 'Admin User',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'admin-buy@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.ADMIN);
+      await personRepo.save(person);
+
+      expect(() => person.addRole(PersonRole.CONSUMER)).toThrow('ADMIN_EXCLUSIVE');
+      // Person still has only ADMIN role
+      const persisted = await personRepo.findById(person.id);
+      expect(persisted!.roles).toEqual([PersonRole.ADMIN]);
+    });
+
+    it('should reject adding VENDOR role to a person with ADMIN role (Admin cannot sell)', async () => {
+      const person = Person.create({
+        name: 'Admin User',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'admin-sell@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.ADMIN);
+      await personRepo.save(person);
+
+      expect(() => person.addRole(PersonRole.VENDOR)).toThrow('ADMIN_EXCLUSIVE');
+      // Person still has only ADMIN role
+      const persisted = await personRepo.findById(person.id);
+      expect(persisted!.roles).toEqual([PersonRole.ADMIN]);
+    });
+
+    it('should reject adding ADMIN role to a person with CONSUMER role', async () => {
+      const person = Person.create({
+        name: 'Consumer User',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'consumer-admin@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.CONSUMER);
+      await personRepo.save(person);
+
+      expect(() => person.addRole(PersonRole.ADMIN)).toThrow('ADMIN_EXCLUSIVE');
+      // Person still has only CONSUMER role
+      const persisted = await personRepo.findById(person.id);
+      expect(persisted!.roles).toEqual([PersonRole.CONSUMER]);
+    });
+
+    it('should reject adding ADMIN role to a person with VENDOR role', async () => {
+      const person = Person.create({
+        name: 'Vendor User',
+        mainInfo: { taxIdType: 'CNPJ', taxIdValue: '11222333000181' },
+        contactInfos: [{ type: 'email', value: 'vendor-admin@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.VENDOR);
+      await personRepo.save(person);
+
+      expect(() => person.addRole(PersonRole.ADMIN)).toThrow('ADMIN_EXCLUSIVE');
+      // Person still has only VENDOR role
+      const persisted = await personRepo.findById(person.id);
+      expect(persisted!.roles).toEqual([PersonRole.VENDOR]);
+    });
+
+    it('should allow adding VENDOR role to a person with CONSUMER role (both roles simultaneously)', async () => {
+      const person = Person.create({
+        name: 'Consumer Vendor',
+        mainInfo: { taxIdType: 'CPF', taxIdValue: '52998224725' },
+        contactInfos: [{ type: 'email', value: 'cv@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.CONSUMER);
+      person.addRole(PersonRole.VENDOR);
+
+      expect(person.roles).toEqual([PersonRole.CONSUMER, PersonRole.VENDOR]);
+      await personRepo.save(person);
+      const persisted = await personRepo.findById(person.id);
+      expect(persisted!.roles).toEqual([PersonRole.CONSUMER, PersonRole.VENDOR]);
+    });
+  });
 });

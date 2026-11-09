@@ -124,7 +124,7 @@ export function createStripeWebhookHandler(
             ;(existing as any).eventId = event.id;
             // Re-save the payment to persist the eventId
             if (paymentRepo && typeof paymentRepo.save === 'function') {
-              paymentRepo.save(existing).catch(() => void 0);
+              await paymentRepo.save(existing).catch(() => void 0);
             }
           }
         } catch {

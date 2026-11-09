@@ -388,7 +388,8 @@ export class OrderService {
   async initiateDispute(
     orderItemId: string,
     description: string,
-    requestedBy: 'consumer' | 'vendor'
+    requestedBy: 'consumer' | 'vendor',
+    personId?: string
   ): Promise<Dispute> {
     // Find the order containing this item by searching all orders
     const allOrders = await this.orderRepo.findAll?.() ?? [];
@@ -397,6 +398,12 @@ export class OrderService {
     );
     if (!order) {
       throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    }
+
+    // Verify authorization: consumer can only initiate disputes on their own orders
+    // (enforced when personId is provided; direct service calls bypass this)
+    if (personId !== undefined && order.personId !== personId) {
+      throw new Error(OrderError.ORDER_NOT_FOUND);
     }
 
     // Verify the item is delivered
@@ -408,9 +415,6 @@ export class OrderService {
       throw new Error(OrderError.ORDER_NOT_DELIVERED);
     }
 
-    // Verify authorization: consumer can only initiate disputes on their own orders
-    // This will be checked at the route level, but let's add a basic check here
-
     const dispute = Dispute.create({
       orderItemId,
       description,
@@ -419,26 +423,28 @@ export class OrderService {
       status: DisputeStatus.PENDING,
       createdAt: new Date(),
       resolvedAt: undefined,
-      resolvedBy: 'vendor',
-      resolution: DisputeResolution.REJECTED
     });
 
     // Attach dispute to the order item
     item.dispute = dispute;
 
-    return this.orderRepo.update(order);
+    await this.orderRepo.update(order);
+
+    return dispute;
   }
 
-  async approveDispute(disputeId: string): Promise<Dispute> {
+  async approveDispute(disputeId: string, vendorId: string): Promise<Dispute> {
     const allOrders = await this.orderRepo.findAll?.() ?? [];
     let foundDispute: Dispute | undefined;
     let order: Order | undefined;
+    let item: OrderItem | undefined;
 
     for (const o of allOrders) {
-      const item = o.vendorGroups.flatMap(vg => vg.items).find(i => i.dispute?.id === disputeId);
-      if (item?.dispute) {
-        foundDispute = item.dispute;
+      const foundItem = o.vendorGroups.flatMap(vg => vg.items).find(i => i.dispute?.id === disputeId);
+      if (foundItem?.dispute) {
+        foundDispute = foundItem.dispute;
         order = o;
+        item = foundItem;
         break;
       }
     }
@@ -451,34 +457,33 @@ export class OrderService {
       throw new Error(OrderError.DISPUTE_NOT_PENDING);
     }
 
-    // Vendor approval - verify the vendor is the one related to this order item
-    const vendorId = foundDispute.type; // This is simplified - in reality we'd check vendor
-    // Actually, let me look at the item's vendorId
-    const item = order?.vendorGroups.flatMap(vg => vg.items).find(i => i.dispute?.id === disputeId);
-    if (!item) {
-      throw new Error(OrderError.ORDER_ITEM_NOT_FOUND);
+    // Vendor can only approve disputes on their own order items
+    if (!item || item.vendorId !== vendorId) {
+      throw new Error(OrderError.FORBIDDEN);
     }
 
-    // The item's vendorId should match the dispute's context
-    // For now, we'll allow vendor approval if the dispute is on their item
     foundDispute.approve();
 
     // Trigger commission reversal when dispute is approved
     await this.reverseCommissionForDispute(order!, item.id);
 
-    return this.orderRepo.update(order!);
+    await this.orderRepo.update(order!);
+
+    return foundDispute!;
   }
 
-  async rejectDispute(disputeId: string): Promise<Dispute> {
+  async rejectDispute(disputeId: string, vendorId: string): Promise<Dispute> {
     const allOrders = await this.orderRepo.findAll?.() ?? [];
     let foundDispute: Dispute | undefined;
     let order: Order | undefined;
+    let item: OrderItem | undefined;
 
     for (const o of allOrders) {
-      const item = o.vendorGroups.flatMap(vg => vg.items).find(i => i.dispute?.id === disputeId);
-      if (item?.dispute) {
-        foundDispute = item.dispute;
+      const foundItem = o.vendorGroups.flatMap(vg => vg.items).find(i => i.dispute?.id === disputeId);
+      if (foundItem?.dispute) {
+        foundDispute = foundItem.dispute;
         order = o;
+        item = foundItem;
         break;
       }
     }
@@ -491,9 +496,16 @@ export class OrderService {
       throw new Error(OrderError.DISPUTE_NOT_PENDING);
     }
 
+    // Vendor can only reject disputes on their own order items
+    if (!item || item.vendorId !== vendorId) {
+      throw new Error(OrderError.FORBIDDEN);
+    }
+
     foundDispute.reject();
 
-    return this.orderRepo.update(order!);
+    await this.orderRepo.update(order!);
+
+    return foundDispute!;
   }
 
   async adminMediateDispute(
@@ -531,7 +543,9 @@ export class OrderService {
       }
     }
 
-    return this.orderRepo.update(order!);
+    await this.orderRepo.update(order!);
+
+    return foundDispute!;
   }
 
   private async reverseCommissionForDispute(order: Order, itemId: string): Promise<void> {

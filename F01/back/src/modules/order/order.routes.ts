@@ -5,7 +5,7 @@ import { PersonRepository } from '../person/person.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
-import { Order, OrderVendorGroup, OrderStatus, OrderVendorGroupStatus, OrderError } from './order.domain';
+import { Order, OrderVendorGroup, OrderStatus, OrderVendorGroupStatus, OrderError, DisputeStatus, DisputeResolution, Dispute } from './order.domain';
 
 export interface OrderRoutesConfig {
   authService: AuthService;
@@ -364,6 +364,143 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
     }
   }) as RequestHandler);
 
+  // POST /orders/:orderId/items/:itemId/disputes - Initiate a dispute on a delivered order item
+  // Body: { description: string }
+  // Consumer: can only dispute their own delivered order items
+  router.post('/orders/:orderId/items/:itemId/disputes', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+      const { description } = req.body ?? {};
+      const personId = req.user.sub;
+
+      if (!orderId || orderId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
+      }
+      if (!itemId || itemId.trim().length === 0) {
+        return res.status(400).json({ error: 'ORDER_ITEM_ID_REQUIRED', message: 'Order item ID is required' });
+      }
+      if (!description || typeof description !== 'string' || description.trim().length === 0) {
+        return res.status(400).json({ error: 'INVALID_COMMENT', message: 'Description is required' });
+      }
+
+      const dispute = await orderService.initiateDispute(itemId, description.trim(), 'consumer', personId);
+      return res.status(201).json({ dispute: disputeToResponse(dispute) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.ORDER_NOT_FOUND:
+          case OrderError.ORDER_ITEM_NOT_FOUND:
+            return res.status(404).json({ error: error.message, message: 'Order or order item not found' });
+          case OrderError.ORDER_NOT_DELIVERED:
+            return res.status(422).json({ error: OrderError.ORDER_NOT_DELIVERED, message: 'Order item is not delivered' });
+          case OrderError.FORBIDDEN:
+            return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+          case OrderError.REVIEW_ALREADY_EXISTS:
+          case OrderError.REVIEW_CONFLICT:
+            return res.status(409).json({ error: error.message, message: error.message });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // POST /disputes/:disputeId/approve - Vendor approves a dispute
+  router.post('/disputes/:disputeId/approve', authMw as RequestHandler, requireVendor as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const disputeId = Array.isArray(req.params.disputeId) ? req.params.disputeId[0] : req.params.disputeId;
+      const personId = req.user.sub;
+
+      if (!disputeId || disputeId.trim().length === 0) {
+        return res.status(400).json({ error: 'DISPUTE_ID_REQUIRED', message: 'Dispute ID is required' });
+      }
+
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (!vendor) {
+        return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+      }
+
+      const dispute = await orderService.approveDispute(disputeId, vendor.id);
+      return res.json({ dispute: disputeToResponse(dispute) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.DISPUTE_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.DISPUTE_NOT_FOUND, message: 'Dispute not found' });
+          case OrderError.DISPUTE_NOT_PENDING:
+          case OrderError.DISPUTE_ALREADY_RESOLVED:
+            return res.status(409).json({ error: error.message, message: error.message });
+          case OrderError.FORBIDDEN:
+            return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // POST /disputes/:disputeId/reject - Vendor rejects a dispute
+  router.post('/disputes/:disputeId/reject', authMw as RequestHandler, requireVendor as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const disputeId = Array.isArray(req.params.disputeId) ? req.params.disputeId[0] : req.params.disputeId;
+      const personId = req.user.sub;
+
+      if (!disputeId || disputeId.trim().length === 0) {
+        return res.status(400).json({ error: 'DISPUTE_ID_REQUIRED', message: 'Dispute ID is required' });
+      }
+
+      const vendor = await vendorRepo.findByPersonId(personId);
+      if (!vendor) {
+        return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
+      }
+
+      const dispute = await orderService.rejectDispute(disputeId, vendor.id);
+      return res.json({ dispute: disputeToResponse(dispute) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.DISPUTE_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.DISPUTE_NOT_FOUND, message: 'Dispute not found' });
+          case OrderError.DISPUTE_NOT_PENDING:
+          case OrderError.DISPUTE_ALREADY_RESOLVED:
+            return res.status(409).json({ error: error.message, message: error.message });
+          case OrderError.FORBIDDEN:
+            return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
+  // POST /disputes/:disputeId/admin-mediate - Admin mediates a dispute
+  // Body: { resolution: 'approved' | 'rejected' | 'mediated' }
+  router.post('/disputes/:disputeId/admin-mediate', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const disputeId = Array.isArray(req.params.disputeId) ? req.params.disputeId[0] : req.params.disputeId;
+      const { resolution } = req.body ?? {};
+
+      if (!disputeId || disputeId.trim().length === 0) {
+        return res.status(400).json({ error: 'DISPUTE_ID_REQUIRED', message: 'Dispute ID is required' });
+      }
+      if (!resolution || !Object.values(DisputeResolution).includes(resolution as DisputeResolution)) {
+        return res.status(400).json({ error: 'INVALID_RESOLUTION', message: 'Invalid resolution' });
+      }
+
+      const dispute = await orderService.adminMediateDispute(disputeId, resolution as DisputeResolution);
+      return res.json({ dispute: disputeToResponse(dispute) });
+    } catch (error) {
+      if (error instanceof Error) {
+        switch (error.message) {
+          case OrderError.DISPUTE_NOT_FOUND:
+            return res.status(404).json({ error: OrderError.DISPUTE_NOT_FOUND, message: 'Dispute not found' });
+          case OrderError.DISPUTE_NOT_PENDING:
+          case OrderError.DISPUTE_ALREADY_RESOLVED:
+            return res.status(409).json({ error: error.message, message: error.message });
+        }
+      }
+      next(error);
+    }
+  }) as RequestHandler);
+
   return router;
 }
 
@@ -418,4 +555,20 @@ function vendorGroupToResponse(vg: OrderVendorGroup) {
 
 function vendorGroupsToResponse(vgs: OrderVendorGroup[]) {
   return vgs.map(vendorGroupToResponse);
+}
+
+function disputeToResponse(dispute: Dispute) {
+  return {
+    id: dispute.id,
+    status: dispute.status,
+    type: dispute.type,
+    requestedBy: dispute.requestedBy,
+    orderItemId: dispute.orderItemId,
+    description: dispute.description,
+    resolution: dispute.resolution,
+    resolvedAt: dispute.resolvedAt,
+    resolvedBy: dispute.resolvedBy,
+    createdAt: dispute.createdAt,
+    updatedAt: dispute.updatedAt,
+  };
 }

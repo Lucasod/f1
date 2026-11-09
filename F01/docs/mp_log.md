@@ -2979,3 +2979,36 @@ All five LCs received independent code-reviewer PASS with zero corrective findin
 - No code changes were made in this DOCUPDATE phase; code implementation and test execution occurred in prior LC cycles (each with independent PASS).
 - `MAX_AUTHORIZED_PHASE = 5` applied to this run only; global phase limit remains `MAX_AUTHORIZED_PHASE = 4` outside this run's scope.
 - No commits, staging, push, or destructive operations performed.
+
+---
+
+## MP-P5-DOC: Integration States Documentation (2026-11-09)
+
+**Date:** 2026-11-09
+**Objective:** Record verified integration states for Stripe TEST, S3, and AWS integrations per P5-DOC mission, documenting CONFIGURED/RUNTIME VERIFIED/INTEGRATION VERIFIED/BLOCKED states across project documentation.
+**Scope:** Documentation-only updates across `F01/docs/task_list.md`, `docs/agent_runs/orch-p5-mvp-recovery-2026-11-09.md`, and `F01/docs/mp_log.md`. No code changes. No secret values exposed.
+
+### Results
+
+- **Stripe TEST → INTEGRATION VERIFIED:** Real Stripe TEST checkout session created (HTTP 201); webhook → payment CAPTURED + order PAID (AC-1 PASS); idempotency (AC-2 PASS); `payment_intent.succeeded` handling (AC-3 PASS); cart reconciliation (AC-4 PASS); unit tests without credentials (AC-5 PASS: 17/17); Docker backend on port 3000 healthy. Keys updated; webhook + financial flow validation continues.
+- **S3 → INTEGRATION VERIFIED:** S3StorageAdapter active; upload HTTP 201; presigned retrieval HTTP 302 to S3; image association to product verified. Existing bucket (`fs01-marketplace-dev-20261105`) and region (`us-east-2`) must be reused — no re-creation.
+- **AWS → CONFIGURED:** Credentials present in Docker container; bucket exists. Existing bucket and region must be reused — no re-creation.
+
+### State Legend
+- **CONFIGURED:** configuração declarada existente pelo responsável
+- **RUNTIME VERIFIED:** aplicação comprovadamente carrega a configuração
+- **INTEGRATION VERIFIED:** operação real em ambiente de teste aprovada
+- **BLOCKED:** bloqueio demonstrado com evidência técnica
+
+### Files Modified
+| File | Section | Change |
+|------|---------|--------|
+| `F01/docs/task_list.md` | Integration States — P5 DOC | New section with Stripe/S3/AWS integration states |
+| `docs/agent_runs/orch-p5-mvp-recovery-2026-11-09.md` | Integration States — P5 DOC | New section with Stripe/S3/AWS integration states |
+| `F01/docs/mp_log.md` | P5-DOC entry | This entry appended |
+
+### Secret Safety
+No secret values read, printed, or stored. References use masked notation only (e.g., `rk_test_*`, `whsec_*`).
+
+### Git State
+No commits made. No secret values read.

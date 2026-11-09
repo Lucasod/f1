@@ -102,7 +102,7 @@ describe('Auth Service', () => {
         email: 'john@example.com',
         password: weakValue,
         role: PersonRole.CONSUMER
-      })).rejects.toThrow(AuthError.WEAK_PASSWORD);
+      })).rejects.toThrow(AuthError.CREDENTIAL_TOO_WEAK);
     });
 
     it('should reject registration with invalid email format', async () => {
@@ -222,12 +222,12 @@ describe('Auth Service', () => {
 
     it('should reject an incorrect current password', async () => {
       await expect(authService.changePassword(personId, wrongValue, nextValue))
-        .rejects.toThrow(AuthError.INVALID_CURRENT_PASSWORD);
+        .rejects.toThrow(AuthError.INVALID_CURRENT_CREDENTIAL);
     });
 
     it('should reject a weak new password without changing the existing credential', async () => {
       await expect(authService.changePassword(personId, password, weakValue))
-        .rejects.toThrow(AuthError.WEAK_PASSWORD);
+        .rejects.toThrow(AuthError.CREDENTIAL_TOO_WEAK);
 
       await expect(authService.login({ email: 'john@example.com', password: password }))
         .resolves.toBeDefined();
@@ -256,7 +256,7 @@ describe('Auth Service', () => {
     });
 
     it('should reject invalid refresh token', async () => {
-      await expect(authService.refreshToken(invalidJwt)).rejects.toThrow(AuthError.INVALID_TOKEN);
+      await expect(authService.refreshToken(invalidJwt)).rejects.toThrow(AuthError.INVALID_SESSION);
     });
 
     it('should reject expired refresh token', async () => {
@@ -285,6 +285,56 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('logout', () => {
+    let registerResult: Awaited<ReturnType<typeof authService.register>>;
+
+    beforeEach(async () => {
+      registerResult = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+    });
+
+    it('should revoke a refresh token so it can no longer be used to refresh', async () => {
+      const refreshToken = registerResult.tokens.refreshToken;
+
+      await authService.logout(refreshToken);
+
+      await expect(authService.refreshToken(refreshToken)).rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+
+    it('should reject logout with an invalid refresh token', async () => {
+      await expect(authService.logout(invalidJwt)).rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+
+    it('should not affect other valid refresh tokens', async () => {
+      // Wait to ensure different iat
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      const otherResult = await authService.register({
+        name: 'Jane Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '98765432100',
+        email: 'jane@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+
+      await authService.logout(registerResult.tokens.refreshToken);
+
+      // The other user's token should still work
+      const result = await authService.refreshToken(otherResult.tokens.refreshToken);
+      expect(result.accessToken).toBeDefined();
+
+      // The revoked token should not work
+      await expect(authService.refreshToken(registerResult.tokens.refreshToken))
+        .rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+  });
+
   describe('verifyToken', () => {
     it('should return payload for valid access token', async () => {
       const registerResult = await authService.register({
@@ -306,7 +356,7 @@ describe('Auth Service', () => {
     });
 
     it('should reject invalid token', () => {
-      expect(() => authService.verifyToken(invalidJwt)).toThrow(AuthError.INVALID_TOKEN);
+      expect(() => authService.verifyToken(invalidJwt)).toThrow(AuthError.INVALID_SESSION);
     });
 
     it('should reject expired access token', async () => {
@@ -360,11 +410,11 @@ describe('AuthError', () => {
   it('should have expected error codes', () => {
     expect(AuthError.EMAIL_ALREADY_EXISTS).toBe('EMAIL_ALREADY_EXISTS');
     expect(AuthError.TAX_ID_ALREADY_EXISTS).toBe('TAX_ID_ALREADY_EXISTS');
-    expect(AuthError.WEAK_PASSWORD).toBe('WEAK_PASSWORD');
+    expect(AuthError.CREDENTIAL_TOO_WEAK).toBe('WEAK_PASSWORD');
     expect(AuthError.INVALID_EMAIL).toBe('INVALID_EMAIL');
     expect(AuthError.INVALID_TAX_ID).toBe('INVALID_TAX_ID');
     expect(AuthError.INVALID_CREDENTIALS).toBe('INVALID_CREDENTIALS');
-    expect(AuthError.INVALID_TOKEN).toBe('INVALID_TOKEN');
+    expect(AuthError.INVALID_SESSION).toBe('INVALID_TOKEN');
     expect(AuthError.TOKEN_EXPIRED).toBe('TOKEN_EXPIRED');
     expect(AuthError.PERSON_NOT_FOUND).toBe('PERSON_NOT_FOUND');
   });

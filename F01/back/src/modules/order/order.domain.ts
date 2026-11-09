@@ -126,8 +126,8 @@ export interface DisputeData {
   description: string;
   createdAt?: Date;
   resolvedAt?: Date;
-  resolvedBy: 'vendor' | 'admin';
-  resolution: DisputeResolution;
+  resolvedBy?: 'vendor' | 'admin';
+  resolution?: DisputeResolution;
 }
 
 export interface OrderVendorGroupData {
@@ -298,8 +298,8 @@ export class Dispute {
   public description: string;
   public readonly createdAt: Date;
   public resolvedAt?: Date;
-  public resolvedBy: 'vendor' | 'admin';
-  public resolution: DisputeResolution;
+  public resolvedBy?: 'vendor' | 'admin';
+  public resolution?: DisputeResolution;
 
   private constructor(data: DisputeData) {
     this.id = data.id;
@@ -340,8 +340,8 @@ export class Dispute {
       description: data.description,
       createdAt: now,
       resolvedAt: undefined,
-      resolvedBy: 'vendor',
-      resolution: DisputeResolution.REJECTED
+      resolvedBy: data.resolvedBy ?? undefined,
+      resolution: data.resolution ?? undefined
     });
   }
 

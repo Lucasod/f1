@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { AuthService } from '../auth/auth.service';
 import { InMemoryPersonRepository, Person, PersonRole } from '../person/person.domain';
-import { InMemoryVendorRepository } from '../vendor/vendor.domain';
+import { InMemoryVendorRepository, Vendor } from '../vendor/vendor.domain';
 import { config } from '../../config';
 import { hashPassword } from '../auth/credential.domain';
 import {
@@ -13,10 +13,10 @@ import {
   OrderStatus,
   DisputeStatus,
   DisputeType,
+  DisputeResolution,
 } from './order.domain';
 import { OrderService } from './order.service';
 import { createOrderRoutes } from './order.routes';
-
 describe('Order routes ownership', () => {
   let app: express.Express;
   let ownerToken: string;
@@ -466,11 +466,19 @@ describe('Order dispute route', () => {
   let ownerToken: string;
   let otherConsumerToken: string;
   let adminToken: string;
+  let vendorToken: string;
+  let otherVendorToken: string;
+  let vendorPersonId: string;
+  let otherVendorPersonId: string;
+  let vendorId: string;
+  let otherVendorId: string;
   let deliveredOrderId: string;
   let ownerPersonId: string;
+  let otherConsumerPersonId: string;
   let personRepository: InMemoryPersonRepository;
   let orderRepository: InMemoryOrderRepository;
   let authService: AuthService;
+  let orderService: OrderService;
   const password = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
@@ -508,24 +516,68 @@ describe('Order dispute route', () => {
 
     ownerToken = owner.tokens.accessToken;
     ownerPersonId = owner.person.id;
+    otherConsumerPersonId = otherConsumer.person.id;
     otherConsumerToken = otherConsumer.tokens.accessToken;
     adminToken = (await authService.login({
       email: 'admin@example.com',
       password: password,
     })).tokens.accessToken;
 
+    // Create vendor user (the vendor who owns the vendor group in the order)
+    const vendorPerson = await authService.register({
+      name: 'Test Vendor',
+      taxIdType: 'CNPJ',
+      taxIdValue: '11222333000181',
+      email: 'vendor@example.com',
+      password: password,
+      role: PersonRole.VENDOR,
+    });
+    vendorToken = vendorPerson.tokens.accessToken;
+    vendorPersonId = vendorPerson.person.id;
+
+    // Create another vendor user (used to assert cross-vendor FORBIDDEN)
+    const otherVendorPerson = await authService.register({
+      name: 'Other Vendor',
+      taxIdType: 'CNPJ',
+      taxIdValue: '11222333000343',
+      email: 'other-vendor@example.com',
+      password: password,
+      role: PersonRole.VENDOR,
+    });
+    otherVendorToken = otherVendorPerson.tokens.accessToken;
+    otherVendorPersonId = otherVendorPerson.person.id;
+
     orderRepository = new InMemoryOrderRepository();
     const paymentRepository = new InMemoryPaymentRepository();
     const vendorRepository = new InMemoryVendorRepository();
 
+    // Create vendor profiles
+    const vendor = Vendor.create({
+      personId: vendorPersonId,
+      storeName: 'Test Store',
+      slug: 'test-store',
+      commissionPct: config.commissionPct,
+    });
+    vendorId = vendor.id;
+    await vendorRepository.save(vendor);
+
+    const otherVendor = Vendor.create({
+      personId: otherVendorPersonId,
+      storeName: 'Other Store',
+      slug: 'other-store',
+      commissionPct: config.commissionPct,
+    });
+    otherVendorId = otherVendor.id;
+    await vendorRepository.save(otherVendor);
+
     const deliveredOrder = Order.create({
       personId: owner.person.id,
       vendorGroups: [{
-        vendorId: 'owner-vendor',
+        vendorId: vendorId,
         items: [{
           productId: 'dispute-product',
           productName: 'Dispute Product',
-          vendorId: 'owner-vendor',
+          vendorId: vendorId,
           quantity: 1,
           unitPrice: 100,
         }],
@@ -545,10 +597,13 @@ describe('Order dispute route', () => {
     deliveredOrder.transitionTo(OrderStatus.PROCESSING);
     deliveredOrder.transitionTo(OrderStatus.SHIPPED);
     deliveredOrder.transitionTo(OrderStatus.DELIVERED);
+    // Mark all items as delivered so dispute eligibility checks pass
+    const allItems = deliveredOrder.vendorGroups.flatMap(vg => vg.items);
+    deliveredOrder.markItemsDeliveredByIds(allItems.map(i => i.id), owner.person.id);
     deliveredOrderId = deliveredOrder.id;
     await orderRepository.save(deliveredOrder);
 
-    const orderService = new OrderService(
+    orderService = new OrderService(
       orderRepository,
       paymentRepository,
       personRepository,
@@ -578,7 +633,6 @@ describe('Order dispute route', () => {
   });
 
   it('POST initiate dispute on non-delivered item → 422', async () => {
-    const pendingOrderId = 'pending-order-dispute';
     const pendingOrder = Order.create({
       personId: ownerPersonId,
       vendorGroups: [{
@@ -605,7 +659,7 @@ describe('Order dispute route', () => {
     await orderRepository.save(pendingOrder);
 
     const res = await request(app)
-      .post(`/api/v1/orders/${pendingOrderId}/items/${(await orderRepository.findById(pendingOrderId))?.vendorGroups[0]?.items[0]?.id}/disputes`)
+      .post(`/api/v1/orders/${pendingOrder.id}/items/${pendingOrder.vendorGroups[0]?.items[0]?.id}/disputes`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ description: 'Not delivered yet' })
       .expect(422);
@@ -613,7 +667,6 @@ describe('Order dispute route', () => {
   });
 
   it('POST initiate dispute by non-owner → 404', async () => {
-    const otherOrderId = 'other-order-dispute';
     const otherOrder = Order.create({
       personId: otherConsumerPersonId,
       vendorGroups: [{
@@ -640,7 +693,7 @@ describe('Order dispute route', () => {
     await orderRepository.save(otherOrder);
 
     const res = await request(app)
-      .post(`/api/v1/orders/${otherOrderId}/items/${(await orderRepository.findById(otherOrderId))?.vendorGroups[0]?.items[0]?.id}/disputes`)
+      .post(`/api/v1/orders/${otherOrder.id}/items/${otherOrder.vendorGroups[0]?.items[0]?.id}/disputes`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ description: 'Someone elses dispute' })
       .expect(404);
@@ -659,12 +712,29 @@ describe('Order dispute route', () => {
 
     const res = await request(app)
       .post(`/api/v1/disputes/${disputeId}/approve`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Authorization', `Bearer ${vendorToken}`)
       .expect(200);
     expect(res.body.dispute.status).toBe(DisputeStatus.APPROVED);
     expect(res.body.dispute.resolution).toBe(DisputeResolution.APPROVED);
     expect(res.body.dispute.resolvedAt).toBeDefined();
     expect(res.body.dispute.resolvedBy).toBe('vendor');
+  });
+
+  it('POST approve dispute by another vendor → 403', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item arrived damaged', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    await request(app)
+      .post(`/api/v1/disputes/${disputeId}/approve`)
+      .set('Authorization', `Bearer ${otherVendorToken}`)
+      .expect(403);
   });
 
   it('POST reject dispute by vendor → 200', async () => {
@@ -680,12 +750,29 @@ describe('Order dispute route', () => {
 
     const res = await request(app)
       .post(`/api/v1/disputes/${disputeId}/reject`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Authorization', `Bearer ${vendorToken}`)
       .expect(200);
     expect(res.body.dispute.status).toBe(DisputeStatus.REJECTED);
     expect(res.body.dispute.resolution).toBe(DisputeResolution.REJECTED);
     expect(res.body.dispute.resolvedAt).toBeDefined();
     expect(res.body.dispute.resolvedBy).toBe('vendor');
+  });
+
+  it('POST reject dispute by another vendor → 403', async () => {
+    // First initiate a dispute
+    const order = await orderRepository.findById(deliveredOrderId);
+    const item = order?.vendorGroups[0]?.items[0];
+    await orderService.initiateDispute(item!.id, 'Item wrong product', 'consumer');
+
+    // Find the dispute ID
+    const updatedOrder = await orderRepository.findById(deliveredOrderId);
+    const disputedItem = updatedOrder?.vendorGroups[0]?.items.find((i: any) => i.dispute);
+    const disputeId = disputedItem?.dispute?.id;
+
+    await request(app)
+      .post(`/api/v1/disputes/${disputeId}/reject`)
+      .set('Authorization', `Bearer ${otherVendorToken}`)
+      .expect(403);
   });
 
   it('POST admin mediate dispute → 200', async () => {
@@ -733,5 +820,4 @@ describe('Order dispute route', () => {
     expect(res.body.dispute.resolvedAt).toBeDefined();
     expect(res.body.dispute.resolvedBy).toBe('admin');
   });
-});
 });

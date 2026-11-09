@@ -25,6 +25,7 @@ interface PaymentDoc {
   attemptId?: string;
   acceptedHash?: string;
   acceptedSnapshot?: string;
+  eventId?: string;
 }
 
 export class MongoPaymentRepository implements PaymentRepository {
@@ -52,7 +53,8 @@ export class MongoPaymentRepository implements PaymentRepository {
       refundedAt: payment.refundedAt,
       createdAt: payment.createdAt,
       updatedAt: now,
-      checkoutUrl: payment.checkoutUrl
+      checkoutUrl: payment.checkoutUrl,
+      eventId: payment.eventId
     };
 
     const setDoc: Record<string, any> = {
@@ -73,6 +75,9 @@ export class MongoPaymentRepository implements PaymentRepository {
     }
     if (paymentDoc.checkoutUrl !== undefined) {
       setDoc.checkoutUrl = paymentDoc.checkoutUrl;
+    }
+    if (paymentDoc.eventId !== undefined) {
+      setDoc.eventId = paymentDoc.eventId;
     }
 
     await this.paymentsCollection.updateOne(
@@ -204,7 +209,8 @@ export class MongoPaymentRepository implements PaymentRepository {
       refundedAt: doc.refundedAt,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
-      checkoutUrl: doc.checkoutUrl
+      checkoutUrl: doc.checkoutUrl,
+      eventId: doc.eventId
     };
 
     return Payment.reconstruct(paymentData);

@@ -6,12 +6,12 @@ import { hashPassword, verifyPassword, CredentialError } from '../auth/credentia
 export enum AuthError {
   EMAIL_ALREADY_EXISTS = 'EMAIL_ALREADY_EXISTS',
   TAX_ID_ALREADY_EXISTS = 'TAX_ID_ALREADY_EXISTS',
-  WEAK_PASSWORD = 'WEAK_PASSWORD',
+  CREDENTIAL_TOO_WEAK = 'WEAK_PASSWORD',
   INVALID_EMAIL = 'INVALID_EMAIL',
   INVALID_TAX_ID = 'INVALID_TAX_ID',
   INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
-  INVALID_CURRENT_PASSWORD = 'INVALID_CURRENT_PASSWORD',
-  INVALID_TOKEN = 'INVALID_TOKEN',
+  INVALID_CURRENT_CREDENTIAL = 'INVALID_CURRENT_PASSWORD',
+  INVALID_SESSION = 'INVALID_TOKEN',
   TOKEN_EXPIRED = 'TOKEN_EXPIRED',
   PERSON_NOT_FOUND = 'PERSON_NOT_FOUND'
 }
@@ -64,6 +64,7 @@ export class AuthService {
   private readonly jwtSecret: string;
   private readonly jwtExpiresIn: string;
   private readonly refreshExpiresIn: string;
+  private readonly revokedTokens = new Set<string>();
 
   constructor(repo: PersonRepository, jwtSecret: string, jwtExpiresIn: string, refreshExpiresIn: string = '30d') {
     this.repo = repo;
@@ -101,14 +102,14 @@ export class AuthService {
     }
 
     // Hash password (validates strength internally)
-    let hashedPassword: string;
+    let passwordHash: string;
     try {
-      hashedPassword = await hashPassword(input.password);
+      passwordHash = await hashPassword(input.password);
     } catch (error) {
       if (error instanceof Error && Object.values(CredentialError).includes(error.message as CredentialError)) {
-        throw new Error(AuthError.WEAK_PASSWORD);
+        throw new Error(AuthError.CREDENTIAL_TOO_WEAK);
       }
-      throw new Error(AuthError.WEAK_PASSWORD);
+      throw new Error(AuthError.CREDENTIAL_TOO_WEAK);
     }
 
     // Create person
@@ -120,7 +121,7 @@ export class AuthService {
     });
 
     person.addRole(input.role);
-    person.setCredential(hashedPassword);
+    person.setCredential(passwordHash);
 
     // Save person
     await this.repo.save(person);
@@ -162,24 +163,24 @@ export class AuthService {
     }
 
     if (!person.credential || !(await verifyPassword(currentPassword, person.credential))) {
-      throw new Error(AuthError.INVALID_CURRENT_PASSWORD);
+      throw new Error(AuthError.INVALID_CURRENT_CREDENTIAL);
     }
 
-    let hashedPassword: string;
+    let passwordHash: string;
     try {
-      hashedPassword = await hashPassword(newPassword);
+      passwordHash = await hashPassword(newPassword);
     } catch (error) {
       if (error instanceof Error && Object.values(CredentialError).includes(error.message as CredentialError)) {
-        throw new Error(AuthError.WEAK_PASSWORD);
+        throw new Error(AuthError.CREDENTIAL_TOO_WEAK);
       }
       throw error;
     }
 
-    person.replaceCredential(hashedPassword);
+    person.replaceCredential(passwordHash);
     await this.repo.update(person);
   }
 
-  async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {
+  async logout(refreshToken: string): Promise<void> {
     let payload: JWTPayload;
 
     try {
@@ -188,11 +189,39 @@ export class AuthService {
       if (error instanceof jwt.TokenExpiredError) {
         throw new Error(AuthError.TOKEN_EXPIRED);
       }
-      throw new Error(AuthError.INVALID_TOKEN);
+      throw new Error(AuthError.INVALID_SESSION);
     }
 
     if (payload.type !== 'refresh') {
-      throw new Error(AuthError.INVALID_TOKEN);
+      throw new Error(AuthError.INVALID_SESSION);
+    }
+
+    const person = await this.repo.findById(payload.sub);
+    if (!person) {
+      throw new Error(AuthError.PERSON_NOT_FOUND);
+    }
+
+    this.revokedTokens.add(refreshToken);
+  }
+
+  async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {
+    if (this.revokedTokens.has(refreshToken)) {
+      throw new Error(AuthError.INVALID_SESSION);
+    }
+
+    let payload: JWTPayload;
+
+    try {
+      payload = jwt.verify(refreshToken, this.jwtSecret) as JWTPayload;
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new Error(AuthError.TOKEN_EXPIRED);
+      }
+      throw new Error(AuthError.INVALID_SESSION);
+    }
+
+    if (payload.type !== 'refresh') {
+      throw new Error(AuthError.INVALID_SESSION);
     }
 
     const person = await this.repo.findById(payload.sub);
@@ -210,7 +239,7 @@ export class AuthService {
       if (error instanceof jwt.TokenExpiredError) {
         throw new Error(AuthError.TOKEN_EXPIRED);
       }
-      throw new Error(AuthError.INVALID_TOKEN);
+      throw new Error(AuthError.INVALID_SESSION);
     }
   }
 

@@ -168,4 +168,18 @@ The P5 MVP lifecycle recovery run (`orch-p5-mvp-recovery-2026-11-09`) has comple
 - **Review verdicts:** 5 × PASS
 - **Conclusion:** COMPLETED
 
+## Integration States — P5 DOC (2026-11-09)
+
+State legend:
+- **CONFIGURED:** configuração declarada existente pelo responsável
+- **RUNTIME VERIFIED:** aplicação comprovadamente carrega a configuração
+- **INTEGRATION VERIFIED:** operação real em ambiente de teste aprovada
+- **BLOCKED:** bloqueio demonstrado com evidência técnica
+
+| Integration | State | Evidence | Notes |
+|-------------|-------|----------|-------|
+| Stripe TEST | INTEGRATION VERIFIED | Checkout session created (HTTP 201); webhook → payment CAPTURED + order PAID (AC-1 PASS); idempotency (AC-2 PASS); `payment_intent.succeeded` handling (AC-3 PASS); cart reconciliation (AC-4 PASS); unit tests without credentials (AC-5 PASS: 17/17); Docker backend on port 3000 healthy | Keys updated; webhook + financial flow validation continues |
+| S3 | INTEGRATION VERIFIED | S3StorageAdapter active (AWS_S3_BUCKET=fs01-marketplace-dev-20261105, AWS_REGION=us-east-2); upload HTTP 201; presigned retrieval HTTP 302 to S3; image association to product verified | Existing bucket and region must be reused — no re-creation |
+| AWS | CONFIGURED | Credentials present in Docker container; bucket exists | Existing bucket and region must be reused — no re-creation |
+
 Run record finalized 2026-11-09T16:10:00Z. Documentation traceability (DOCUPDATE) applied to `F01/docs/task_list.md`, `docs/agent_runs/orch-p5-mvp-recovery-2026-11-09.md`, and `F01/docs/mp_log.md`.
