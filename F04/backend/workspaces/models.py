@@ -269,6 +269,7 @@ class Issue(models.Model):
         max_length=10000,
         blank=True,
         default="",
+        null=True,
     )
     status_id = models.ForeignKey(
         WorkflowStatus,

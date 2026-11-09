@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate, login as auth_login, get_user_model
 from django.http import Http404
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import F, Q, Max, Max
 
 from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint
 from .serializers import (
@@ -554,7 +554,7 @@ def create_issue(request, project_id):
 
     # Allocate monotonic issue number (max existing + 1, or 1)
     from django.db.models import Max
-    last_number = Issue.objects.aggregate(models.Max("number"))["number__max"]
+    last_number = Issue.objects.aggregate(Max("number"))["number__max"]
     next_number = (last_number or 0) + 1
 
     # Determine assignee (optional)
@@ -646,6 +646,27 @@ def list_issues(request):
     # Get issues from user's workspace projects
     memberships = user.memberships.select_related("workspace")
     workspaces = [m.workspace for m in memberships]
+
+    # Cross-workspace isolation: if project_id is provided, user must be a member
+    # of the project's workspace
+    project_id = request.query_params.get("project_id", None)
+    if project_id:
+        try:
+            project = Project.objects.get(id=project_id)
+            # Check user has membership in the project's workspace
+            has_membership = Membership.objects.filter(
+                user=user, workspace=project.workspace
+            ).exists()
+            if not has_membership:
+                return Response(
+                    {"error": {"code": "permission_denied", "message": "Cross-workspace access denied. You are not a member of this project's workspace."}},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except Project.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Project not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
     # Build queryset: issues from boards in user's workspaces
     issues = Issue.objects.select_related(

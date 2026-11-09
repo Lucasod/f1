@@ -69,7 +69,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "conf.urls"
+ROOT_URLCONF = "conf.conf.urls"
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [

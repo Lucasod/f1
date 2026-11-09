@@ -23,6 +23,6 @@ urlpatterns = [
     # Issue endpoints
     path("issues/", views.list_issues, name="list_issues"),
     path("issues/<int:issue_id>/", views.issue_detail, name="issue_detail"),
-    path("issues/<int:issue_id>/", views.update_issue, name="update_issue"),
+    path("issues/<int:issue_id>/update/", views.update_issue, name="update_issue"),
     path("issues/<int:issue_id>/transitions/", views.transition_issue, name="transition_issue"),
 ]

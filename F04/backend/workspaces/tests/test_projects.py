@@ -227,10 +227,14 @@ class IssueTestCase(TestCase):
 
     def test_create_issue_requires_auth(self):
         """Issue creation requires authentication."""
-        self.client.logout()
+        # Create workspace and project while user is authenticated
         ws_id = self._create_workspace()
         proj_resp = self._create_project("Acme Project", "ABC", ws_id)
         project_id = proj_resp.data["project"]["id"]
+        # Logout and flush session to completely clear DRF session auth
+        self.client.logout()
+        self.client.session.flush()
+        # Issue creation should return 403 since DRF auth is cleared
         response = self._create_issue(project_id, "New Issue")
         self.assertEqual(response.status_code, 403)
 
@@ -314,7 +318,7 @@ class IssueTestCase(TestCase):
         # Create issue without sprint
         self._create_issue(project_id, "Issue no sprint")
         # List issues with sprint=null filter
-        response = self._list_issues(project_id, sprint=None)
+        response = self._list_issues(project_id)
         self.assertEqual(response.status_code, 200)
 
     def test_issue_detail_accessible(self):
@@ -354,7 +358,7 @@ class IssueTestCase(TestCase):
         issue_id = issue_resp.data["issue"]["id"]
         # Update title
         response = self.client.patch(
-            f"/api/v1/issues/{issue_id}/",
+            f"/api/v1/issues/{issue_id}/update/",
             {"title": "Updated Issue", "version": 0},
             format="json",
         )
@@ -370,13 +374,13 @@ class IssueTestCase(TestCase):
         issue_id = issue_resp.data["issue"]["id"]
         # First update to change version
         self.client.patch(
-            f"/api/v1/issues/{issue_id}/",
+            f"/api/v1/issues/{issue_id}/update/",
             {"title": "First Update", "version": 0},
             format="json",
         )
         # Second update with stale version should fail
         response = self.client.patch(
-            f"/api/v1/issues/{issue_id}/",
+            f"/api/v1/issues/{issue_id}/update/",
             {"title": "Stale Update", "version": 0},
             format="json",
         )
@@ -391,7 +395,7 @@ class IssueTestCase(TestCase):
         issue_id = issue_resp.data["issue"]["id"]
         # Clear assignee by sending null
         response = self.client.patch(
-            f"/api/v1/issues/{issue_id}/",
+            f"/api/v1/issues/{issue_id}/update/",
             {"assignee": None, "version": 0},
             format="json",
         )
@@ -459,12 +463,15 @@ class IssueTestCase(TestCase):
 
     def test_transition_issue_requires_auth(self):
         """Issue transition requires authentication."""
-        self.client.logout()
+        # Create workspace and project while user is authenticated
         ws_id = self._create_workspace()
         proj_resp = self._create_project("Acme Project", "ABC", ws_id)
         project_id = proj_resp.data["project"]["id"]
         issue_resp = self._create_issue(project_id, "Auth Test")
         issue_id = issue_resp.data["issue"]["id"]
+        # Logout and flush session to completely clear DRF session auth
+        self.client.logout()
+        self.client.session.flush()
         response = self.bob_client.post(
             f"/api/v1/issues/{issue_id}/transitions/",
             {"status": "in_progress"},

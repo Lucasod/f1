@@ -170,19 +170,19 @@ class IssueSerializer(serializers.ModelSerializer):
     assignee_username = serializers.ReadOnlyField(source="assignee.username", allow_null=True)
     reporter_username = serializers.ReadOnlyField(source="reporter.username", allow_null=True)
     sprint_name = serializers.ReadOnlyField(source="sprint_id.name", allow_null=True)
-    status_name = serializers.ReadOnlyField(source="status_id.name")
+    status = serializers.ReadOnlyField(source="status_id.name")
 
     class Meta:
         model = Issue
         fields = [
-            "id", "number", "title", "description", "status_name",
+            "id", "number", "title", "description", "status",
             "priority", "assignee_username", "reporter_username",
             "sprint_name", "board_name", "board_key", "version",
             "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "number", "board_name", "board_key",
-            "reporter_username", "status_name",
+            "reporter_username", "status",
             "created_at", "updated_at",
         ]
 
