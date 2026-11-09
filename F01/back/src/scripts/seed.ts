@@ -189,7 +189,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system.',
     price: 9999.00,
     quantity: 50,
-    images: [],
+    images: ['seed/products/tech-iphone-15-pro/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -200,7 +200,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Powerful laptop with M3 Max chip, 16-inch Liquid Retina XDR display.',
     price: 24999.00,
     quantity: 30,
-    images: [],
+    images: ['seed/products/tech-macbook-pro-16/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -211,7 +211,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'iPad Pro with M2 chip, 12.9-inch Liquid Retina XDR display.',
     price: 8999.00,
     quantity: 40,
-    images: [],
+    images: ['seed/products/tech-ipad-pro/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -222,7 +222,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Active noise cancelling wireless earbuds with transparency mode.',
     price: 2499.00,
     quantity: 100,
-    images: [],
+    images: ['seed/products/tech-airpods-pro/main.webp'],
   },
   // Fashion Hub products
   {
@@ -234,7 +234,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: '100% cotton classic fit t-shirt, available in multiple colors.',
     price: 79.90,
     quantity: 200,
-    images: [],
+    images: ['seed/products/fashion-classic-tshirt/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -245,7 +245,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Premium denim jeans with modern fit and stretch comfort.',
     price: 199.90,
     quantity: 150,
-    images: [],
+    images: ['seed/products/fashion-denim-jeans/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -256,7 +256,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Light and flowy summer dress, perfect for warm days.',
     price: 149.90,
     quantity: 120,
-    images: [],
+    images: ['seed/products/fashion-summer-dress/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -267,7 +267,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Genuine leather jacket with classic biker style.',
     price: 899.90,
     quantity: 40,
-    images: [],
+    images: ['seed/products/fashion-leather-jacket/main.webp'],
   },
   // Book World products
   {
@@ -279,7 +279,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'A Handbook of Agile Software Craftsmanship by Robert C. Martin.',
     price: 129.90,
     quantity: 80,
-    images: [],
+    images: ['seed/products/book-clean-code/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -290,7 +290,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Elements of Reusable Object-Oriented Software by Gang of Four.',
     price: 149.90,
     quantity: 70,
-    images: [],
+    images: ['seed/products/book-design-patterns/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -301,7 +301,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Your Journey to Mastery by Andrew Hunt and David Thomas.',
     price: 119.90,
     quantity: 90,
-    images: [],
+    images: ['seed/products/book-pragmatic-programmer/main.webp'],
   },
   {
     id: generateDeterministicHashId('prod'),
@@ -312,7 +312,7 @@ const PRODUCTS: ProductSeedData[] = [
     description: 'Tackling Complexity in the Heart of Software by Eric Evans.',
     price: 159.90,
     quantity: 60,
-    images: [],
+    images: ['seed/products/book-domain-driven-design/main.webp'],
   },
 ];
 
