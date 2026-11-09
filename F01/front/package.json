@@ -9,7 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "node /home/workstation/source/f1/F01/back/scripts/reset-database.cjs && playwright test",
+    "test:e2e": "cd /home/workstation/source/f1/F01/back && npx tsx scripts/seed.ts && cd /home/workstation/source/f1/F01/front && playwright test",
   "test": "npm run test:e2e"
   },
   "dependencies": {

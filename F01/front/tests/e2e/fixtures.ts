@@ -262,12 +262,21 @@ export async function getUserRole(page: Page): Promise<string | null> {
  * Clear all auth data (logout)
  */
 export async function clearAuth(page: Page) {
-  // Reload the current page to clear auth data from localStorage/sessionStorage
-  // within the same browser context. Using page.goto('/') was avoided because
-  // it can close the browser context or cause context loss.
+  // Navigate to a real origin first if on about:blank, since page.reload()
+  // on about:blank keeps a null-origin page where localStorage access is denied
+  // with a SecurityError.
+  if (page.url() === 'about:blank') {
+    await page.goto('/');
+  }
+  // page.reload() alone does not clear localStorage, so authenticated state
+  // (auth-storage / accessToken) would persist across reloads. Remove it
+  // explicitly so the page starts unauthenticated.
+  await page.evaluate(() => {
+    localStorage.removeItem('auth-storage');
+    localStorage.removeItem('accessToken');
+  });
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
-  // Auth data should be cleared after reload since the page starts fresh
 }
 
 /**

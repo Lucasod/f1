@@ -32,14 +32,17 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
     await gotoAndWait(page, '/products');
     await page.waitForLoadState('networkidle');
     
-    // Wait for products to load (wait for either products appear or "No products found" message)
-    await page.waitForSelector('[role="list"] [role="article"]', { timeout: 10000 });
-    
-    // Check if products exist
+    // Check if no products are available (empty state)
+    // Must be done before waiting for product articles, since the selector
+    // times out when the catalog shows the "No products found" state
     const noProducts = await page.locator('text=No products found').isVisible().catch(() => false);
     if (noProducts) {
       return null;
     }
+    
+    // Wait for products to load - at this point the empty state check has already
+    // determined products exist, so the selector should appear within the timeout
+    await page.waitForSelector('[role="list"] [role="article"]', { timeout: 10000 });
     
     // Get the first product link
     const firstProductLink = page.locator('[role="list"] [role="article"] a').first();
@@ -84,8 +87,10 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
     await gotoAndWait(page, '/cart');
     await page.waitForLoadState('networkidle');
     
-    // Wait for cart to load
-    await page.waitForSelector('text=Shopping Cart, text=Carrinho de Compras, text=Your cart is empty, text=Seu carrinho está vazio', { timeout: 10000 });
+    // Wait for cart to load. The cart page renders <h1>Shopping cart</h1>
+    // (CartPage.tsx line 277) when items exist, or EmptyState with
+    // "Your cart is empty" when empty.
+    await page.waitForSelector('text=Shopping cart', { timeout: 10000 });
     
     // Check if cart is empty
     const emptyText = await page.locator('text=Your cart is empty, text=Seu carrinho está vazio').isVisible().catch(() => false);
@@ -349,6 +354,15 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
     // Get two different products
     await gotoAndWait(page, '/products');
     await page.waitForLoadState('networkidle');
+    
+    // Check if no products are available (empty state) - must wait before the selector below,
+    // since waitForSelector times out when the catalog shows "No products found"
+    const noProducts = await page.locator('text=No products found').isVisible().catch(() => false);
+    if (noProducts) {
+      test.skip(true, 'No products available in catalog');
+      return;
+    }
+    
     await page.waitForSelector('[role="list"] [role="article"] a', { timeout: 10000 });
     
     const productLinks = page.locator('[role="list"] [role="article"] a');
