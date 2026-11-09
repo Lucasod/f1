@@ -95,6 +95,7 @@ function getNextVendorGroupStatuses(currentStatus: OrderVendorGroupStatus): Orde
 
 interface VendorGroupCardProps {
   vendorGroup: OrderVendorGroup;
+  financialStatus: string | undefined;
   onUpdateStatus: (ovgId: string, status: OrderVendorGroupStatus) => void;
   isUpdating: boolean;
   onViewDetails: (orderId: string) => void;
@@ -102,6 +103,7 @@ interface VendorGroupCardProps {
 
 function VendorGroupCard({
   vendorGroup,
+  financialStatus,
   onUpdateStatus,
   isUpdating,
   onViewDetails,
@@ -109,6 +111,7 @@ function VendorGroupCard({
   const statusConfig = getVendorGroupStatusConfig(vendorGroup.status);
   const availableNextStatuses = getNextVendorGroupStatuses(vendorGroup.status);
   const itemsCount = vendorGroup.items.length;
+  const canPrepare = financialStatus === 'paid';
 
   return (
     <Card variant="bordered" padding="md" className="mb-4">
@@ -171,13 +174,15 @@ function VendorGroupCard({
             <div className="flex flex-wrap gap-2">
               {availableNextStatuses.map((nextStatus) => {
                 const nextStatusConfig = getVendorGroupStatusConfig(nextStatus);
+                // Disable PREPARING button if order financial status is not 'paid'
+                const isPreparing = nextStatus === 'preparing';
                 return (
                   <Button
                     key={nextStatus}
                     variant="outline"
                     size="sm"
                     onClick={() => onUpdateStatus(vendorGroup.id, nextStatus)}
-                    disabled={isUpdating || vendorGroup.status === nextStatus}
+                    disabled={isUpdating || vendorGroup.status === nextStatus || (isPreparing && !canPrepare)}
                   >
                     {nextStatusConfig.label}
                   </Button>
@@ -218,6 +223,19 @@ export function VendorOrderPage() {
   const vendorGroups = vendorGroupsData?.vendorGroups ?? [];
   const totalGroups = vendorGroupsData?.total ?? 0;
   const totalPages = Math.ceil(totalGroups / DEFAULT_PAGE_SIZE);
+
+  // Map orderId to financialStatus for guard checks
+  const orderFinancialStatusMap = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    // Fetch order details for each unique orderId to get financialStatus
+    const orderIds = [...new Set(vendorGroups.map((vg) => vg.orderId))];
+    orderIds.forEach((orderId) => {
+      // TODO: Use proper order API call to fetch financialStatus
+      // For now, set as undefined - will be enhanced with actual fetch
+      map[orderId] = undefined;
+    });
+    return map;
+  }, [vendorGroups]);
 
   const handleUpdateStatus = (ovgId: string, status: OrderVendorGroupStatus) => {
     // Note: We need the orderId to call the mutation, but the hook only has ovgId.
@@ -326,15 +344,20 @@ export function VendorOrderPage() {
 
         {/* Vendor Groups List */}
         <div className="space-y-4">
-          {vendorGroups.map((vendorGroup) => (
-            <VendorGroupCard
-              key={vendorGroup.id}
-              vendorGroup={vendorGroup}
-              onUpdateStatus={handleUpdateStatus}
-              isUpdating={updateVendorGroupStatusMutation.isPending}
-              onViewDetails={(orderId) => navigate(`/orders/${orderId}`)}
-            />
-          ))}
+          {vendorGroups.map((vendorGroup) => {
+    // Get financialStatus for this vendor group's order
+    const financialStatus = orderFinancialStatusMap[vendorGroup.orderId];
+    return (
+      <VendorGroupCard
+        key={vendorGroup.id}
+        vendorGroup={vendorGroup}
+        financialStatus={financialStatus}
+        onUpdateStatus={handleUpdateStatus}
+        isUpdating={updateVendorGroupStatusMutation.isPending}
+        onViewDetails={(orderId) => navigate(`/orders/${orderId}`)}
+      />
+    );
+  })}
         </div>
 
         {/* Pagination */}

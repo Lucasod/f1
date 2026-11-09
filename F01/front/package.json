@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "node /home/workstation/source/f1/F01/back/scripts/reset-database.cjs && playwright test",
+  "test": "npm run test:e2e"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.105.0",

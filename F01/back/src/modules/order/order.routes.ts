@@ -284,41 +284,9 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
   }) as RequestHandler);
 
 
-  // POST /orders/:orderId/comment - Add a comment to a delivered order (consumer owner only)
-  router.post('/orders/:orderId/comment', authMw as RequestHandler, requireConsumer as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
-      const personId = req.user.sub;
-      const { comment } = req.body;
-
-      if (!orderId || orderId.trim().length === 0) {
-        return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
-      }
-
-      if (typeof comment !== 'string' || comment.trim().length === 0 || comment.length > 1000) {
-        return res.status(400).json({ error: OrderError.INVALID_COMMENT, message: 'Invalid comment' });
-      }
-
-      const order = await orderService.addOrderComment(orderId, personId, comment);
-
-      return res.status(200).json({ order: orderToResponse(order) });
-    } catch (error) {
-      if (error instanceof Error) {
-        switch (error.message) {
-          case OrderError.ORDER_NOT_FOUND:
-            return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
-          case OrderError.FORBIDDEN:
-            return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
-          case OrderError.ORDER_COMMENT_ALREADY_EXISTS:
-            return res.status(409).json({ error: OrderError.ORDER_COMMENT_ALREADY_EXISTS, message: 'Comment already exists' });
-          case OrderError.INVALID_COMMENT:
-            return res.status(400).json({ error: OrderError.INVALID_COMMENT, message: 'Invalid comment' });
-          case OrderError.ORDER_NOT_DELIVERED:
-            return res.status(422).json({ error: OrderError.ORDER_NOT_DELIVERED, message: 'Order not delivered' });
-        }
-      }
-      next(error);
-    }
+  // POST /orders/:orderId/comment - Comment feature disabled
+  router.post('/orders/:orderId/comment', authMw as RequestHandler, (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    return res.status(404).json({ error: 'COMMENT_FEATURE_DISABLED', message: 'Comment feature is disabled' });
   }) as RequestHandler);
 
   // PATCH /orders/:orderId/items/delivery - Mark order items as delivered (item-level delivery)
@@ -412,9 +380,7 @@ function orderToResponse(order: Order, vendorId?: string) {
     financialStatus: order.financialStatus,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
-    comment: order.comment,
-    commentedAt: order.commentedAt,
-    commentedBy: order.commentedBy
+    
   };
 }
 

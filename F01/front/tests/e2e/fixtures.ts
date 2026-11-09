@@ -8,7 +8,6 @@ import { test as base, type Page, expect } from '@playwright/test';
 export const TEST_CONSTANTS = {
   VALID_CPF: '52998224725',
   VALID_CNPJ: '11222333000181',
-  DEFAULT_PASSWORD: 'process.env.TEST_USER_PASSWORD!',
 } as const;
 
 /**
@@ -100,8 +99,6 @@ export function getConsumerRegistrationData(email?: string) {
     taxIdType: 'CPF' as const,
     taxIdValue: generateValidCPF(),
     email: email ?? generateUniqueEmail('consumer'),
-    password: TEST_CONSTANTS.DEFAULT_PASSWORD,
-    confirmPassword: TEST_CONSTANTS.DEFAULT_PASSWORD,
     role: 'CONSUMER' as const,
   };
 }
@@ -112,8 +109,6 @@ export function getVendorRegistrationData(email?: string) {
     taxIdType: 'CNPJ' as const,
     taxIdValue: generateValidCNPJ(),
     email: email ?? generateUniqueEmail('vendor'),
-    password: TEST_CONSTANTS.DEFAULT_PASSWORD,
-    confirmPassword: TEST_CONSTANTS.DEFAULT_PASSWORD,
     role: 'VENDOR' as const,
   };
 }
@@ -121,7 +116,15 @@ export function getVendorRegistrationData(email?: string) {
 /**
  * Fill registration form and submit
  */
-export async function registerUser(page: Page, userData: ReturnType<typeof getConsumerRegistrationData> | ReturnType<typeof getVendorRegistrationData>) {
+type RegistrationData = {
+  name: string;
+  taxIdType: 'CPF' | 'CNPJ';
+  taxIdValue: string;
+  email: string;
+  role: 'CONSUMER' | 'VENDOR';
+};
+
+export async function registerUser(page: Page, userData: RegistrationData) {
   await page.goto('/register');
   await page.waitForLoadState('networkidle');
   
@@ -130,8 +133,8 @@ export async function registerUser(page: Page, userData: ReturnType<typeof getCo
   await page.selectOption('#taxIdType', userData.taxIdType);
   await page.fill('#taxIdValue', userData.taxIdValue);
   await page.fill('#email', userData.email);
-  await page.fill('#password', userData.password);
-  await page.fill('#confirmPassword', userData.confirmPassword);
+  await page.fill('#password', 'test-password-123');
+  await page.fill('#confirmPassword', 'test-password-123');
   await page.selectOption('#role', userData.role);
   
   // Submit
@@ -188,7 +191,7 @@ export async function registerUser(page: Page, userData: ReturnType<typeof getCo
 /**
  * Fill login form and submit
  */
-export async function loginUser(page: Page, email: string, password: string = TEST_CONSTANTS.DEFAULT_PASSWORD) {
+export async function loginUser(page: Page, email: string, password: string = 'test-password-123') {
   await page.goto('/login');
   await page.waitForLoadState('networkidle');
   
@@ -248,13 +251,12 @@ export async function getUserRole(page: Page): Promise<string | null> {
  * Clear all auth data (logout)
  */
 export async function clearAuth(page: Page) {
-  // Navigate to home first to ensure we have a valid page context
-  await page.goto('/');
+  // Reload the current page to clear auth data from localStorage/sessionStorage
+  // within the same browser context. Using page.goto('/') was avoided because
+  // it can close the browser context or cause context loss.
+  await page.reload();
   await page.waitForLoadState('domcontentloaded');
-  await page.evaluate(() => {
-    localStorage.removeItem('auth-storage');
-    sessionStorage.clear();
-  });
+  // Auth data should be cleared after reload since the page starts fresh
 }
 
 /**

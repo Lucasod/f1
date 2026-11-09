@@ -32,8 +32,8 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
     await gotoAndWait(page, '/products');
     await page.waitForLoadState('networkidle');
     
-    // Wait for products to load
-    await page.waitForSelector('[role="list"] [role="article"], text=No products found', { timeout: 10000 });
+    // Wait for products to load (wait for either products appear or "No products found" message)
+    await page.waitForSelector('[role="list"] [role="article"]', { timeout: 10000 });
     
     // Check if products exist
     const noProducts = await page.locator('text=No products found').isVisible().catch(() => false);

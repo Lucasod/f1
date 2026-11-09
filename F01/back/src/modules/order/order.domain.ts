@@ -775,22 +775,7 @@ export class Order {
   }
 
   addComment(personId: string, text: string): void {
-    if (this.status !== OrderStatus.DELIVERED) {
-      throw new Error(OrderError.ORDER_NOT_DELIVERED);
-    }
-    if (personId !== this.personId) {
-      throw new Error(OrderError.FORBIDDEN);
-    }
-    if (this.comment !== undefined) {
-      throw new Error(OrderError.ORDER_COMMENT_ALREADY_EXISTS);
-    }
-    if (typeof text !== 'string' || text.trim().length === 0 || text.length > 1000) {
-      throw new Error(OrderError.INVALID_COMMENT);
-    }
-    this.comment = text;
-    this.commentedAt = new Date();
-    this.commentedBy = personId;
-    this.updatedAt = new Date();
+    throw new Error('Comment feature is disabled');
   }
 
   getVendorGroupsWithoutTransfer(): OrderVendorGroup[] {

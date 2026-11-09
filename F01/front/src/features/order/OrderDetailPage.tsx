@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useOrderDetail, useOrderMutations } from './useOrder';
 import { OrderCommentSection } from './OrderCommentSection';
-import { OrderReviewSection } from './OrderReviewSection';
+import { OrderItemReview } from './OrderReviewSection';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { vendorApi } from '@/shared/api/vendor';
 import {
@@ -93,6 +93,7 @@ interface VendorGroupCardProps {
   vendorGroup: OrderVendorGroup;
   isVendor: boolean;
   isAdmin: boolean;
+  isConsumer: boolean;
   currentVendorId?: string;
   onUpdateStatus: (ovgId: string, status: OrderVendorGroupStatus) => void;
   orderStatus?: OrderStatus;
@@ -102,6 +103,7 @@ function VendorGroupCard({
   vendorGroup,
   isVendor,
   isAdmin,
+  isConsumer,
   currentVendorId,
   onUpdateStatus,
   orderStatus,
@@ -161,6 +163,15 @@ function VendorGroupCard({
                 <td className="px-4 py-3 text-right text-gray-900">{item.quantity}</td>
                 <td className="px-4 py-3 text-right text-gray-900">{formatCurrency(item.unitPrice)}</td>
                 <td className="px-4 py-3 text-right font-medium text-gray-900">{formatCurrency(item.totalPrice)}</td>
+                <td className="px-4 py-3 text-center">
+                  {orderStatus === 'delivered' && isConsumer && (
+                    <OrderItemReview
+                      orderId={order.id}
+                      productId={item.productId}
+                      productName={item.productName}
+                    />
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -592,6 +603,7 @@ description="The requested order does not exist or has been removed."
                   vendorGroup={vendorGroup}
                   isVendor={isVendor}
                   isAdmin={isAdmin}
+                  isConsumer={isConsumer}
                   currentVendorId={currentVendorId}
                   onUpdateStatus={handleUpdateVendorGroupStatus}
                   orderStatus={order.status as OrderStatus | undefined}
@@ -605,8 +617,7 @@ description="The requested order does not exist or has been removed."
             {/* Order Comment (delivered orders only) */}
             <OrderCommentSection order={order} />
 
-            {/* Product Reviews (delivered orders only) */}
-            <OrderReviewSection order={order} canReview={isConsumer} />
+            
           </div>
         </div>
       </div>
