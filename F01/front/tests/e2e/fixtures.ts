@@ -152,9 +152,8 @@ export async function registerUser(page: Page, userData: RegistrationData) {
   await page.fill('#email', userData.email);
   await page.fill('#password', 'TestPassword123!');
   await page.fill('#confirmPassword', 'TestPassword123!');
-  await page.selectOption('#role', userData.role);
   
-  // Submit
+  // Submit - role is hardcoded to CONSUMER in the RegisterForm handleSubmit
   await page.click('button[type="submit"]');
   
   // Wait for authentication state in localStorage (zustand persist is async)

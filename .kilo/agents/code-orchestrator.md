@@ -12,6 +12,8 @@ permission:
   edit: deny
   bash: deny
   background: allow
+  goal: allow
+  goal_report: allow
   task:
     "*": deny
     "code-developer": allow

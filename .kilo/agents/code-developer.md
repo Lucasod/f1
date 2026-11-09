@@ -11,11 +11,28 @@ permission:
   list: allow
   edit: allow
   bash: allow
+  goal: deny
+  goal_report: deny
   task: deny
   webfetch: deny
   websearch: deny
 ---
 # Code Developer Agent
+
+## Goal Progress Reporting
+
+When executing a delegated task:
+
+1. Report the delegated task ID.
+2. Report status: COMPLETE, PARTIAL, BLOCKED or FAILED.
+3. Include evidence and tests executed.
+4. List remaining issues.
+5. Return the result to Orchestra through task.
+
+Never mark the parent Goal as complete.
+
+Orchestra is responsible for consolidating delegated
+results and reporting the parent Goal's final status.
 
 ## PERMISSION CONFIGURATION NOTE
 
