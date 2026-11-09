@@ -1,7 +1,32 @@
+import { createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
+import Redis from 'ioredis';
 import { Person, PersonRole, PersonRepository } from '../person/person.domain';
 import { validatePersonTaxId } from '../person/person.domain';
 import { hashPassword, verifyPassword, CredentialError } from '../auth/credential.domain';
+import { config } from '../../config';
+
+const DEFAULT_REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
+function parseExpiresInToSeconds(expiresIn: string): number {
+  const raw = String(expiresIn).trim();
+  if (raw === '') return DEFAULT_REFRESH_TTL_SECONDS;
+  const numeric = Number(raw);
+  if (!Number.isNaN(numeric)) return Math.floor(numeric);
+  const match = raw.match(/^(\d+)(d|h|m|s)$/);
+  if (!match) return DEFAULT_REFRESH_TTL_SECONDS;
+  const value = parseInt(match[1], 10);
+  switch (match[2]) {
+    case 'd':
+      return value * 86400;
+    case 'h':
+      return value * 3600;
+    case 'm':
+      return value * 60;
+    default:
+      return value;
+  }
+}
 
 export enum AuthError {
   EMAIL_ALREADY_EXISTS = 'EMAIL_ALREADY_EXISTS',
@@ -64,13 +89,39 @@ export class AuthService {
   private readonly jwtSecret: string;
   private readonly jwtExpiresIn: string;
   private readonly refreshExpiresIn: string;
+  private readonly refreshTtlSeconds: number;
+  private readonly redis: Redis;
+  // Redis is the durable, shared revocation store. The in-memory set below is a
+  // graceful-degradation fallback: revoked tokens are mirrored here so logout and
+  // refresh keep working when Redis is temporarily unreachable (e.g. Redis not
+  // configured, wrong port, or network failure).
   private readonly revokedTokens = new Set<string>();
+  private readonly keyPrefix = 'revoked_token:';
 
-  constructor(repo: PersonRepository, jwtSecret: string, jwtExpiresIn: string, refreshExpiresIn: string = '30d') {
+  constructor(
+    repo: PersonRepository,
+    jwtSecret: string,
+    jwtExpiresIn: string,
+    refreshExpiresIn: string = '30d',
+    redisClient?: Redis
+  ) {
     this.repo = repo;
     this.jwtSecret = jwtSecret;
     this.jwtExpiresIn = jwtExpiresIn;
     this.refreshExpiresIn = refreshExpiresIn;
+    this.refreshTtlSeconds = parseExpiresInToSeconds(refreshExpiresIn);
+    this.redis =
+      redisClient ||
+      new Redis(config.redisUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => null,
+      });
+    // Connection errors are swallowed here and handled per-operation so auth
+    // keeps working when Redis is unreachable instead of crashing the process.
+    this.redis.on('error', () => {
+      // Intentionally empty: Redis errors are handled per call.
+    });
   }
 
   async register(input: RegisterInput): Promise<RegisterResult> {
@@ -201,11 +252,11 @@ export class AuthService {
       throw new Error(AuthError.PERSON_NOT_FOUND);
     }
 
-    this.revokedTokens.add(refreshToken);
+    await this.revokeToken(refreshToken);
   }
 
   async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {
-    if (this.revokedTokens.has(refreshToken)) {
+    if (await this.isTokenRevoked(refreshToken)) {
       throw new Error(AuthError.INVALID_SESSION);
     }
 
@@ -241,6 +292,47 @@ export class AuthService {
       }
       throw new Error(AuthError.INVALID_SESSION);
     }
+  }
+
+  /**
+   * Returns true when the token has been revoked (logout). Redis is the durable,
+   * shared source of truth; the in-memory set is a graceful-degradation fallback
+   * used when Redis is unreachable.
+   */
+  private async isTokenRevoked(token: string): Promise<boolean> {
+    const key = this.getRevocationKey(token);
+
+    try {
+      const value = await this.redis.get(key);
+      if (value === '1') {
+        this.revokedTokens.add(token);
+        return true;
+      }
+    } catch {
+      // Redis unavailable: fall back to the in-memory set below.
+    }
+
+    return this.revokedTokens.has(token);
+  }
+
+  /**
+   * Revokes a refresh token in Redis with a TTL matching the refresh token
+   * expiry, and mirrors it into the in-memory fallback set.
+   */
+  private async revokeToken(token: string): Promise<void> {
+    const key = this.getRevocationKey(token);
+
+    try {
+      await this.redis.set(key, '1', 'EX', this.refreshTtlSeconds);
+    } catch {
+      // Redis unavailable: rely on the in-memory fallback below.
+    }
+
+    this.revokedTokens.add(token);
+  }
+
+  private getRevocationKey(token: string): string {
+    return `${this.keyPrefix}${createHash('sha256').update(token).digest('hex')}`;
   }
 
   private generateTokens(person: Person): TokenPair {

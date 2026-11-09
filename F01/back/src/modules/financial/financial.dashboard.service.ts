@@ -34,6 +34,7 @@ export interface FinancialHistoryEntry {
 
 export interface FinancialDashboard {
   grossSales: number;
+  grossSalesLabel: string;
   netExpectedAmount: number;
   receivedInStripe: number;
   pendingDistribution: number;
@@ -171,6 +172,7 @@ export class VendorFinancialDashboardService {
 
     return {
       grossSales,
+      grossSalesLabel: 'pre-commission',
       netExpectedAmount,
       receivedInStripe,
       pendingDistribution,

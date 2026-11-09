@@ -303,6 +303,13 @@ export async function expectRedirectedToLogin(page: Page) {
 }
 
 /**
+ * Seeded Admin account email (see back/src/scripts/seed.ts ACCOUNTS).
+ * The password is TEST_USER_PASSWORD, configured in the backend runtime env,
+ * never hardcoded here.
+ */
+export const ADMIN_EMAIL = 'admin@example.com';
+
+/**
  * Backend API base URL. The Vite dev server proxies /api to localhost:3000,
  * but page.request() does not go through the browser proxy, so we call the
  * backend directly.
@@ -323,6 +330,49 @@ export async function getAuthToken(page: Page): Promise<string | null> {
       return null;
     }
   });
+}
+
+/**
+ * Log in via the backend auth API and return the access token.
+ * Used to authenticate as a pre-seeded account without the UI login flow.
+ * Never logs the password value.
+ * @param page - Playwright page (provides page.request)
+ * @param email - Account email
+ * @param password - Account password
+ * @returns The access token and person, or null when login fails.
+ */
+export async function loginViaApi(
+  page: Page,
+  email: string,
+  password: string
+): Promise<{ accessToken: string | null; person: any | null }> {
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/auth/login`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: { email, password },
+  });
+  if (!response.ok()) {
+    const errorText = await response.text().catch(() => '');
+    console.warn(`API login failed (${response.status()}) for ${email}: ${errorText}`);
+    return { accessToken: null, person: null };
+  }
+  const data = await response.json();
+  return {
+    accessToken: data?.tokens?.accessToken ?? null,
+    person: data?.person ?? null,
+  };
+}
+
+/**
+ * Log in as the seeded Admin account via the backend auth API and return the
+ * access token. The password is read from TEST_USER_PASSWORD (configured in
+ * the backend runtime env); it is never logged or hardcoded.
+ * @returns The access token and person, or null when login fails (e.g. when
+ * TEST_USER_PASSWORD is not configured in the running shell).
+ */
+export async function loginAsAdminViaApi(
+  page: Page
+): Promise<{ accessToken: string | null; person: any | null }> {
+  return loginViaApi(page, ADMIN_EMAIL, process.env.TEST_USER_PASSWORD ?? '');
 }
 
 /**
@@ -385,9 +435,14 @@ export async function addAddress(page: Page, addressData: {
 /**
  * Get an order by ID via the backend API.
  * Returns the order object or null on failure.
+ * @param token - Optional Bearer token; if omitted, it is read from localStorage.
  */
-export async function getOrder(page: Page, orderId: string): Promise<any | null> {
-  const response = await apiFetch(page, 'GET', `/api/v1/orders/${orderId}`);
+export async function getOrder(
+  page: Page,
+  orderId: string,
+  token?: string | null
+): Promise<any | null> {
+  const response = await apiFetch(page, 'GET', `/api/v1/orders/${orderId}`, undefined, token);
   if (!response.ok) {
     return null;
   }
@@ -398,14 +453,368 @@ export async function getOrder(page: Page, orderId: string): Promise<any | null>
 /**
  * Get all orders for the authenticated user via the backend API.
  * Returns the orders array or null on failure.
+ * @param token - Optional Bearer token; if omitted, it is read from localStorage.
  */
-export async function listOrders(page: Page): Promise<any[] | null> {
-  const response = await apiFetch(page, 'GET', '/api/v1/orders');
+export async function listOrders(
+  page: Page,
+  token?: string | null
+): Promise<any[] | null> {
+  const response = await apiFetch(page, 'GET', '/api/v1/orders', undefined, token);
   if (!response.ok) {
     return null;
   }
   const data = await response.json();
   return data?.orders ?? null;
+}
+
+/**
+ * Stripe test card details (sandbox test values only — not real credentials).
+ * Card 4242424242424242 requires no 3D Secure in Stripe test mode.
+ */
+export const STRIPE_TEST_CARD = {
+  number: '4242424242424242',
+  expiry: '1230',
+  cvc: '123',
+} as const;
+
+/**
+ * Wait for an order to reach the expected status by polling the backend API.
+ * Returns the final status observed (or null if the order could not be read).
+ */
+export async function waitForOrderStatus(
+  page: Page,
+  orderId: string,
+  expectedStatus: string,
+  { maxAttempts = 40, intervalMs = 1000 }: { maxAttempts?: number; intervalMs?: number } = {},
+  token?: string | null
+): Promise<string | null> {
+  let lastStatus: string | null = null;
+  for (let i = 0; i < maxAttempts; i++) {
+    const order = await getOrder(page, orderId, token);
+    lastStatus = order?.status ?? null;
+    if (lastStatus === expectedStatus) {
+      return lastStatus;
+    }
+    await page.waitForTimeout(intervalMs);
+  }
+  return lastStatus;
+}
+
+/**
+ * Find the most recent pending_payment order for the authenticated consumer.
+ * Returns the order id or null.
+ */
+export async function findPendingOrderId(page: Page): Promise<string | null> {
+  const orders = await listOrders(page);
+  if (!orders || orders.length === 0) return null;
+  const pending = orders.filter((o: any) => o.status === 'pending_payment');
+  if (pending.length === 0) return null;
+  // Sort by createdAt descending, pick the most recent
+  pending.sort((a: any, b: any) => {
+    const da = new Date(a.createdAt ?? 0).getTime();
+    const db = new Date(b.createdAt ?? 0).getTime();
+    return db - da;
+  });
+  return pending[0].id;
+}
+
+/**
+ * Fill the Stripe test card in the hosted checkout page iframes.
+ * Stripe Checkout renders card inputs inside cross-origin iframes; we scan
+ * all frames for known Stripe Elements input selectors. Returns true only
+ * when card number, expiry AND CVC have all been filled.
+ */
+export async function fillStripeTestCard(page: Page): Promise<boolean> {
+  const { number, expiry, cvc } = STRIPE_TEST_CARD;
+  // Give Stripe Elements iframes time to initialize (Stripe Checkout can be slow)
+  await page.waitForTimeout(5000);
+  let cardFilled = false;
+  let expiryFilled = false;
+  let cvcFilled = false;
+
+  const cardSelectors = [
+    'input[data-elements-stable-field-name="cardNumber"]',
+    'input[aria-label*="card number" i]',
+    'input[name="cardnumber"]',
+    'input[placeholder*="••••"]',
+    'input[inputmode="numeric"][maxlength="16"]',
+  ];
+  const expirySelectors = [
+    'input[data-elements-stable-field-name="cardExpiry"]',
+    'input[aria-label*="expiry" i]',
+    'input[name="exp-date"]',
+    'input[placeholder*="MM/YY" i]',
+    'input[inputmode="numeric"][maxlength="4"]',
+  ];
+  const cvcSelectors = [
+    'input[data-elements-stable-field-name="cardCvc"]',
+    'input[aria-label*="cvc" i]',
+    'input[name="cvc"]',
+    'input[inputmode="numeric"][maxlength="3"]',
+  ];
+
+  // Try multiple times in case iframes are still loading
+  for (let attempt = 0; attempt < 3 && !(cardFilled && expiryFilled && cvcFilled); attempt++) {
+    if (attempt > 0) {
+      await page.waitForTimeout(2000);
+    }
+    for (const frame of page.frames()) {
+      try {
+        if (!cardFilled) {
+          for (const sel of cardSelectors) {
+            const input = frame.locator(sel).first();
+            if ((await input.count()) > 0) {
+              await input.fill(number);
+              cardFilled = true;
+              break;
+            }
+          }
+        }
+        if (!expiryFilled) {
+          for (const sel of expirySelectors) {
+            const input = frame.locator(sel).first();
+            if ((await input.count()) > 0) {
+              await input.fill(expiry);
+              expiryFilled = true;
+              break;
+            }
+          }
+        }
+        if (!cvcFilled) {
+          for (const sel of cvcSelectors) {
+            const input = frame.locator(sel).first();
+            if ((await input.count()) > 0) {
+              await input.fill(cvc);
+              cvcFilled = true;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Frame may be inaccessible; skip
+      }
+    }
+  }
+
+  return cardFilled && expiryFilled && cvcFilled;
+}
+
+/**
+ * Fill the phone number field on the Stripe Checkout page if present.
+ * Stripe Checkout may require a phone number when phone_number_collection
+ * is enabled. Scans both the main page and iframes.
+ */
+export async function fillStripePhone(page: Page): Promise<boolean> {
+  const phoneSelectors = [
+    'input[aria-label*="phone" i]',
+    'input[name="phone"]',
+    'input[placeholder*="phone" i]',
+    'input[type="tel"]',
+  ];
+  let filled = false;
+  // Main page
+  try {
+    for (const sel of phoneSelectors) {
+      const input = page.locator(sel).first();
+      if ((await input.count()) > 0) {
+        await input.fill('11999999999');
+        filled = true;
+        break;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // Iframes
+  try {
+    for (const frame of page.frames()) {
+      if (filled) break;
+      for (const sel of phoneSelectors) {
+        const input = frame.locator(sel).first();
+        if ((await input.count()) > 0) {
+          await input.fill('11999999999');
+          filled = true;
+          break;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return filled;
+}
+
+/**
+ * Complete payment on a Stripe Checkout hosted page using the test card.
+ * Navigates to the checkout URL, fills card details, submits, and waits
+ * for the redirect back to the frontend success URL.
+ */
+export async function completeStripePayment(
+  page: Page,
+  checkoutUrl: string
+): Promise<{ navigated: boolean; cardFilled: boolean; submitted: boolean }> {
+  const result = { navigated: false, cardFilled: false, submitted: false };
+
+  try {
+    await page.goto(checkoutUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForLoadState('networkidle').catch(() => {});
+    result.navigated = page.url().includes('checkout.stripe.com');
+  } catch {
+    return result;
+  }
+
+  result.cardFilled = await fillStripeTestCard(page);
+
+  // Fill phone number if Stripe requires it (phone_number_collection enabled)
+  await fillStripePhone(page);
+
+  // Give Stripe a moment to enable the pay button once all fields are complete
+  await page.waitForTimeout(1000);
+
+  // Locate and click the pay/submit button
+  const payButton = page
+    .locator('button:has-text("Pay"), button:has-text("Pagar"), [data-testid*="pay-button"]')
+    .first();
+  if ((await payButton.count()) > 0) {
+    try {
+      await payButton.click();
+      result.submitted = true;
+    } catch {
+      // Try pressing Enter on the last focused card field as fallback
+      try {
+        await page.keyboard.press('Enter');
+        result.submitted = true;
+      } catch {}
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Trigger a Stripe checkout.session.completed webhook directly against the
+ * backend webhook endpoint, with a valid Stripe-Signature header computed
+ * using the CLI's webhook signing secret. This exercises the same webhook
+ * handler that the Stripe CLI would forward to, without depending on the
+ * fragile Stripe Checkout hosted-page iframe filling.
+ *
+ * @param orderId - The order id (embedded in session.metadata.orderId)
+ * @param paymentId - The payment id (embedded in session.metadata.paymentId)
+ * @param amount - Order total amount (in major currency units, e.g. BRL)
+ * @param webhookSecret - The Stripe webhook signing secret (whsec_...)
+ */
+export async function triggerStripeWebhook(
+  page: Page,
+  orderId: string,
+  paymentId: string,
+  amount: number,
+  webhookSecret: string
+): Promise<{ ok: boolean; statusCode: number }> {
+  const { createHmac } = await import('crypto');
+  const timestamp = Math.floor(Date.now() / 1000);
+  const payload: any = {
+    id: `evt_test_webhook_${Date.now()}`,
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        id: `cs_test_${orderId}`,
+        payment_status: 'paid',
+        amount_total: Math.round(amount * 100),
+        currency: 'brl',
+        metadata: { orderId, paymentId },
+        payment_intent: `pi_test_${orderId}`,
+      },
+    },
+  };
+
+  const body = JSON.stringify(payload);
+  const signedPayload = `${timestamp}.${body}`;
+  const signature = createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
+  const stripeSignature = `t=${timestamp},v1=${signature}`;
+
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/webhooks/stripe`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Stripe-Signature': stripeSignature,
+    },
+    data: payload,
+  });
+
+  return { ok: response.ok(), statusCode: response.status() };
+}
+
+/**
+ * Read the Stripe webhook signing secret from the file captured when the CLI
+ * was started. Returns null if the file is not present.
+ */
+export async function readWebhookSecret(): Promise<string | null> {
+  const { readFileSync } = await import('fs');
+  try {
+    return readFileSync('/tmp/kilo/webhook-secret.txt', 'utf-8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Onboard the authenticated user as a vendor via the backend API.
+ * Returns the vendor profile or null on failure.
+ */
+export async function onboardVendor(
+  page: Page,
+  storeName: string,
+  slug: string
+): Promise<any | null> {
+  const token = await getAuthToken(page);
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/vendor/onboard`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: { storeName, slug },
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.warn(`Vendor onboarding failed (${response.status}): ${errorText}`);
+    return null;
+  }
+  const data = await response.json();
+  return data?.vendor ?? null;
+}
+
+/**
+ * Transition a vendor group status via the backend API using a supplied token.
+ * Used for vendor fulfillment steps when the page's localStorage holds a
+ * different user's token.
+ */
+export async function transitionVendorGroupWithToken(
+  page: Page,
+  token: string,
+  orderId: string,
+  vendorGroupId: string,
+  status: string
+): Promise<{ ok: boolean; statusCode: number }> {
+  const response = await page.request.patch(`${API_BASE_URL}/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: { status },
+  });
+  return { ok: response.ok(), statusCode: response.status() };
+}
+
+/**
+ * Extract the access token from localStorage (auth-storage or accessToken key).
+ * Duplicated here for use with vendor tokens obtained out-of-band.
+ */
+export async function getAuthTokenFromResponse(response: any): Promise<string | null> {
+  try {
+    const data = await response.json();
+    return data?.tokens?.accessToken ?? data?.accessToken ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

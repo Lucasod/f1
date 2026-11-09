@@ -34,6 +34,7 @@ import { createPersonRoutes } from './modules/person/person.routes';
 import { createReviewRoutes } from './modules/review/review.routes';
 import { createPaymentRoutes } from './modules/order/payment.routes';
 import { createPayoutRoutes } from './modules/payout/payout.routes';
+import { createTransferRoutes } from './modules/transfer/transfer.routes';
 import { createInvoiceRoutes } from './modules/invoice/invoice.routes';
 import { createWalletRoutes } from './modules/wallet/wallet.routes';
 import { WalletService } from './modules/wallet/wallet.service';
@@ -322,6 +323,9 @@ financialRepo = new MongoFinancialAllocationRepository(db);
 
       // Payout routes (T-1003)
       app.use('/api/v1/payouts', createPayoutRoutes({ authService, payoutService, vendorRepo }));
+
+      // Transfer routes (LC-23)
+      app.use('/api/v1/transfers', createTransferRoutes({ authService, transferService, vendorRepo }));
 
       // Invoice routes (T-1103)
       app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));

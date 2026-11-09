@@ -36,6 +36,7 @@ export function createFinancialDashboardRoutes({
 
         res.json({
           grossSales: dashboard.grossSales,
+          grossSalesLabel: dashboard.grossSalesLabel,
           netExpectedAmount: dashboard.netExpectedAmount,
           receivedInStripe: dashboard.receivedInStripe,
           pendingDistribution: dashboard.pendingDistribution,

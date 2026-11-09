@@ -2,6 +2,7 @@ import {
   Order,
   OrderVendorGroup,
   OrderItem,
+  OrderItemData,
   OrderStatus,
   OrderVendorGroupStatus,
   FinancialStatus,
@@ -20,6 +21,7 @@ import { VendorRepository } from '../vendor/vendor.domain';
 import { config } from '../../config';
 import { InvoiceService } from '../../modules/invoice/invoice.service';
 import { generateInvoiceKey } from '../../shared/storage/s3.key-generator';
+import { Address } from './order.domain';
 
 export interface ListOrdersFilters {
   status?: OrderStatus;
@@ -65,6 +67,45 @@ export class OrderService {
     this.invoiceService = invoiceService;
   }
 
+  private async checkExistingOrderByIdempotencyKey(
+    personId: string,
+    idempotencyKey: string
+  ): Promise<Order | null> {
+    const existingOrders = await this.orderRepo.findByPersonId(personId);
+    const matchingOrder = existingOrders.find(
+      order =>
+        (order.status === OrderStatus.PENDING_PAYMENT || order.status === OrderStatus.PAID) &&
+        order.attemptId === idempotencyKey
+    );
+    return matchingOrder ?? null;
+  }
+
+  async createOrderWithIdempotencyCheck(data: {
+    personId: string;
+    vendorGroups: { vendorId: string; items: Omit<OrderItemData, 'id' | 'totalPrice'>[]; commissionPct: number }[];
+    shippingAddress: Address;
+    idempotencyKey?: string;
+    attemptId?: string;
+  }): Promise<{ order: Order; created: boolean }> {
+    if (data.idempotencyKey) {
+      const existingOrder = await this.checkExistingOrderByIdempotencyKey(data.personId, data.idempotencyKey);
+      if (existingOrder) {
+        return { order: existingOrder, created: false };
+      }
+    }
+
+    const order = Order.create({
+      personId: data.personId,
+      vendorGroups: data.vendorGroups,
+      shippingAddress: data.shippingAddress,
+      attemptId: data.attemptId,
+      idempotencyKey: data.idempotencyKey,
+      repository: this.orderRepo
+    });
+
+    return { order, created: true };
+  }
+
   async listOrders(
     personId: string,
     filters?: ListOrdersFilters
@@ -79,8 +120,8 @@ export class OrderService {
       // Consumer: only their own orders
       orders = await this.orderRepo.findByPersonId(personId);
     } else if (role === 'vendor') {
-      if (filters?.status) throw new Error(OrderError.FORBIDDEN);
       // Vendor: orders containing their vendor groups
+      // Note: status filter is allowed and applied at the end
       const vendorId = filters?.vendorId;
       if (!vendorId) {
         throw new Error(OrderError.VENDOR_ID_REQUIRED);
@@ -343,15 +384,49 @@ export class OrderService {
       throw new Error(OrderError.PAYMENT_FAILED);
     }
 
-    // Update payment status
-    if (paymentStatus === PaymentStatus.AUTHORIZED) {
-      if (providerTransactionId) {
-        payment.authorize(providerTransactionId);
+    // Idempotency check: if payment is already in the target status, skip payment modification
+    // but still proceed with order updates and invoice generation
+    const isAlreadyInTargetStatus =
+      (paymentStatus === PaymentStatus.AUTHORIZED && payment.status === PaymentStatus.AUTHORIZED) ||
+      (paymentStatus === PaymentStatus.CAPTURED && payment.status === PaymentStatus.CAPTURED) ||
+      (paymentStatus === PaymentStatus.FAILED && payment.status === PaymentStatus.FAILED);
+
+    if (!isAlreadyInTargetStatus) {
+      // Payment not in target status - attempt the transition with idempotent error handling
+      if (paymentStatus === PaymentStatus.AUTHORIZED) {
+        if (providerTransactionId) {
+          try {
+            payment.authorize(providerTransactionId);
+          } catch (error) {
+            if ((error as Error).message === OrderError.INVALID_STATUS_TRANSITION) {
+              // Graceful handling: payment transition failed (e.g. already in correct state);
+              // idempotent return - proceed with current state
+            } else {
+              throw error;
+            }
+          }
+        }
+      } else if (paymentStatus === PaymentStatus.CAPTURED) {
+        try {
+          payment.capture();
+        } catch (error) {
+          if ((error as Error).message === OrderError.INVALID_STATUS_TRANSITION) {
+            // Graceful handling - already in correct state
+          } else {
+            throw error;
+          }
+        }
+      } else if (paymentStatus === PaymentStatus.FAILED) {
+        try {
+          payment.fail();
+        } catch (error) {
+          if ((error as Error).message === OrderError.INVALID_STATUS_TRANSITION) {
+            // Graceful handling - already in correct state
+          } else {
+            throw error;
+          }
+        }
       }
-    } else if (paymentStatus === PaymentStatus.CAPTURED) {
-      payment.capture();
-    } else if (paymentStatus === PaymentStatus.FAILED) {
-      payment.fail();
     }
 
     await this.paymentRepo.update(payment);

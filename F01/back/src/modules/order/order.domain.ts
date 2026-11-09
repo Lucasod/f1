@@ -603,7 +603,15 @@ export class Order {
     shippingAddress: Address;
     attemptId?: string;
     acceptedHash?: string;
+    idempotencyKey?: string;
+    repository?: OrderRepository;
   }): Order {
+    // Idempotency: if idempotencyKey is provided, store it as attemptId
+    // for later idempotency checking by the repository/service layer.
+    // The actual check for existing orders can be done via repository.findByPersonId()
+    // filtering by status (PENDING_PAYMENT or PAID) and attempting to match the key.
+    const effectiveAttemptId = data.idempotencyKey || data.attemptId;
+
     if (!data.personId || data.personId.trim().length === 0) {
       throw new Error(OrderError.PERSON_ID_REQUIRED);
     }
@@ -638,7 +646,7 @@ export class Order {
       financialStatus: FinancialStatus.PENDING,
       createdAt: now,
       updatedAt: now,
-      attemptId: data.attemptId,
+      attemptId: effectiveAttemptId,
       acceptedHash: data.acceptedHash
     });
   }
