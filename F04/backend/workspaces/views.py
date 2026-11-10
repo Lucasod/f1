@@ -7,15 +7,34 @@ from django.http import Http404
 from django.db import transaction
 from django.db.models import F, Q, Max, Max
 
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog
 from .serializers import (
     WorkspaceSerializer, MembershipSerializer, MembershipCreateSerializer,
     ProjectSerializer, BoardSerializer, BoardCreateSerializer,
-    WorkflowStatusSerializer, IssueSerializer, SprintSerializer,
+    WorkflowStatusSerializer, IssueSerializer, SprintSerializer, CommentSerializer,
 )
 
 
 User = get_user_model()
+
+
+def log_audit_operation(actor, workspace, resource_type, resource_id, operation, success=True, correlation_id=None, details=""):
+    """Create an AuditLog entry for a completed operation.
+
+    Failed/rolled-back operations should NOT call this function (or call it with
+    success=False depending on policy). This helper avoids duplication across
+    view functions.
+    """
+    AuditLog.objects.create(
+        actor=actor,
+        workspace=workspace,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        operation=operation,
+        success=success,
+        correlation_id=correlation_id,
+        details=details,
+    )
 
 
 @api_view(["GET"])
@@ -171,6 +190,16 @@ def create_workspace(request):
             status=status.HTTP_201_CREATED,
         )
         response["Location"] = f"/api/v1/workspaces/{workspace.id}/"
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            operation="create",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Workspace created successfully",
+        )
         return response
 
 
@@ -267,6 +296,16 @@ def rename_workspace(request, workspace_id):
             status=status.HTTP_200_OK,
         )
         response["Location"] = f"/api/v1/workspaces/{workspace.id}/"
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            operation="update",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Workspace renamed successfully",
+        )
         return response
 
 
@@ -394,6 +433,16 @@ def create_project(request):
             status=status.HTTP_201_CREATED,
         )
         response["Location"] = f"/api/v1/projects/{project.id}/"
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="project",
+            resource_id=project.id,
+            operation="create",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Project created successfully",
+        )
         return response
 
 
@@ -626,6 +675,16 @@ def create_issue(request, project_id):
         )
 
         issue_serializer = IssueSerializer(issue, context={"request": request})
+        log_audit_operation(
+            actor=request.user,
+            workspace=issue.board.project.workspace,
+            resource_type="issue",
+            resource_id=issue.id,
+            operation="create",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Issue created successfully",
+        )
         return Response(
             {
                 "error": None,
@@ -882,6 +941,17 @@ def update_issue(request, issue_id):
     issue.version = (issue.version or 0) + 1
     issue.save()
 
+    log_audit_operation(
+        actor=request.user,
+        workspace=issue.board.project.workspace,
+        resource_type="issue",
+        resource_id=issue.id,
+        operation="update",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Issue updated successfully",
+    )
+
     serializer = IssueSerializer(issue, context={"request": request})
     return Response(
         {
@@ -975,12 +1045,23 @@ def transition_issue(request, issue_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Perform the transition
+# Perform the transition
     with transaction.atomic():
         issue.status_id = target_status
         # Increment version for optimistic locking
         issue.version = (issue.version or 0) + 1
         issue.save()
+
+        log_audit_operation(
+            actor=request.user,
+            workspace=issue.board.project.workspace,
+            resource_type="issue",
+            resource_id=issue.id,
+            operation="transition",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Issue transition completed successfully",
+        )
 
         # Visual rollback on API error simulation
         # In a real system, if the API call fails after this point,
@@ -998,8 +1079,440 @@ def transition_issue(request, issue_id):
                         "message": "Failed to persist status transition. Changes rolled back.",
                     }
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    serializer = IssueSerializer(issue, context={"request": request})
+    return Response(
+        {
+            "error": None,
+            "issue": serializer.data,
+        }
+    )
+
+    serializer = IssueSerializer(issue, context={"request": request})
+    return Response(
+        {
+            "error": None,
+            "issue": serializer.data,
+        }
+    )
+
+# ---- Comment endpoints ----
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_comments(request, issue_id):
+    """List comments for an issue.
+
+    Only workspace members can view comments.
+    """
+    user = request.user
+
+    try:
+        issue = Issue.objects.select_related(
+            "board__project", "board__project__workspace"
+        ).get(id=issue_id)
+    except Issue.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Issue not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be member of the issue's board's project workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=issue.board.project.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view comments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    comments = issue.comments.filter(is_active=True).order_by("-created_at")
+    serializer = CommentSerializer(comments, many=True, context={"request": request})
+    return Response(
+        {"error": None, "results": serializer.data}
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_comment(request, issue_id):
+    """Create a comment on an issue.
+
+    Only workspace members can create comments.
+    Author is set to the current user.
+    Body: {"text": "comment text"}
+    """
+    user = request.user
+
+    try:
+        issue = Issue.objects.select_related(
+            "board__project", "board__project__workspace"
+        ).get(id=issue_id)
+    except Issue.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Issue not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be member of the issue's board's project workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=issue.board.project.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may create comments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = CommentSerializer(data=request.data, context={"request": request})
+    if serializer.is_valid(raise_exception=True):
+        comment = serializer.save(issue=issue, author=user)
+    log_audit_operation(
+        actor=request.user,
+        workspace=issue.board.project.workspace,
+        resource_type="comment",
+        resource_id=comment.id,
+        operation="create",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Comment created successfully",
+    )
+
+    return Response(
+        {"error": None, "comment": CommentSerializer(comment, context={"request": request}).data},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_comment(request, comment_id):
+    """Delete a comment.
+
+    Only the author or workspace owner/admin can delete.
+    """
+    user = request.user
+
+    try:
+        comment = Comment.objects.select_related(
+            "issue__board__project__workspace", "author"
+        ).get(id=comment_id, is_active=True)
+    except Comment.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Comment not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check: user must be member of the comment's issue board's project workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=comment.issue.board.project.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may delete comments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Only author or owner/admin can delete
+    is_author = comment.author and comment.author.id == user.id
+    is_owner_or_admin = False
+    if comment.issue.board.project.workspace:
+        membership = Membership.objects.filter(
+            user=user, workspace=comment.issue.board.project.workspace
+        ).first()
+        if membership and membership.role in ("owner", "admin"):
+            is_owner_or_admin = True
+
+    if not (is_author or is_owner_or_admin):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only the comment author or workspace owner/admin may delete comments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    comment.is_active = False
+    comment.save()
+    log_audit_operation(
+        actor=request.user,
+        workspace=comment.issue.board.project.workspace,
+        resource_type="comment",
+        resource_id=comment.id,
+        operation="delete",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Comment deleted successfully",
+    )
+    return Response({"error": None}, status=status.HTTP_204_NO_CONTENT)
+
+# ---- Sprint lifecycle endpoints ----
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_sprints(request):
+    """List sprints for a project.
+
+    Query param project_id filters sprints to a specific project.
+    Returns sprints for projects in the user's workspaces.
+    """
+    user = request.user
+    project_id = request.query_params.get("project_id", None)
+
+    if project_id:
+        try:
+            project = Project.objects.get(id=project_id)
+            # Check membership: user must be member of the project's workspace
+            has_membership = Membership.objects.filter(
+                user=user, workspace=project.workspace
+            ).exists()
+            if not has_membership:
+                return Response(
+                    {"error": {"code": "permission_denied", "message": "Cross-workspace access denied. You are not a member of this project's workspace."}},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except Project.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Project not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        sprints = Sprint.objects.filter(project=project).select_related("project", "workspace")
+    else:
+        # List sprints from user's workspace projects
+        memberships = user.memberships.select_related("workspace")
+        workspaces = [m.workspace for m in memberships]
+        sprints = Sprint.objects.filter(workspace__in=workspaces).select_related("project", "workspace")
+
+    serializer = SprintSerializer(sprints, many=True, context={"request": request})
+    return Response(
+        {
+            "error": None,
+            "results": serializer.data,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_sprint(request):
+    """Create a new sprint.
+
+    Only owners/admins of the project's workspace can create sprints.
+    Body: {"name": "Sprint Name", "project_id": 1, "status": "planned"}
+    """
+    user = request.user
+    project_id = request.data.get("project_id", None)
+
+    if not project_id:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "Missing required parameter: project_id.",
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Project not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be owner or admin of the project's workspace
+    membership = Membership.objects.filter(user=user, role__in=["owner", "admin"], workspace=project.workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may create sprints."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    name = request.data.get("name", "").strip()
+    status = request.data.get("status", "planned")
+
+    if not name:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "The request contains invalid data.",
+                    "fields": {"name": ["This field must not be blank."]},
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Valid status choices
+    status_choices = dict(Sprint.STATUS_CHOICES).keys()
+    if status not in status_choices:
+        status = "planned"
+
+    with transaction.atomic():
+        sprint = Sprint.objects.create(
+            name=name,
+            project=project,
+            workspace=project.workspace,
+            status=status,
+        )
+
+    log_audit_operation(
+        actor=request.user,
+        workspace=sprint.workspace,
+        resource_type="sprint",
+        resource_id=sprint.id,
+        operation="create",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Sprint created successfully",
+    )
+
+    serializer = SprintSerializer(sprint, context={"request": request})
+    return Response(
+        {
+            "error": None,
+            "sprint": serializer.data,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_sprint(request, sprint_id):
+    """Update a sprint.
+
+    Only owners/admins of the sprint's project workspace can update.
+    Body: {"name": "New Name", "status": "active", "start_date": "2026-01-01", "end_date": "2026-12-31"}
+    """
+    user = request.user
+
+    try:
+        sprint = Sprint.objects.get(id=sprint_id)
+    except Sprint.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Sprint not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be owner or admin of the sprint's workspace
+    membership = Membership.objects.filter(user=user, role__in=["owner", "admin"], workspace=sprint.workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may update sprints."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    name = request.data.get("name", None)
+    status = request.data.get("status", None)
+    start_date = request.data.get("start_date", None)
+    end_date = request.data.get("end_date", None)
+
+    if name is not None:
+        name = name.strip()
+        if not name:
+            return Response(
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "The request contains invalid data.",
+                        "fields": {"name": ["This field must not be blank."]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sprint.name = name
+
+    if status is not None:
+        status_choices = dict(Sprint.STATUS_CHOICES).keys()
+        if status in status_choices:
+            sprint.status = status
+
+    if start_date is not None:
+        sprint.start_date = start_date
+
+    if end_date is not None:
+        sprint.end_date = end_date
+
+    sprint.save()
+
+    log_audit_operation(
+        actor=request.user,
+        workspace=sprint.workspace,
+        resource_type="sprint",
+        resource_id=sprint.id,
+        operation="update",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Sprint updated successfully",
+    )
+
+    serializer = SprintSerializer(sprint, context={"request": request})
+    return Response(
+        {
+            "error": None,
+            "sprint": serializer.data,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def issue_sprint_assignment(request, issue_id):
+    """Assign an issue to a sprint.
+
+    Checks membership and that the sprint belongs to the same project/workspace.
+    Body: {"sprint_id": 1}
+    """
+    user = request.user
+
+    try:
+        issue = Issue.objects.select_related(
+            "board__project", "sprint_id"
+        ).get(id=issue_id)
+    except Issue.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Issue not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be member of the issue's workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=issue.board.project.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may assign sprints to issues."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    sprint_id = request.data.get("sprint_id", None)
+    if not sprint_id:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "Missing required parameter: sprint_id.",
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        sprint = Sprint.objects.get(id=sprint_id, project=issue.board.project, workspace=issue.board.project.workspace)
+    except Sprint.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Sprint not found in this project or does not belong to the same workspace."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Assign sprint to issue
+    with transaction.atomic():
+        issue.sprint_id = sprint
+        issue.version = (issue.version or 0) + 1
+        issue.save()
 
     serializer = IssueSerializer(issue, context={"request": request})
     return Response(

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -213,3 +213,17 @@ class SprintSerializer(serializers.ModelSerializer):
             "status", "start_date", "end_date", "created_at",
         ]
         read_only_fields = ["id", "project_name", "project_key", "created_at"]
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    """Serializer for comment representation."""
+
+    author_username = serializers.ReadOnlyField(source="author.username", allow_null=True)
+
+    class Meta:
+        model = Comment
+        fields = [
+            "id", "issue", "author", "author_username", "text",
+            "created_at", "is_active",
+        ]
+        read_only_fields = ["id", "author", "author_username", "created_at"]

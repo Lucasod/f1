@@ -25,4 +25,9 @@ urlpatterns = [
     path("issues/<int:issue_id>/", views.issue_detail, name="issue_detail"),
     path("issues/<int:issue_id>/update/", views.update_issue, name="update_issue"),
     path("issues/<int:issue_id>/transitions/", views.transition_issue, name="transition_issue"),
+    # Sprint lifecycle endpoints
+    path("sprints/", views.list_sprints, name="list_sprints"),
+    path("sprints/create/", views.create_sprint, name="create_sprint"),
+    path("sprints/<int:sprint_id>/", views.update_sprint, name="update_sprint"),
+    path("issues/<int:issue_id>/assign-sprint/", views.issue_sprint_assignment, name="issue_sprint_assignment"),
 ]

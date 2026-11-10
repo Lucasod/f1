@@ -221,6 +221,7 @@ class WorkflowStatus(TenantModelMixin, models.Model):
     )
     name = models.CharField("name", max_length=20, choices=STATUS_CHOICES)
     position = models.IntegerField("position", default=0, help_text="Ordering within the board")
+    is_active = models.BooleanField("is active", default=True, help_text="Indicates if this status is currently active for its board")
     is_default = models.BooleanField("is default", default=True)
 
     class Meta:
@@ -360,3 +361,97 @@ class Issue(TenantModelMixin, models.Model):
 
     def __str__(self):
         return f"#{self.number} {self.title} — {self.board.project.key}"
+
+
+class AuditLog(TenantModelMixin, models.Model):
+    """Audit log trail for all significant operations."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
+
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+    )
+    RESOURCE_TYPE_CHOICES = [
+        ("workspace", "Workspace"),
+        ("project", "Project"),
+        ("board", "Board"),
+        ("issue", "Issue"),
+        ("sprint", "Sprint"),
+        ("comment", "Comment"),
+    ]
+    resource_type = models.CharField(
+        "resource type",
+        max_length=30,
+        choices=RESOURCE_TYPE_CHOICES,
+    )
+    resource_id = models.PositiveBigIntegerField()
+    OPERATION_CHOICES = [
+        ("create", "Create"),
+        ("update", "Update"),
+        ("delete", "Delete"),
+        ("transition", "Transition"),
+    ]
+    operation = models.CharField(
+        "operation",
+        max_length=30,
+        choices=OPERATION_CHOICES,
+    )
+    timestamp = models.DateTimeField("timestamp", auto_now_add=True)
+    correlation_id = models.CharField(
+        "correlation id",
+        max_length=36,
+        null=True,
+        blank=True,
+        help_text="UUID for request tracing",
+    )
+    success = models.BooleanField("success", default=True)
+    details = models.TextField("details", blank=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        verbose_name = "audit log"
+        verbose_name_plural = "audit logs"
+
+
+class Comment(TenantModelMixin, models.Model):
+    """A comment on an issue."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
+
+    issue = models.ForeignKey(
+        Issue,
+        on_delete=models.CASCADE,
+        verbose_name="issue",
+        related_name="comments",
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="author",
+    )
+    text = models.TextField("text")
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    is_active = models.BooleanField("is active", default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "comment"
+        verbose_name_plural = "comments"
+
+    def __str__(self):
+        return f"Comment by {self.author} on #{self.issue.number}" if self.author else f"Comment on #{self.issue.number}"
