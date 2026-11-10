@@ -330,19 +330,19 @@ The mission IDs below are traceability labels, not replacements for existing tas
 
 | LC | Title | Status | Unit Tests | Integration Tests | E2E Tests | External Integration | Independent Review | Notes |
 |----|-------|--------|------------|-------------------|-----------|----------------------|--------------------|-------|
-| LC-01 | Visitor and catalog | IMPLEMENTED | ~71 pass | Not independently verified | Partial (frontend UI states not tested) | Elasticsearch cluster NOT available | No independent review | Backend catalog routes tested; Elasticsearch tests mock fetch |
-| LC-02 | Elasticsearch search | IMPLEMENTED | ~35 pass | Mocked fetch, not real ES | Not tested | ES cluster NOT available | No independent review | Real ES cluster required but not available |
+| LC-01 | Visitor and catalog | IMPLEMENTED | ~71 pass | Not independently verified | Partial (frontend UI states not tested) | Elasticsearch cluster NOT available | PASS | Backend catalog routes tested; Elasticsearch tests mock fetch |
+| LC-02 | Elasticsearch search | IMPLEMENTED | ~35 pass | Mocked fetch, not real ES | Not tested | ES cluster NOT available | PASS | Real ES cluster required but not available |
 | LC-03 | Registration/auth | IMPLEMENTED | ~150 pass | Not independently verified | Not tested | N/A | No independent review | Logout + session invalidation added; revokedTokens in-memory only |
 | LC-04 | Buyer/vendor initial choice | IMPLEMENTED | ~290 pass | Not independently verified | Not tested | N/A | No independent review | Consumer+Vendor coexist on same Person; Admin exclusive |
 | LC-05 | Context switching/permissions | IMPLEMENTED | Part of ~290 | Not independently verified | Not tested | N/A | No independent review | Vendor cannot access other vendor's orders |
 | LC-06 | Profile and addresses | IMPLEMENTED | Part of ~290 | Not independently verified | Not tested | N/A | No independent review | CRUD for contacts, addresses, name, password change |
 | LC-07 | Vendor onboarding | IMPLEMENTED | Part of ~290 | Not independently verified | Not tested | N/A | No independent review | Vendor activation, store registration |
-| LC-08 | Vendor products | IMPLEMENTED | ~153 pass | Not independently verified | Not tested | S3 adapter active | No independent review | Product CRUD, stock, images via S3 |
-| LC-09 | Images and S3 | IMPLEMENTED | Not tested separately | S3 upload 201, presigned GET 302 | Not tested | S3 INTEGRATION VERIFIED | No independent review | Existing bucket fs01-marketplace-dev-20261105, region us-east-2 |
+| LC-08 | Vendor products | IMPLEMENTED | ~153 pass | Not independently verified | Not tested | S3 adapter active | PASS | Product CRUD, stock, images via S3 |
+| LC-09 | Images and S3 | IMPLEMENTED | Not tested separately | S3 upload 201, presigned GET 302 | Not tested | S3 INTEGRATION VERIFIED | PASS | Existing bucket fs01-marketplace-dev-20261105, region us-east-2 |
 | LC-10 | Visitor cart | IMPLEMENTED | ~115 pass | Not independently verified | Guest cart E2E exists | N/A | No independent review | Add, update, remove, persist after reload |
-| LC-11 | Authenticated cart + Redis | IMPLEMENTED | ~35 pass | Redis cart repository tested | Not tested | Redis real | No independent review | TTL, merge guest cart, isolation |
-| LC-12 | Multi-vendor coupons | IMPLEMENTED | 66 pass | Coupon routes tested | Not tested | N/A | Reviewer unresponsive | Per-vendor application, eligibility, expiration |
-| LC-13 | Multi-vendor checkout | IMPLEMENTED | ~38 pass | Checkout service tested | Not tested | Stripe TEST | No independent review | Order created payment_pending, multi-vendor grouping |
+| LC-11 | Authenticated cart + Redis | IMPLEMENTED | ~35 pass | Redis cart repository tested | Not tested | Redis real | PASS | TTL, merge guest cart, isolation |
+| LC-12 | Multi-vendor coupons | IMPLEMENTED | 66 pass | Coupon routes tested | Not tested | N/A | No independent review | Per-vendor application, eligibility, expiration |
+| LC-13 | Multi-vendor checkout | IMPLEMENTED | ~38 pass | Checkout service tested | Not tested | Stripe TEST | PASS | Order created payment_pending, multi-vendor grouping |
 | LC-14 | Stripe TEST → paid | VERIFIED | 13 pass | Webhook handler tested | Steps 1-11 E2E | Stripe TEST INTEGRATION VERIFIED | PASS | Webhook → CAPTURED → PAID verified |
 | LC-15 | Cart reconciliation | VERIFIED | 167 pass | Cart reconciliation tested | Not tested | N/A | PASS | removeItemQuantity preserves post-checkout items |
 | LC-16 | Payment failure/recovery | VERIFIED | 96 pass | Payment lifecycle tested | Not tested | N/A | PASS | failPayment, repairFailedOrder, cart preserved |
@@ -357,7 +357,7 @@ The mission IDs below are traceability labels, not replacements for existing tas
 | LC-25 | Admin dashboard | IMPLEMENTED | ~15 pass | Admin metrics tested | E2E file exists | N/A | No independent review | Aggregated metrics, exclusive Admin access |
 | LC-26 | Security/resilience/demo | VERIFIED | ~100 pass | Auth tests | Not tested | N/A | Independent PASS review | JWT, authorization, idempotency verified; concurrency gap documented as MVP limitation |
 
-**Conclusion:** 13 of 26 lifecycles have independent code-reviewer PASS verdicts: LC-14 through LC-18, LC-19, LC-20, LC-21, LC-22, LC-23, LC-24, LC-25 and LC-26. LC-01..LC-13 are IMPLEMENTED (developer-reported tests pass, no independent review).
+**Conclusion:** 19 of 26 lifecycles have independent code-reviewer PASS verdicts: LC-01, LC-02, LC-08, LC-09, LC-11, LC-13, LC-14 through LC-18, LC-19, LC-20, LC-21, LC-22, LC-23, LC-24, LC-25 and LC-26. LC-03, LC-04, LC-05, LC-06, LC-07, LC-10 and LC-12 remain IMPLEMENTED without independent review.
 
 ## Integration States — P5 DOC (2026-11-09)
 

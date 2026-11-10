@@ -19,12 +19,12 @@ import { Product } from '@/shared/api/product';
 import { productApi } from '@/shared/api/product';
 
 /**
- * Format currency in BRL (Brazilian Real)
+ * Format currency in USD (English locale)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'BRL',
+    currency: 'USD',
   }).format(value);
 }
 

@@ -18,12 +18,12 @@ import { Select } from '@/components/ui/Input';
 const DEFAULT_PAGE_SIZE = 10;
 
 /**
- * Format currency in BRL (Brazilian Real)
+ * Format currency in USD (US Dollar)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'BRL',
+    currency: 'USD',
   }).format(value);
 }
 
@@ -31,7 +31,7 @@ function formatCurrency(value: number): string {
  * Format date to Brazilian locale
  */
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('pt-BR', {
+  return new Date(dateString).toLocaleDateString('en-US', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -52,13 +52,13 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): {
     label: string;
     variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral';
   }> = {
-    pending: { label: 'PENDENTE', variant: 'warning' },
-    confirmed: { label: 'CONFIRMADO', variant: 'default' },
-    preparing: { label: 'PREPARANDO', variant: 'info' },
-    shipped: { label: 'ENVIADO', variant: 'info' },
-    delivered: { label: 'ENTREGUE', variant: 'success' },
-    cancelled: { label: 'CANCELADO', variant: 'error' },
-    returned: { label: 'DEVOLVIDO', variant: 'error' },
+    pending: { label: 'PENDING', variant: 'warning' },
+    confirmed: { label: 'CONFIRMED', variant: 'default' },
+    preparing: { label: 'PREPARING', variant: 'info' },
+    shipped: { label: 'SHIPPED', variant: 'info' },
+    delivered: { label: 'DELIVERED', variant: 'success' },
+    cancelled: { label: 'CANCELLED', variant: 'error' },
+    returned: { label: 'RETURNED', variant: 'error' },
   };
 
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
@@ -69,13 +69,13 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): {
  */
 const VENDOR_GROUP_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All status' },
-  { value: 'pending', label: 'PENDENTE' },
-  { value: 'confirmed', label: 'CONFIRMADO' },
-  { value: 'preparing', label: 'PREPARANDO' },
-  { value: 'shipped', label: 'ENVIADO' },
-  { value: 'delivered', label: 'ENTREGUE' },
-  { value: 'cancelled', label: 'CANCELADO' },
-  { value: 'returned', label: 'DEVOLVIDO' },
+  { value: 'pending', label: 'PENDING' },
+  { value: 'confirmed', label: 'CONFIRMED' },
+  { value: 'preparing', label: 'PREPARING' },
+  { value: 'shipped', label: 'SHIPPED' },
+  { value: 'delivered', label: 'DELIVERED' },
+  { value: 'cancelled', label: 'CANCELLED' },
+  { value: 'returned', label: 'RETURNED' },
 ];
 
 /**
@@ -120,11 +120,11 @@ function VendorGroupCard({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-gray-200">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">Pedido</span>
+            <span className="text-sm font-medium text-gray-900">Order</span>
             <span className="font-mono text-sm text-gray-700">{vendorGroup.orderId.slice(0, 8).toUpperCase()}</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>Grupo vendedor</span>
+            <span>Vendor Group</span>
             <span className="font-mono">{vendorGroup.id.slice(0, 8).toUpperCase()}</span>
           </div>
         </div>
@@ -136,11 +136,11 @@ function VendorGroupCard({
       {/* Customer Info & Items Count */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Itens</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Items</p>
           <p className="font-medium text-gray-900">{itemsCount}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Data</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Date</p>
           <p className="font-medium text-gray-900">{formatDate(vendorGroup.createdAt)}</p>
         </div>
       </div>
@@ -169,7 +169,7 @@ function VendorGroupCard({
             size="sm"
             onClick={() => onViewDetails(vendorGroup.orderId)}
           >
-            Ver detalhes
+            View details
           </Button>
           {availableNextStatuses.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -270,15 +270,15 @@ export function VendorOrderPage() {
           onError: (error: any) => {
             if (error instanceof OrderApiException && error.status === 409) {
               const message =
-                error.message || 'Status de pagamento inválido';
+                error.message || 'Invalid payment status';
               alert(
-                `Não é possível preparar este pedido: ` + message +
-                  `. O pagamento deve ser confirmado antes de mudar o status para PREPARANDO.`
+                `Unable to prepare this order: ` + message +
+                  `. The payment must be confirmed before changing the status to PREPARING.`
               );
             } else if (error instanceof Error) {
-              alert(`Erro ao atualizar status: ${error.message}`);
+              alert(`Error updating status: ${error.message}`);
             } else {
-              alert('Erro inesperado ao atualizar o status do pedido.');
+              alert('Error unexpectedly updating order status.');
             }
           },
         }
@@ -292,7 +292,7 @@ export function VendorOrderPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" label="Carregando pedidos do vendedor" withStatusRole />
+            <Spinner size="lg" label="Loading vendor orders" withStatusRole />
           </div>
         </div>
       </div>
@@ -306,10 +306,10 @@ export function VendorOrderPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
             message="Could not load seller's orders. Try again."
-            title="Erro ao carregar pedidos"
+            title="Error loading orders"
             variant="error"
             action={{
-              label: 'Tentar novamente',
+              label: 'Try again',
               onClick: () => refetch(),
             }}
             role="alert"
@@ -336,7 +336,7 @@ export function VendorOrderPage() {
               !statusFilter
                 ? undefined
                 : {
-                    label: 'Limpar filtro',
+                    label: 'Clear filter',
                     onClick: () => setStatusFilter(''),
                     variant: 'secondary' as const,
                   }
@@ -353,7 +353,7 @@ export function VendorOrderPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Meus Pedidos (Vendedor)</h1>
+          <h1 className="text-3xl font-bold text-gray-900">My Orders (Seller)</h1>
           <p className="mt-1 text-gray-600">
             {totalGroups} order group{totalGroups !== 1 ? 's' : ''} found{totalGroups !== 1 ? 's' : ''}
           </p>
@@ -365,14 +365,14 @@ export function VendorOrderPage() {
             <div className="w-full sm:w-72">
               <Select
                 id="vendor-group-status-filter"
-                label="Filtrar por status"
+                label="Filter by status"
                 options={VENDOR_GROUP_STATUS_FILTER_OPTIONS}
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value as OrderVendorGroupStatus | '');
                   setCurrentPage(1);
                 }}
-                placeholder="Todos os status"
+                placeholder="All status"
               />
             </div>
           </div>
@@ -405,7 +405,7 @@ export function VendorOrderPage() {
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
             >
-              Anterior
+              Previous
             </Button>
             <span className="px-4 text-sm text-gray-600">
               Page {currentPage} of {totalPages}

@@ -75,8 +75,8 @@ const mockProduct1: Product = {
   id: 'prod-1',
   vendorId: 'vendor-1',
   categoryId: 'cat-1',
-  name: 'Produto Teste 1',
-  description: 'Descrição do produto 1',
+  name: 'Test Product 1',
+  description: 'Product Description 1',
   price: 29.99,
   quantity: 10,
   status: 'active',
@@ -89,8 +89,8 @@ const mockProduct2: Product = {
   id: 'prod-2',
   vendorId: 'vendor-2',
   categoryId: 'cat-2',
-  name: 'Produto Teste 2',
-  description: 'Descrição do produto 2',
+  name: 'Test Product 2',
+  description: 'Product Description 2',
   price: 49.99,
   quantity: 5,
   status: 'active',
@@ -154,7 +154,7 @@ describe('CartPage', () => {
     'allows editing after a proven pre-write rejection %s %s and successful read', async (status, code) => {
       vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new CartApiException('rejected', status, code));
       renderWithNav(<CartPage />);
-      const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+      const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
       fireEvent.change(input, { target: { value: '3' } });
       fireEvent.blur(input);
       expect(await screen.findByRole('alert')).toHaveTextContent(/rejected/i);
@@ -168,7 +168,7 @@ describe('CartPage', () => {
     'allows editing after proven pre-write removal rejection %s %s', async (status, code) => {
       vi.mocked(cartApi.removeItem).mockRejectedValue(new CartApiException('rejected', status, code));
       renderWithNav(<CartPage />);
-      fireEvent.click(await screen.findByRole('button', { name: /remove produto teste 1 from cart/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /remove test product 1 from cart/i }));
       fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
       expect(await screen.findByRole('alert')).toHaveTextContent(/removal was rejected/i);
       expect(await screen.findByRole('button', { name: /proceed to checkout/i })).toBeEnabled();
@@ -181,7 +181,7 @@ describe('CartPage', () => {
     'keeps an unproven update rejection %s %s unconfirmed', async (status, code) => {
       vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new CartApiException('rejected', status, code));
       renderWithNav(<CartPage />);
-      const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+      const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
       fireEvent.change(input, { target: { value: '3' } });
       fireEvent.blur(input);
       expect(await screen.findByText(/cart unconfirmed/i)).toBeInTheDocument();
@@ -194,7 +194,7 @@ describe('CartPage', () => {
     vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new CartApiException('rejected', 404, 'PRODUCT_NOT_FOUND'));
     vi.mocked(cartApi.getCart).mockResolvedValueOnce({ cart: mockCart }).mockRejectedValue(new Error('Unavailable'));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     expect(await screen.findByText(/cart unconfirmed/i)).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('CartPage', () => {
     'keeps an unproven delete rejection %s %s unconfirmed', async (status, code) => {
       vi.mocked(cartApi.removeItem).mockRejectedValue(new CartApiException('rejected', status, code));
       renderWithNav(<CartPage />);
-      fireEvent.click(await screen.findByRole('button', { name: /remove produto teste 1 from cart/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /remove test product 1 from cart/i }));
       fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
       expect(await screen.findByText(/cart unconfirmed/i)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /proceed to checkout/i })).not.toBeInTheDocument();
@@ -217,28 +217,28 @@ describe('CartPage', () => {
   it('checks the live quantity rather than a detached optimistic input after an old read', async () => {
     vi.mocked(cartApi.updateItemQuantity).mockResolvedValue({ cart: { ...mockCart, items: [{ ...mockCartItem1, quantity: 3 }, mockCartItem2] } });
     renderWithNav(<CartPage />);
-    const oldInput = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const oldInput = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(oldInput, { target: { value: '3' } });
     fireEvent.blur(oldInput);
     await screen.findByRole('status');
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(oldInput).toHaveValue(3);
-    expect(screen.getByRole('spinbutton', { name: /quantity of produto teste 1/i })).toHaveValue(2);
-    expect(screen.getAllByText(/R\$ 109,97/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('spinbutton', { name: /quantity of test product 1/i })).toHaveValue(2);
+    expect(screen.getAllByText(/\$109\.97/).length).toBeGreaterThan(0);
   });
 
   it('discards only drafts for externally removed items after a cart refetch', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     renderWithNav(<CartPage />, client);
-    const first = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
-    const second = await screen.findByRole('spinbutton', { name: /quantity of produto teste 2/i });
+    const first = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
+    const second = await screen.findByRole('spinbutton', { name: /quantity of test product 2/i });
     fireEvent.change(first, { target: { value: '' } });
     fireEvent.blur(first);
     fireEvent.change(second, { target: { value: '3' } });
     vi.mocked(cartApi.getCart).mockResolvedValue({ cart: { ...mockCart, items: [mockCartItem2] } });
     await act(async () => { await client.refetchQueries({ queryKey: ['cart'] }); });
-    await waitFor(() => expect(screen.queryByRole('spinbutton', { name: /quantity of produto teste 1/i })).not.toBeInTheDocument());
-    const remaining = await screen.findByRole('spinbutton', { name: /quantity of produto teste 2/i });
+    await waitFor(() => expect(screen.queryByRole('spinbutton', { name: /quantity of test product 1/i })).not.toBeInTheDocument());
+    const remaining = await screen.findByRole('spinbutton', { name: /quantity of test product 2/i });
     expect(remaining).toHaveValue(3);
     expect(screen.getByRole('button', { name: /proceed to checkout/i })).toBeDisabled();
     fireEvent.keyDown(remaining, { key: 'Escape' });
@@ -250,7 +250,7 @@ describe('CartPage', () => {
     let resolveUpdate!: (value: { cart: Cart }) => void;
     vi.mocked(cartApi.updateItemQuantity).mockImplementation(() => new Promise((resolve) => { resolveUpdate = resolve; }));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     expect(await screen.findByRole('status')).toHaveTextContent(/processing/i);
@@ -263,7 +263,7 @@ describe('CartPage', () => {
   it('does not treat a read after an ambiguous write as proof of completion', async () => {
     vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new Error('Network failure'));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     await waitFor(() => expect(cartApi.getCart).toHaveBeenCalledTimes(2));
@@ -278,7 +278,7 @@ describe('CartPage', () => {
       .mockRejectedValueOnce(new Error('Unavailable'))
       .mockImplementationOnce(() => new Promise((resolve) => { resolveRead = resolve; }));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     await screen.findByText(/cart unconfirmed/i);
@@ -325,22 +325,22 @@ describe('CartPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Wait for product details to load
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
-    expect(screen.getByText('Produto Teste 2')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
+    expect(screen.getByText('Test Product 2')).toBeInTheDocument();
 
     // Check quantities
     expect(screen.getByDisplayValue('2')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1')).toBeInTheDocument();
 
     // Check prices (unit prices)
-    expect(screen.getByText(/R\$ 29,99 \/ un/)).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 49,99 \/ un/)).toBeInTheDocument();
+    expect(screen.getByText(/\$29\.99 \/ un/)).toBeInTheDocument();
+    expect(screen.getByText(/\$49\.99 \/ un/)).toBeInTheDocument();
 
     // Check line totals
-    expect(screen.getByText(/R\$ 59,98/)).toBeInTheDocument(); // 2 * 29.99
-    // Product 2 line total is also R$ 49,99 (1 * 49.99), same as unit price
-    // So we verify by checking there are 2 elements with R$ 49,99 (unit price + line total)
-    const price4999Elements = screen.getAllByText(/R\$ 49,99/);
+    expect(screen.getByText(/\$59\.98/)).toBeInTheDocument(); // 2 * 29.99
+    // Product 2 line total is also $49.99 (1 * 49.99), same as unit price
+    // So we verify by checking there are 2 elements with $49.99 (unit price + line total)
+    const price4999Elements = screen.getAllByText(/\$49\.99/);
     expect(price4999Elements.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -350,7 +350,7 @@ describe('CartPage', () => {
     renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
     const quantityInput = screen.getByDisplayValue('2');
 
@@ -370,11 +370,11 @@ describe('CartPage', () => {
   it('does not display stale quantity and subtotal as confirmed when an update fails', async () => {
     vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new Error('Update failed'));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     await screen.findByText(/could not confirm the update/i);
-    expect(screen.queryByRole('spinbutton', { name: /quantity of produto teste 1/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: /quantity of test product 1/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /proceed to checkout/i })).not.toBeInTheDocument();
   });
 
@@ -386,11 +386,11 @@ describe('CartPage', () => {
       return { cart };
     });
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
-    await waitFor(() => expect(screen.getByRole('spinbutton', { name: /quantity of produto teste 1/i })).toHaveValue(3));
-    expect(screen.getAllByText(/R\$ 139,96/).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: /quantity of test product 1/i })).toHaveValue(3));
+    expect(screen.getAllByText(/\$139\.96/).length).toBeGreaterThan(0);
   });
 
   it('removes item when remove button clicked and confirmed', async () => {
@@ -401,14 +401,14 @@ describe('CartPage', () => {
     renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
     // Click remove button for first item
-    const removeButton = screen.getByRole('button', { name: /remove produto teste 1 from cart/i });
+    const removeButton = screen.getByRole('button', { name: /remove test product 1 from cart/i });
     fireEvent.click(removeButton);
 
     // Confirm dialog should appear
-    await waitFor(() => expect(screen.getByText(/are you sure you want to remove "produto teste 1" from your cart\?/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/are you sure you want to remove "test product 1" from your cart\?/i)).toBeInTheDocument());
 
     // Click confirm button in dialog (the one with "Remover" text that's not the item remove buttons)
     const confirmButton = screen.getByRole('button', { name: /^remove$/i });
@@ -422,7 +422,7 @@ describe('CartPage', () => {
     renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
     // Check order summary section
     expect(screen.getByText(/order summary/i)).toBeInTheDocument();
@@ -431,7 +431,7 @@ describe('CartPage', () => {
     expect(screen.getByText(/subtotal/i)).toBeInTheDocument();
     // Both subtotal and total show the same value, so we check for the text in the summary section
     const summarySection = screen.getByText(/order summary/i).closest('section') || document.body;
-    expect(summarySection).toHaveTextContent(/R\$ 109,97/);
+    expect(summarySection).toHaveTextContent(/\$109\.97/);
 
     // Shipping
     expect(screen.getByText(/^shipping$/i)).toBeInTheDocument();
@@ -458,7 +458,7 @@ describe('CartPage', () => {
     const { navigateMock } = renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
     const checkoutButton = screen.getByRole('button', { name: /proceed to checkout/i });
     expect(checkoutButton).not.toBeDisabled();
@@ -479,7 +479,7 @@ describe('CartPage', () => {
     renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
     const quantityInput = screen.getByDisplayValue('2');
 
@@ -500,7 +500,7 @@ describe('CartPage', () => {
     vi.mocked(productApi.getById).mockImplementation(async (id) => ({ product: id === 'prod-1' ? { ...mockProduct1, quantity: 50 } : mockProduct2 }));
     vi.mocked(cartApi.updateItemQuantity).mockResolvedValue({ cart: mockCart });
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     input.focus();
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.change(input, { target: { value: '1' } });
@@ -517,7 +517,7 @@ describe('CartPage', () => {
     vi.mocked(cartApi.updateItemQuantity).mockRejectedValue(new Error('Network failure'));
     vi.mocked(cartApi.getCart).mockResolvedValueOnce({ cart: mockCart }).mockRejectedValue(new Error('Unavailable'));
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     await screen.findByText(/cart unconfirmed/i);
@@ -533,7 +533,7 @@ describe('CartPage', () => {
 
   it('allows cancelling an invalid draft without sending an update', async () => {
     renderWithNav(<CartPage />);
-    const input = await screen.findByRole('spinbutton', { name: /quantity of produto teste 1/i });
+    const input = await screen.findByRole('spinbutton', { name: /quantity of test product 1/i });
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
     expect(screen.getByRole('button', { name: /proceed to checkout/i })).toBeDisabled();
@@ -546,7 +546,7 @@ describe('CartPage', () => {
   it('reports and reconciles an ambiguous removal', async () => {
     vi.mocked(cartApi.removeItem).mockRejectedValue(new Error('Network failure'));
     renderWithNav(<CartPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /remove produto teste 1 from cart/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /remove test product 1 from cart/i }));
     fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
     await screen.findByText(/could not confirm the removal/i);
     await waitFor(() => expect(cartApi.getCart).toHaveBeenCalledTimes(2));
@@ -596,13 +596,13 @@ describe('CartPage', () => {
     renderWithNav(<CartPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Produto Teste 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Test Product 1')).toBeInTheDocument());
 
-    const removeButton = screen.getByRole('button', { name: /remove produto teste 1 from cart/i });
+    const removeButton = screen.getByRole('button', { name: /remove test product 1 from cart/i });
     fireEvent.click(removeButton);
 
     await waitFor(() => expect(screen.getByText(/remove item from cart/i)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText(/are you sure you want to remove "produto teste 1" from your cart\?/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/are you sure you want to remove "test product 1" from your cart\?/i)).toBeInTheDocument());
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
     fireEvent.click(cancelButton);

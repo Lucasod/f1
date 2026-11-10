@@ -22,12 +22,12 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Badge } from '@/components/ui/Badge';
 
 /**
- * Format currency in BRL (Brazilian Real)
+ * Format currency in USD (US Dollar)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'BRL',
+    currency: 'USD',
   }).format(value);
 }
 
@@ -140,10 +140,10 @@ interface CheckoutStep {
 }
 
 const CHECKOUT_STEPS: CheckoutStep[] = [
-  { id: 'address', title: 'Endereço', description: 'Selecione o endereço de entrega' },
-  { id: 'coupon', title: 'Cupom', description: 'Aplique cupons de desconto' },
-  { id: 'summary', title: 'Resumo', description: 'Revise seu pedido' },
-  { id: 'payment', title: 'Pagamento', description: 'Escolha a forma de pagamento' },
+  { id: 'address', title: 'Address', description: 'Select delivery address' },
+  { id: 'coupon', title: 'Coupon', description: 'Apply discount coupons' },
+  { id: 'summary', title: 'Summary', description: 'Review your order' },
+  { id: 'payment', title: 'Payment', description: 'Choose payment method' },
 ];
 
 export function CheckoutPage() {
@@ -210,7 +210,7 @@ export function CheckoutPage() {
       const data = await fetchUserAddresses();
       setAddresses(data);
     } catch {
-      setAddressesError('Não foi possível carregar os endereços');
+      setAddressesError('Unable to load addresses');
     } finally {
       setAddressesLoading(false);
     }
@@ -306,7 +306,7 @@ export function CheckoutPage() {
 
   // Payment options
   const paymentOptions = useMemo(() => [
-    { value: 'stripe_checkout', label: 'Pagamento seguro via Stripe', description: 'You will be redirected to complete payment' },
+    { value: 'stripe_checkout', label: 'Secure payment via Stripe', description: 'You will be redirected to complete payment' },
   ], []);
 
   const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview && !confirmedQuote && !applyingCoupon && preview.purchasable !== false;
@@ -333,7 +333,7 @@ export function CheckoutPage() {
       });
       window.open(response.checkoutUrl, '_self');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao finalizar pedido';
+      const message = error instanceof Error ? error.message : 'Finalize order failed';
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
@@ -358,7 +358,7 @@ export function CheckoutPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex items-center justify-center h-64">
-          <Spinner size="lg" label="Carregando checkout" withStatusRole />
+          <Spinner size="lg" label="Loading checkout" withStatusRole />
         </div>
       </div>
     </div>
@@ -372,7 +372,7 @@ export function CheckoutPage() {
           title="Access denied"
           variant="error"
           action={{
-            label: 'Fazer login',
+            label: 'Login',
             onClick: () => navigate('/login'),
           }}
           role="alert"
@@ -386,10 +386,10 @@ export function CheckoutPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <ErrorAlert
           message="Could not load cart. Try again."
-          title="Erro ao carregar carrinho"
+          title="Error loading cart"
           variant="error"
           action={{
-            label: 'Tentar novamente',
+            label: 'Try again',
             onClick: () => refetchCart(),
           }}
           role="alert"
@@ -406,7 +406,7 @@ export function CheckoutPage() {
           title="Your cart is empty"
           description="Add products to your cart before proceeding to checkout."
           action={{
-            label: 'Continuar comprando',
+            label: 'Continue Shopping',
             onClick: () => navigate('/products'),
             variant: 'primary',
           }}
@@ -420,7 +420,7 @@ export function CheckoutPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Progress Steps */}
-        <nav className="mb-8" aria-label="Progresso do checkout" data-testid="checkout-progress-steps">
+        <nav className="mb-8" aria-label="Checkout progress" data-testid="checkout-progress-steps">
           <ol className="flex items-center" role="list">
             {CHECKOUT_STEPS.map((step, index) => (
               <li key={step.id} className="flex items-center" data-testid={`checkout-step-${step.id}`}>
@@ -451,7 +451,7 @@ export function CheckoutPage() {
         {submitError && (
           <ErrorAlert
             message={submitError}
-            title="Erro ao finalizar pedido"
+            title="Error finalizing order"
             variant="error"
             role="alert"
             className="mb-6"
@@ -463,11 +463,11 @@ export function CheckoutPage() {
         {/* Preview Error Alert */}
         {previewError && (
           <ErrorAlert
-            message={previewError instanceof Error ? previewError.message : 'Não foi possível carregar o resumo do pedido'}
-            title="Erro ao carregar preview"
+            message={previewError instanceof Error ? previewError.message : 'Unable to load order summary'}
+            title="Error loading preview"
             variant="error"
             action={{
-              label: 'Tentar novamente',
+              label: 'Try again',
               onClick: () => refetchPreview(),
             }}
             role="alert"
@@ -482,20 +482,20 @@ export function CheckoutPage() {
             <Card variant="bordered" padding="lg" data-testid="checkout-step-address">
               <CardHeader>
                 <CardTitle as="h2">1. Delivery Address</CardTitle>
-                <CardDescription>Selecione o endereço para onde o pedido será entregue</CardDescription>
+                <CardDescription>Select the delivery address</CardDescription>
               </CardHeader>
               <CardContent>
                 {addressesLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <Spinner label="Carregando endereços" withStatusRole />
+                    <Spinner label="Loading addresses" withStatusRole />
                   </div>
                 ) : addressesError ? (
                   <ErrorAlert
                     message={addressesError}
-                    title="Erro ao carregar endereços"
+                    title="Error loading addresses"
                     variant="error"
                     action={{
-                      label: 'Tentar novamente',
+                      label: 'Try again',
                       onClick: () => loadAddresses(),
                     }}
                     role="alert"
@@ -520,7 +520,7 @@ export function CheckoutPage() {
                     value={selectedAddressId}
                     onChange={setSelectedAddressId}
                     required
-                    error={submitError && !selectedAddressId ? 'Selecione um endereço' : undefined}
+                    error={submitError && !selectedAddressId ? 'Select address' : undefined}
                   />
                 )}
               </CardContent>
@@ -562,7 +562,7 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500">
-                  {confirmedQuote ? 'Finalizar pedido com desconto do cupom.' : 'Selecione um vendedor e um cupom para obter cotação.'}
+                  {confirmedQuote ? 'Finalize order with coupon discount.' : 'Select a vendor and a coupon to get a quote.'}
                 </p>
 
                 {confirmedQuote && (
@@ -614,8 +614,8 @@ export function CheckoutPage() {
 
                 {previewLoading && (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Spinner size="sm" label="Calculando totais" />
-                    <span>Atualizando totais...</span>
+                    <Spinner size="sm" label="Calculating totals" />
+                    <span>Updating totals...</span>
                   </div>
                 )}
               </CardContent>
@@ -624,8 +624,8 @@ export function CheckoutPage() {
             {/* Step 3: Order Summary */}
             <Card variant="bordered" padding="lg" data-testid="checkout-step-summary">
               <CardHeader>
-                <CardTitle as="h2">3. Resumo do Pedido</CardTitle>
-                <CardDescription>Revise os itens e valores antes de confirmar</CardDescription>
+                <CardTitle as="h2">3. Order Summary</CardTitle>
+                <CardDescription>Review items and values before confirming</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {vendorGroups.length > 0 ? (
@@ -643,14 +643,14 @@ export function CheckoutPage() {
                             <div key={item.productId} className="py-2 flex items-center justify-between">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{item.productName}</p>
-                                <p className="text-xs text-gray-500">Qtd: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
+<p className="text-xs text-gray-500">Qty: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
                               </div>
                               <p className="text-sm font-medium text-gray-900 ml-4">{formatCurrency(item.totalPrice)}</p>
                             </div>
                           ))}
                         </div>
                         <div className="flex justify-between text-sm text-gray-600 border-t border-gray-100 pt-2">
-                          <span>Subtotal do vendedor</span>
+                          <span>Vendor Subtotal</span>
                           <span className="font-medium text-gray-900">{formatCurrency(vendorGroup.subtotal)}</span>
                         </div>
                       </div>
@@ -661,8 +661,8 @@ export function CheckoutPage() {
                     {items.map((item) => (
                       <div key={item.productId} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">Produto {item.productId.slice(0, 8)}...</p>
-                          <p className="text-xs text-gray-500">Qtd: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
+                          <p className="text-sm font-medium text-gray-900 truncate">Product {item.productId.slice(0, 8)}...</p>
+                          <p className="text-xs text-gray-500">Qty: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
                         </div>
                         <p className="text-sm font-medium text-gray-900 ml-4">{formatCurrency(item.quantity * item.unitPrice)}</p>
                       </div>
@@ -672,17 +672,17 @@ export function CheckoutPage() {
 
                 <div className="border-t border-gray-200 pt-4 space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal bruto</span>
+                    <span className="text-gray-600">Gross Subtotal</span>
                     <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between text-sm text-green-600">
-                      <span>Desconto informado no preview</span>
+<span>Discount applied in preview</span>
                       <span className="font-medium">-{formatCurrency(discountAmount)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Frete</span>
+<div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Shipping</span>
                     <span className="font-medium text-gray-900" data-testid="main-shipping-amount">
                       {!preview ? unavailablePreviewLabel : shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                     </span>
@@ -700,13 +700,13 @@ export function CheckoutPage() {
             {/* Step 4: Payment Selection */}
             <Card variant="bordered" padding="lg" data-testid="checkout-step-payment">
               <CardHeader>
-                <CardTitle as="h2">4. Forma de Pagamento</CardTitle>
-                <CardDescription>Escolha como deseja pagar (ambiente de teste)</CardDescription>
+                <CardTitle as="h2">4. Payment Method</CardTitle>
+                <CardDescription>Choose how you want to pay (test environment)</CardDescription>
               </CardHeader>
               <CardContent>
                 <RadioGroup
                   name="payment-method"
-                  label="Forma de pagamento"
+                  label="Payment Method"
                   options={paymentOptions}
                   value={paymentMethod}
                   onChange={setPaymentMethod}
@@ -714,8 +714,8 @@ export function CheckoutPage() {
                   error={submitError && !paymentMethod ? 'Select payment method' : undefined}
                 />
                 <p className="mt-4 text-sm text-gray-500">
-                  <span className="font-medium">Nota:</span> Este é um ambiente de demonstração. 
-                  Nenhuma cobrança real será realizada.
+                  <span className="font-medium">Nota:</span> This is a demonstration environment. 
+                  No real charge will be made.
                 </p>
               </CardContent>
             </Card>
@@ -728,10 +728,10 @@ export function CheckoutPage() {
                 onClick={handleSubmit}
                 disabled={!canSubmit || isSubmitting || !preview}
                 isLoading={isSubmitting}
-                loadingText="Processando..."
+                loadingText="Processing..."
                 data-testid="checkout-submit-button"
               >
-                Finalizar Pedido
+                Finalize Order
               </Button>
             </div>
           </div>
@@ -740,21 +740,21 @@ export function CheckoutPage() {
             <div className="lg:col-span-1">
               <Card variant="elevated" padding="md" className="sticky top-24" data-testid="checkout-sidebar-summary">
                 <CardHeader>
-                  <CardTitle as="h2">Resumo</CardTitle>
+                  <CardTitle as="h2">Summary</CardTitle>
                 </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal bruto</span>
+                  <span className="text-gray-600">Gross Subtotal</span>
                   <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>Desconto informado no preview</span>
+                    <span>Discount applied in preview</span>
                     <span className="font-medium">-{formatCurrency(discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Frete</span>
+                  <span className="text-gray-600">Shipping</span>
                   <span className="font-medium text-gray-900" data-testid="sidebar-shipping-amount">
                     {!preview ? unavailablePreviewLabel : shippingAmount > 0 ? formatCurrency(shippingAmount) : 'free'}
                   </span>
@@ -768,7 +768,7 @@ export function CheckoutPage() {
               </CardContent>
               <CardFooter className="flex-col gap-3 pt-6 border-t border-gray-200">
                 <p className="text-xs text-gray-500 text-center w-full">
-                  {items.length} item{items.length !== 1 ? 's' : ''} no pedido
+                  {items.length} item{items.length !== 1 ? 's' : ''} in order
                 </p>
               </CardFooter>
             </Card>

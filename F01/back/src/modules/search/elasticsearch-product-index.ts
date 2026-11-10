@@ -65,6 +65,15 @@ export class ElasticsearchProductIndex {
           settings: {
             number_of_shards: 1,
             number_of_replicas: 0,
+            analysis: {
+              analyzer: {
+                product_analyzer: {
+                  type: 'custom',
+                  tokenizer: 'standard',
+                  filter: ['lowercase', 'asciifolding', 'portuguese_stemmer']
+                }
+              }
+            }
           },
           mappings: {
             properties: {
@@ -74,11 +83,13 @@ export class ElasticsearchProductIndex {
               category_path: { type: 'keyword' },
               name: {
                 type: 'text',
+                analyzer: 'product_analyzer',
+                search_analyzer: 'product_search_analyzer',
                 fields: {
                   keyword: { type: 'keyword' },
                 },
               },
-              description: { type: 'text' },
+              description: { type: 'text', analyzer: 'product_analyzer', search_analyzer: 'product_search_analyzer' },
               price: { type: 'double' },
               quantity: { type: 'integer' },
               in_stock: { type: 'boolean' },

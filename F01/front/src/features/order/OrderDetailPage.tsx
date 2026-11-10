@@ -21,12 +21,12 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 
 /**
- * Format currency in BRL (Brazilian Real)
+ * Format currency in USD (US Dollar)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'BRL',
+    currency: 'USD',
   }).format(value);
 }
 
@@ -34,7 +34,7 @@ function formatCurrency(value: number): string {
  * Format date to Brazilian locale
  */
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('pt-BR', {
+  return new Date(dateString).toLocaleDateString('en-US', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -81,11 +81,11 @@ function getVendorGroupStatusConfig(status: OrderVendorGroupStatus): { label: st
  * Timeline steps for order status tracking
  */
 const TIMELINE_STEPS: { status: OrderStatus; label: string; description: string }[] = [
-  { status: 'pending_payment', label: 'PENDING_PAYMENT', description: 'Aguardando pagamento' },
-  { status: 'paid', label: 'PAID', description: 'Pagamento confirmado' },
+  { status: 'pending_payment', label: 'PENDING_PAYMENT', description: 'Awaiting payment' },
+  { status: 'paid', label: 'PAID', description: 'Payment confirmed' },
   { status: 'processing', label: 'PROCESSING', description: 'Preparing' },
-  { status: 'shipped', label: 'SHIPPED', description: 'Enviado para entrega' },
-  { status: 'delivered', label: 'DELIVERED', description: 'Entregue' },
+  { status: 'shipped', label: 'SHIPPED', description: 'Shipped for delivery' },
+  { status: 'delivered', label: 'DELIVERED', description: 'Delivered' },
 ];
 
 const TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'failed_payment'];
@@ -135,7 +135,7 @@ function VendorGroupCard({
       {/* Vendor Group Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-gray-200">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Vendedor: {vendorGroup.vendorId.slice(0, 8).toUpperCase()}</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Seller: {vendorGroup.vendorId.slice(0, 8).toUpperCase()}</h3>
           <p className="text-sm text-gray-500 mt-0.5">ID do grupo: {vendorGroup.id.slice(0, 8).toUpperCase()}</p>
         </div>
         <Badge variant={statusConfig.variant} size="md" dot>
@@ -148,9 +148,9 @@ function VendorGroupCard({
         <table className="w-full text-sm" role="table">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Produto</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">Qtd</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">Preço Unit.</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Product</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">Total</th>
             </tr>
           </thead>
@@ -229,16 +229,16 @@ function OrderTotals({ order }: OrderTotalsProps) {
   return (
     <Card variant="bordered" padding="md">
       <CardHeader>
-        <CardTitle as="h3">Totais do Pedido</CardTitle>
+        <CardTitle as="h3">Order Totals</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Subtotal ({order.vendorGroups.length} vendedor{order.vendorGroups.length !== 1 ? 'es' : ''})</span>
+          <span className="text-gray-600">Subtotal ({order.vendorGroups.length} seller{order.vendorGroups.length !== 1 ? 's' : ''})</span>
           <span className="font-medium text-gray-900">{formatCurrency(subtotal)}</span>
         </div>
         {hasOrderStatus && (
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Frete</span>
+            <span className="text-gray-600">Shipping</span>
             <span className="font-medium text-gray-900">{formatCurrency(shipping)}</span>
           </div>
         )}
@@ -283,7 +283,7 @@ function TimelineTracker({ currentStatus }: TimelineTrackerProps) {
   return (
     <Card variant="bordered" padding="md">
       <CardHeader>
-        <CardTitle as="h3">Rastreamento do Pedido</CardTitle>
+        <CardTitle as="h3">Order Tracking</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="relative">
@@ -340,7 +340,7 @@ function TimelineTracker({ currentStatus }: TimelineTrackerProps) {
                 </div>
                 <div className="text-red-600">
                   <p className="font-medium text-sm">{getOrderStatusConfig(currentStatus).label}</p>
-                  <p className="text-xs mt-0.5">Pedido {currentStatus === 'cancelled' ? 'cancelado' : 'com pagamento falhou'}</p>
+                  <p className="text-xs mt-0.5">Order {currentStatus === 'cancelled' ? 'cancelled' : 'payment failed'}</p>
                 </div>
               </div>
             )}
@@ -421,7 +421,7 @@ const handleReorder = async () => {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" label="Carregando detalhes do pedido" withStatusRole />
+            <Spinner size="lg" label="Loading order details" withStatusRole />
           </div>
         </div>
       </div>
@@ -441,7 +441,7 @@ const handleReorder = async () => {
 title="Order not found"
 description="The requested order does not exist or has been removed."
               action={{
-                label: 'Voltar para meus pedidos',
+                label: 'Back to my orders',
                 onClick: handleBackToOrders,
                 variant: 'primary',
               }}
@@ -457,10 +457,10 @@ description="The requested order does not exist or has been removed."
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
             message="Could not load order details. Try again."
-            title="Erro ao carregar pedido"
+            title="Error loading order"
             variant="error"
             action={{
-              label: 'Tentar novamente',
+              label: 'Try again',
               onClick: () => refetch(),
             }}
             role="alert"
@@ -522,12 +522,12 @@ description="The requested order does not exist or has been removed."
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           }>
-            Voltar
+            Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Detalhes do Pedido</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Order Details</h1>
             <p className="text-gray-600 mt-1">
-              Pedido <span className="font-mono text-gray-900">{order.id.slice(0, 8).toUpperCase()}</span>
+              Order <span className="font-mono text-gray-900">{order.id.slice(0, 8).toUpperCase()}</span>
             </p>
           </div>
         </div>
@@ -538,7 +538,7 @@ description="The requested order does not exist or has been removed."
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               {hasOrderStatus && orderStatusConfig && (
               <div>
-                <p className="text-sm text-gray-500">Status do Pedido</p>
+                <p className="text-sm text-gray-500">Order Status</p>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge variant={orderStatusConfig.variant} size="md" dot>
                     {orderStatusConfig.label}
@@ -552,7 +552,7 @@ description="The requested order does not exist or has been removed."
               </div>
               )}
               <div className="border-l border-gray-200 pl-4 sm:pl-0 sm:border-l-0 sm:border-t sm:pt-4">
-                <p className="text-sm text-gray-500">Data do Pedido</p>
+                <p className="text-sm text-gray-500">Order Date</p>
                 <p className="font-medium text-gray-900">{formatDate(order.createdAt)}</p>
               </div>
             </div>
@@ -561,12 +561,12 @@ description="The requested order does not exist or has been removed."
             <div className="flex flex-wrap gap-2">
               {/* Consumer: Reorder */}
               {isConsumer && hasOrderStatus && !isTerminal && (
-                <Button variant="primary" onClick={handleReorder} leftIcon={
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                }>
-                  Comprar Novamente
+<Button variant="primary" onClick={handleReorder} leftIcon={
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  }>
+                  Buy Again
                 </Button>
               )}
 
@@ -613,7 +613,7 @@ description="The requested order does not exist or has been removed."
           <div className="lg:col-span-2 space-y-6">
             {/* Vendor Groups */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Itens por Vendedor</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Items by Vendor</h2>
               {order.vendorGroups.map((vendorGroup) => (
                 <VendorGroupCard
                   key={vendorGroup.id}

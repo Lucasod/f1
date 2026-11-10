@@ -11,12 +11,12 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Select } from '@/components/ui/Input';
 
 /**
- * Format currency in BRL (Brazilian Real)
+ * Format currency in USD (US Dollar)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'BRL',
+    currency: 'USD',
   }).format(value);
 }
 
@@ -24,7 +24,7 @@ function formatCurrency(value: number): string {
  * Format date to Brazilian locale
  */
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('pt-BR', {
+  return new Date(dateString).toLocaleDateString('en-US', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -91,7 +91,7 @@ export function OrderHistoryPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" label="Carregando pedidos" withStatusRole />
+            <Spinner size="lg" label="Loading orders" withStatusRole />
           </div>
         </div>
       </div>
@@ -105,10 +105,10 @@ export function OrderHistoryPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <ErrorAlert
             message="Could not load order history. Try again."
-            title="Erro ao carregar pedidos"
+            title="Error loading order history"
             variant="error"
             action={{
-              label: 'Tentar novamente',
+              label: 'Try again',
               onClick: () => refetch(),
             }}
             role="alert"
@@ -135,7 +135,7 @@ export function OrderHistoryPage() {
                     variant: 'primary' as const,
                   }
                 : {
-                    label: 'Limpar filtro',
+                    label: 'Clear filter',
                     onClick: () => setStatusFilter(''),
                     variant: 'secondary' as const,
                   }
@@ -152,7 +152,7 @@ export function OrderHistoryPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Meus Pedidos</h1>
+          <h1 className="text-3xl font-bold text-gray-900">My Orders</h1>
           <p className="mt-1 text-gray-600">
             {totalOrders} order{totalOrders !== 1 ? 's' : ''} found{totalOrders !== 1 ? 's' : ''}
           </p>
@@ -171,7 +171,7 @@ export function OrderHistoryPage() {
                   setStatusFilter(e.target.value as OrderStatus | '');
                   setCurrentPage(1);
                 }}
-                placeholder="Todos os status"
+                placeholder="All status"
               />
             </div>
           </div>
@@ -189,14 +189,14 @@ export function OrderHistoryPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-6 flex items-center justify-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-            >
-              Anterior
-            </Button>
+<Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
             <span className="px-4 text-sm text-gray-600">
               Page {currentPage} of {totalPages}
             </span>
@@ -240,7 +240,7 @@ function OrderCard({ order, onClick }: OrderCardProps) {
       {/* Order ID */}
       <div className="flex-1 sm:w-48 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">
-          Pedido <span className="font-mono">{order.id.slice(0, 8).toUpperCase()}</span>
+          Order <span className="font-mono">{order.id.slice(0, 8).toUpperCase()}</span>
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
           {formatDate(order.createdAt)}
@@ -257,7 +257,7 @@ function OrderCard({ order, onClick }: OrderCardProps) {
       {/* Vendor Groups Count */}
       <div className="flex-1 sm:w-32 text-center sm:text-left">
         <p className="text-sm font-medium text-gray-900">{vendorGroupsCount}</p>
-        <p className="text-xs text-gray-500">vendedor{vendorGroupsCount !== 1 ? 'es' : ''}</p>
+        <p className="text-xs text-gray-500">seller{vendorGroupsCount !== 1 ? 's' : ''}</p>
       </div>
 
       {/* Total Amount */}
@@ -275,7 +275,7 @@ function OrderCard({ order, onClick }: OrderCardProps) {
             onClick();
           }}
         >
-          Ver detalhes
+          View details
         </Button>
       </div>
     </div>
