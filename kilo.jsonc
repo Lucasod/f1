@@ -1,5 +1,47 @@
 {
   "$schema": "https://app.kilo.ai/config.json",
+  "plugin": [
+    ".kilo/plugin/security-guard.ts"
+  ],
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.pem": "deny",
+      "*.key": "deny",
+      "**/id_rsa": "deny",
+      "**/id_ecdsa": "deny",
+      "**/id_ed25519": "deny",
+      "**/credentials*": "deny",
+      "**/secrets*": "deny"
+    },
+    "edit": {
+      "*": "ask",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.pem": "deny",
+      "*.key": "deny",
+      "**/id_rsa": "deny",
+      "**/id_ecdsa": "deny",
+      "**/id_ed25519": "deny",
+      "**/credentials*": "deny",
+      "**/secrets*": "deny"
+    },
+    "bash": {
+      "*": "ask",
+      "cat *": "ask",
+      "head *": "ask",
+      "tail *": "ask",
+      "grep *": "ask",
+      "rg *": "ask",
+      "printenv *": "ask",
+      "which *": "ask",
+      "tr *": "ask",
+      "sed *": "ask",
+      "awk *": "ask"
+    }
+  },
   "instructions": [
     ".kilo/rules/universal-rules.md",
     ".kilo/rules/project-rules.md",
@@ -12,7 +54,8 @@
         "task": {
           "*": "deny",
           "code-reviewer": "allow",
-          "code-orchestrator": "allow"
+          "code-orchestrator": "allow",
+          "code-developer": "allow"
         }
       }
     }
@@ -43,5 +86,6 @@
     "model": "nomic-embed-text"
   },
   "mcp": {
-  }
+  },
+  
 }

@@ -42,8 +42,7 @@ export class SelfCorrectionEngine {
       maxAttemptsPerFailure: 3,
       maxTotalAttempts: 10,
       allowedCorrectionPaths: [
-        'kilo-orchestration/src/',
-        'kilo-orchestration/tests/',
+        '.kilo/orchestration/',
       ],
       blockedActions: [
         'chmod',

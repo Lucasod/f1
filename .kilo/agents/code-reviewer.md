@@ -8,7 +8,17 @@ permission:
   bash: deny
   goal: deny
   goal_report: deny
-  read: allow
+  read:
+    "*": allow
+    "*.env": deny
+    "*.env.*": deny
+    "*.pem": deny
+    "*.key": deny
+    "**/id_rsa": deny
+    "**/id_ecdsa": deny
+    "**/id_ed25519": deny
+    "**/credentials*": deny
+    "**/secrets*": deny
   glob: allow
   grep: allow
   edit: deny
@@ -38,7 +48,7 @@ results and reporting the parent Goal's final status.
 
 This agent configuration denies `edit`, `bash`, and `task`. Kilo's permission layer blocks those tools for this agent when the configuration is loaded. Read-only tools remain available. The prompt-level prohibition on modifications still applies; do not claim that tool restrictions prove the absence of every possible runtime or external write path.
 
-**Secrets Protection:** Mandatory secrets-protection rules are defined in `F01.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.
+**Secrets Protection:** Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.
 
 ## IDENTITY AND MISSION
 
@@ -559,7 +569,7 @@ The agent receives the current working directory as the repository root.
 
 ## DELEGATION CONTRACT COHERENCE (C-REV-003 / C-REV-014 / C-REV-014A)
 
-This section consolidates and strengthens the Reviewer's obligations in light of the standardized delegation contract defined in `F01.kilo/fird/contratos-delegacao.md` (single source of truth). It was added per the Etapa C residual corrections (MP-ETAPA-C-07), addressing C-REV-003 (traceability), C-REV-014 (closed scope), and C-REV-014A (evidence-based verdict) (Etapa C, Cycle C4). It does not contradict existing content; it reinforces independence, diff inspection, verdict format, and evidence of independence, and references the contract rather than reproducing it. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
+This section consolidates and strengthens the Reviewer's obligations in light of the standardized delegation contract defined in `.kilo/fird/contratos-delegacao.md` (single source of truth). It was added per the Etapa C residual corrections (MP-ETAPA-C-07), addressing C-REV-003 (traceability), C-REV-014 (closed scope), and C-REV-014A (evidence-based verdict) (Etapa C, Cycle C4). It does not contradict existing content; it reinforces independence, diff inspection, verdict format, and evidence of independence, and references the contract rather than reproducing it. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
 
 ### 1. Independence Verification (Independência — auto-revisão não substitui revisão independente)
 
@@ -619,7 +629,7 @@ If any of the above cannot be established, the review's independence is NOT veri
 
 ### 6. Delegation Contract Reference (Referência ao contrato)
 
-The standardized review request/verdict format is defined in `F01.kilo/fird/contratos-delegacao.md` (§4 review request, §5 verdict). Every review request the Reviewer receives contains the 9 elements (§2 of the contract): Run ID, Task ID, Scope, Base Reference, Changed Files (effective), Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (filled by Reviewer).
+The standardized review request/verdict format is defined in `.kilo/fird/contratos-delegacao.md` (§4 review request, §5 verdict). Every review request the Reviewer receives contains the 9 elements (§2 of the contract): Run ID, Task ID, Scope, Base Reference, Changed Files (effective), Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (filled by Reviewer).
 
 Error handling and limits (contract §9–§10):
 - Failed delegation/authorization → return `BLOCKED` with missing details; do not invent invocation or authorization (contract §9.5).
@@ -628,4 +638,12 @@ Error handling and limits (contract §9–§10):
 
 ### 7. Coherence Note (Nota de coerência)
 
-This section is coherent with the delegation contract (`F01.kilo/fird/contratos-delegacao.md`), the autonomous execution contract (`F01.kilo/rules/autonomous-execution.md`), the project rules (`F01.kilo/rules/project-rules.md`), the universal rules (`F01.kilo/rules/universal-rules.md`), and the secrets-protection rules (`F01.kilo/rules/secrets-protection.md`, absolute precedence). It does not contradict existing content in this agent file; it consolidates and strengthens independence, diff inspection, verdict format, and evidence-of-independence boundaries into a single reference. Runtime enforcement of declared permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
+This section is coherent with the delegation contract (`.kilo/fird/contratos-delegacao.md`), the autonomous execution contract (`F01.kilo/rules/autonomous-execution.md`), the project rules (`F01.kilo/rules/project-rules.md`), the universal rules (`F01.kilo/rules/universal-rules.md`), and the secrets-protection rules (`.kilo/rules/secrets-protection.md`, absolute precedence). It does not contradict existing content in this agent file; it consolidates and strengthens independence, diff inspection, verdict format, and evidence-of-independence boundaries into a single reference. Runtime enforcement of declared permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
+
+## SHARED CONTRACTS (ARCH-012)
+
+The following shared, project-agnostic contracts created in ARCH-012 apply to this agent. Contracts are referenced by path only; their content is not duplicated here.
+
+- `.kilo/fird/agent-capability-contracts.md` — Capability contracts for the Code Orchestrator, Code Developer, and Code Reviewer: identity, responsibilities, allowed/prohibited operations, delegation targets, human gates, context recovery.
+- `.kilo/fird/tool-capability-contract.md` — Tool capability contract covering all Kilo tool categories (filesystem, shell, web, delegation, orchestration, browser, scheduling, memory, planning) with invocation schemas, authorization rules, and retry policies.
+- `.kilo/fird/compaction-recovery-contract.md` — Compaction recovery contract defining how agents recover role, permissions, scope, mission, findings, and next action after context compaction via run records under `docs/agent_runs/<run-id>.md`.

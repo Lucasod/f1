@@ -13,7 +13,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 tmpbase="$(mktemp -d)"
 trap 'rm -rf "$tmpbase"' EXIT
-mkdir -p /tmp/scratchpad
+mkdir -p "$tmpbase"
 
 # Fictitious secrets (split literals so this file itself is not flagged)
 S_STRIPE='sk_test_''FAKE1234567890abcdef'
@@ -68,10 +68,10 @@ BT_COOKIE=$(printf '`Cookie: %s`' "$SID_VAL")
 run_expect() {
   # $1 expected exit, rest args
   exp="$1"; shift
-  "$SCANNER" "$@" >/tmp/scratchpad/out.txt 2>&1
+  "$SCANNER" "$@" >"$tmpbase/out.txt" 2>&1
   rc=$?
   desc="$*"
-  if [ "$rc" = "$exp" ]; then ok "$desc (exit $rc)"; else bad "$desc (expected $exp got $rc)"; cat /tmp/scratchpad/out.txt >&2; fi
+  if [ "$rc" = "$exp" ]; then ok "$desc (exit $rc)"; else bad "$desc (expected $exp got $rc)"; cat "$tmpbase/out.txt" >&2; fi
 }
 
 td="$tmpbase/cat"; mkdir -p "$td"
@@ -243,7 +243,7 @@ cd "$ROOT"
 # --- PCRE/tool unavailable (no grep) ---
 emptybin="$tmpbase/emptybin"; mkdir -p "$emptybin"
 echo 'hello' > "$tmpbase/p.txt"
-PATH="$emptybin" /usr/bin/bash "$SCANNER" "$tmpbase/p.txt" >/tmp/scratchpad/out.txt 2>&1
+PATH="$emptybin" /usr/bin/bash "$SCANNER" "$tmpbase/p.txt" >"$tmpbase/out.txt" 2>&1
 rc=$?
 if [ "$rc" -ne 0 ]; then ok "tool unavailable fails closed (exit $rc)"; else bad "tool unavailable did not fail"; fi
 
@@ -271,27 +271,31 @@ fi
 
 # --- Hook installation in temp clone ---
 clone="$tmpbase/clone"
-rm -rf "$clone"; cp -a "$ROOT" "$clone"
+rm -rf "$clone"; cp -a "$ROOT/.." "$clone"
+rm -rf "$clone/.git"
 cd "$clone"
-"$clone/scripts/install-hooks.sh" >/tmp/scratchpad/hookinstall.txt 2>&1
+git init -q
+git config user.email t@t.com
+git config user.name t
+"$clone/.kilo/scripts/install-hooks.sh" >"$tmpbase/hookinstall.txt" 2>&1
 rc=$?
 hp=$(git config --get core.hooksPath)
 if [ "$rc" -eq 0 ] && [ "$hp" = ".githooks" ] && [ -x "$clone/.githooks/pre-commit" ]; then
   ok "hook installation in temp clone"
 else
   bad "hook installation (rc=$rc hooksPath=$hp)"
-  cat /tmp/scratchpad/hookinstall.txt >&2
+  cat "$tmpbase/hookinstall.txt" >&2
 fi
 printf 'pass%s="%s"\n' "word" "$S_CLONE" > secretfile.txt
 git add secretfile.txt
-if git commit -m "test secret" >/tmp/scratchpad/commitout.txt 2>&1; then
+if git commit -m "test secret" >"$tmpbase/commitout.txt" 2>&1; then
   bad "hook did not block commit"
 else
-  if grep -qi "secrets scan\|BLOCKED" /tmp/scratchpad/commitout.txt; then
+  if grep -qi "secrets scan\|BLOCKED" "$tmpbase/commitout.txt"; then
     ok "hook blocks commit with secret"
   else
     bad "commit failed but not due to scanner?"
-    cat /tmp/scratchpad/commitout.txt >&2
+    cat "$tmpbase/commitout.txt" >&2
   fi
 fi
 cd "$ROOT"

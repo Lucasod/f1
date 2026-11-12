@@ -68,14 +68,14 @@ A referência de planejamento (MP-ETAPA-C-07) mencionava "nove arquivos" como in
   8. `guidelines-developer.md`
   9. `guidelines-reviewer.md`
 
-  `kilo.jsonc` nunca foi modificado (decisão registrada: `kilo.jsonc` fora do escopo efetivo). A contagem incluía arquivos de implementação planejados (incluindo um que não foi alterado).
+  `kilo.jsonc` aparece no histórico do git (última modificação em 2026-11-03, anterior à data deste documento, 2026-11-04). Foi excluído do escopo efetivo de alterações desta etapa por decisão registrada (`kilo.jsonc` fora do escopo efetivo) e não foi modificado nesta tarefa. A contagem incluía arquivos de implementação planejados (incluindo um que não foi alterado neste escopo).
 
 - **"14 artefatos" (avaliacao-integrada.md §2.1–§2.3):** total de entregáveis efetivos da Etapa C:
-  - 8 artefatos primários (4 Grupo C modificados + 4 Grupo A criados, excluindo `kilo.jsonc`)
+  - 8 artefatos primários (4 Grupo C modificados + 4 Grupo A criados; `kilo.jsonc` excluído por decisão de escopo, não modificado nesta etapa)
   - 4 run records (C1–C4)
   - 2 arquivos (run record C5 + `avaliacao-integrada.md`)
 
-- **Conclusão:** "nove" = inventário preliminar de implementação (incluía `kilo.jsonc`, nunca modificado); "14" = entregáveis efetivos (inclui run records). Universos distintos; a discrepância é de timing/escopo de contagem, não de erro.
+- **Conclusão:** "nove" = inventário preliminar de implementação (incluía `kilo.jsonc`; `kilo.jsonc` foi modificado em commits anteriores ao documento, mas excluído do escopo efetivo desta etapa); "14" = entregáveis efetivos (inclui run records). Universos distintos; a discrepância é de timing/escopo de contagem, não de erro.
 
 ---
 
