@@ -14,12 +14,6 @@ export function createStripeWebhookHandler(
   transferService: TransferService
 ): RequestHandler {
   const processedEventIds = new Set<string>();
-  // PaymentService keeps its repositories as private fields; extract them once
-  // for use in event-id persistence and cart reconciliation below.
-  // (payment.service.ts is read-only in this scope, so we cannot add public methods.)
-  const paymentRepo = paymentService['paymentRepo'];
-  const orderRepo = paymentService['orderRepo'];
-
   return async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {
@@ -118,14 +112,9 @@ export function createStripeWebhookHandler(
         // Persist the Stripe event ID on the payment for webhook event correlation / retry/recovery
         // Best-effort: update the payment's eventId field if not already set
         try {
-          const existing = await paymentService.getPaymentById(paymentId);
-          if (existing && existing.eventId !== event.id && event.id) {
-            // @ts-expectError - eventId is readonly but we set it for correlation persistence
-            ;(existing as any).eventId = event.id;
-            // Re-save the payment to persist the eventId
-            if (paymentRepo && typeof paymentRepo.save === 'function') {
-              await paymentRepo.save(existing).catch(() => void 0);
-            }
+          const existingEventId = await paymentService.getPaymentEventId(paymentId);
+          if (existingEventId !== event.id && event.id) {
+            await paymentService.setPaymentEventId(paymentId, event.id);
           }
         } catch {
           /* Best-effort; do not fail the webhook delivery if saving fails. */
@@ -133,7 +122,7 @@ export function createStripeWebhookHandler(
         // Remove only the items effectively purchased from the cart,
         // preserving non-purchased items. The webhook event correlation check
         // above (lines 76-96) provides idempotency against duplicate deliveries.
-        const order = await orderRepo.findById(payment.orderId);
+        const order = await paymentService.getOrderByPaymentId(paymentId);
         if (order) {
           // Aggregate purchased quantities per product so reconciliation removes
           // only the quantities effectively purchased. Items added to the cart

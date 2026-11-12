@@ -21,3 +21,19 @@ export type { ErrorAlertProps } from './ErrorAlert';
 
 export { Modal, ConfirmDialog } from './Modal';
 export type { ModalProps, ConfirmDialogProps } from './Modal';
+
+export {
+  ChartContainer,
+  LineChart,
+  PieChart,
+  BarChart,
+} from './charts';
+export type {
+  ChartContainerProps,
+  LineChartProps,
+  LineData,
+  PieChartProps,
+  PieData,
+  BarChartProps,
+  BarData,
+} from './charts';

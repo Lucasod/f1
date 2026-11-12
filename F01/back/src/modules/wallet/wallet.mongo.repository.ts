@@ -35,7 +35,7 @@ export class MongoWalletRepository implements WalletRepository {
     this.col = db.collection<WalletDoc>('wallets');
   }
 
-  async save(wallet: Wallet): Promise<Wallet> {
+  async save(wallet: Wallet, session?: unknown): Promise<Wallet> {
     const now = new Date();
     await this.col.updateOne(
       { _id: wallet.id },
@@ -47,7 +47,7 @@ export class MongoWalletRepository implements WalletRepository {
         },
         $setOnInsert: { createdAt: wallet.createdAt },
       },
-      { upsert: true }
+      { upsert: true, session }
     );
     return Wallet.reconstruct({ ...wallet.toJSON(), updatedAt: now });
   }
@@ -91,7 +91,7 @@ export class MongoWalletTransactionRepository implements WalletTransactionReposi
     this.col = db.collection<WalletTxDoc>('wallet_transactions');
   }
 
-  async save(tx: WalletTransaction): Promise<WalletTransaction> {
+  async save(tx: WalletTransaction, session?: unknown): Promise<WalletTransaction> {
     const doc: WalletTxDoc = {
       _id: tx.id,
       walletId: tx.walletId,
@@ -103,7 +103,7 @@ export class MongoWalletTransactionRepository implements WalletTransactionReposi
       orderId: tx.orderId,
       createdAt: tx.createdAt,
     };
-    await this.col.updateOne({ _id: tx.id }, { $set: doc }, { upsert: true });
+    await this.col.updateOne({ _id: tx.id }, { $set: doc }, { upsert: true, session });
     return tx;
   }
 

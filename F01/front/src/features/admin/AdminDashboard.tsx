@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getOrderQueryScope, useOrders } from '@/features/order/useOrder';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
+import { LineChart, PieChart, BarChart } from '@/components/ui/charts';
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -23,6 +24,55 @@ function formatDate(value: string): string {
     month: '2-digit',
     year: 'numeric',
   });
+}
+
+function groupOrdersByDate(orders: any[]): { name: string; sales: number }[] {
+  const byDate = new Map<string, number>();
+  for (const order of orders) {
+    const dateKey = new Date(order.createdAt).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+    });
+    byDate.set(dateKey, (byDate.get(dateKey) || 0) + order.totalAmount);
+  }
+  return Array.from(byDate.entries()).map(([name, sales]) => ({ name, sales }));
+}
+
+function groupOrdersByStatus(orders: any[]): { name: string; value: number }[] {
+  const byStatus = new Map<string, number>();
+  for (const order of orders) {
+    const status = order.status || 'unknown';
+    byStatus.set(status, (byStatus.get(status) || 0) + 1);
+  }
+
+  const statusLabels: Record<string, string> = {
+    pending_payment: 'Pending Payment',
+    paid: 'Paid',
+    processing: 'Processing',
+    shipped: 'Shipped',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+    failed_payment: 'Failed Payment',
+  };
+
+  return Array.from(byStatus.entries()).map(([name, value]) => ({
+    name: statusLabels[name] || name.toUpperCase(),
+    value,
+  }));
+}
+
+function computeCommissionsByDate(orders: any[]): { name: string; commissions: number }[] {
+  const byDate = new Map<string, number>();
+  for (const order of orders) {
+    for (const group of order.vendorGroups ?? []) {
+      const dateKey = new Date(group.createdAt || order.createdAt).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+      });
+      byDate.set(dateKey, (byDate.get(dateKey) || 0) + (group.commissionAmount ?? 0));
+    }
+  }
+  return Array.from(byDate.entries()).map(([name, commissions]) => ({ name, commissions }));
 }
 
 export function AdminDashboard() {
@@ -68,12 +118,18 @@ export function AdminDashboard() {
     moderateMutation.variables?.reviewId === reviewId &&
     moderateMutation.variables?.status === status;
 
+  // Chart data transformations from admin-scoped orders
+  const salesOverTimeData = useMemo(() => groupOrdersByDate(orders), [orders]);
+  const ordersByStatusData = useMemo(() => groupOrdersByStatus(orders), [orders]);
+  const revenueByPeriodData = useMemo(() => groupOrdersByDate(orders), [orders]);
+  const commissionData = useMemo(() => computeCommissionsByDate(orders), [orders]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="mt-1 text-gray-600">Recent marketplace orders</p>
+          <p className="mt-1 text-gray-600">Marketplace overview and recent orders</p>
         </header>
 
         <section aria-label="Registered totals" className="mb-8">
@@ -90,6 +146,80 @@ export function AdminDashboard() {
             </>
           )}
         </section>
+
+        {/* Admin charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <Card variant="bordered" padding="none">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Sales Over Time</h2>
+              <p className="text-sm text-gray-500 mt-1">Marketplace sales trend across all vendors</p>
+            </div>
+            <LineChart
+              data={salesOverTimeData}
+              title="Marketplace Sales Over Time"
+              xKey="name"
+              yKeys={['sales']}
+              yKeyLabels={{ sales: 'Sales (BRL)' }}
+              height={300}
+              loading={isLoading}
+              error={error?.message ?? null}
+              emptyMessage="No marketplace sales data available"
+            />
+          </Card>
+
+          <Card variant="bordered" padding="none">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Orders by Status</h2>
+              <p className="text-sm text-gray-500 mt-1">Distribution of marketplace orders by status</p>
+            </div>
+            <PieChart
+              data={ordersByStatusData}
+              title="Orders by Status"
+              height={300}
+              loading={isLoading}
+              error={error?.message ?? null}
+              emptyMessage="No order data available"
+            />
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <Card variant="bordered" padding="none">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Revenue by Period</h2>
+              <p className="text-sm text-gray-500 mt-1">Gross marketplace revenue grouped by day</p>
+            </div>
+            <BarChart
+              data={revenueByPeriodData}
+              title="Revenue by Period"
+              xKey="name"
+              yKeys={['sales']}
+              yKeyLabels={{ sales: 'Revenue (BRL)' }}
+              height={300}
+              loading={isLoading}
+              error={error?.message ?? null}
+              emptyMessage="No revenue data available"
+            />
+          </Card>
+
+          <Card variant="bordered" padding="none">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Platform Commissions</h2>
+              <p className="text-sm text-gray-500 mt-1">Commission earnings across all vendor groups</p>
+            </div>
+            <LineChart
+              data={commissionData}
+              title="Platform Commissions"
+              xKey="name"
+              yKeys={['commissions']}
+              yKeyLabels={{ commissions: 'Commissions (BRL)' }}
+              height={300}
+              loading={isLoading}
+              error={error?.message ?? null}
+              emptyMessage="No commission data available"
+            />
+          </Card>
+        </div>
 
         <Card variant="bordered" padding="none">
           <div className="border-b border-gray-200 px-6 py-4">

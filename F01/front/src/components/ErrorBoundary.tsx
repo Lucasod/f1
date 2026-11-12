@@ -33,10 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="text-center py-12" role="alert">
           <p className="text-red-600 mb-4">Something went wrong.</p>
-          <details className="text-left max-w-md mx-auto text-sm text-gray-600">
-            <summary className="cursor-pointer font-medium text-gray-900 mb-2">Error Details</summary>
-            <pre className="bg-gray-100 p-4 rounded overflow-auto">{this.state.error?.message}</pre>
-          </details>
+          <p className="text-sm text-gray-600 mt-2">Ocorreu um erro inesperado. Tente novamente ou entre em contato com o suporte.</p>
         </div>
       );
     }

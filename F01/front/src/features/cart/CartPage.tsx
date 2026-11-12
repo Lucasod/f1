@@ -24,7 +24,7 @@ import { productApi } from '@/shared/api/product';
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'BRL',
   }).format(value);
 }
 
@@ -59,6 +59,18 @@ async function fetchProductDetails(productId: string): Promise<Product | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Ensures an image reference resolves to a full URL usable as an `` src.
+ * Bare S3 keys (e.g. "products/{vendorId}/{productId}/main.webp") are prefixed
+ * with the uploads endpoint so they load correctly. Already-full URLs (starting
+ * with "/" or "http") are returned as-is.
+ */
+function toImageUrl(imageRef: string | undefined): string | undefined {
+  if (!imageRef) return undefined;
+  if (imageRef.startsWith('/') || imageRef.startsWith('http')) return imageRef;
+  return `/api/v1/uploads/${imageRef}`;
 }
 
 export function CartPage() {
@@ -306,7 +318,7 @@ export function CartPage() {
                           <div className="w-full h-full bg-gray-100 rounded-lg animate-pulse" aria-hidden="true" />
                         ) : product?.images?.[0] ? (
                           <img
-                            src={product.images[0]}
+                            src={toImageUrl(product?.images?.[0])}
                             alt={product.name}
                             className="w-full h-full object-cover rounded-lg"
                             loading="lazy"

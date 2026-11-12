@@ -2,14 +2,40 @@ import { VendorRepository } from '../vendor/vendor.domain';
 import { Payout, PayoutStatus, PayoutError, PayoutRepository } from './payout.domain';
 import { OrderRepository } from '../order/order.domain';
 import type { WalletService } from '../wallet/wallet.service';
+import {
+  FinancialMovementRecord,
+  MovementType,
+  FinancialMovementRepository,
+} from '../financial/financial.movement';
+import {
+  FinancialEventRecord,
+  EventType,
+  FinancialEventRepository,
+} from '../financial/financial.event';
 
 export class PayoutService {
+  private readonly payoutRepo: PayoutRepository;
+  private readonly vendorRepo: VendorRepository;
+  private readonly orderRepo?: OrderRepository;
+  private readonly walletService?: WalletService;
+  private readonly movementRepo?: FinancialMovementRepository;
+  private readonly eventRepo?: FinancialEventRepository;
+
   constructor(
-    private readonly payoutRepo: PayoutRepository,
-    private readonly vendorRepo: VendorRepository,
-    private readonly orderRepo?: OrderRepository,
-    private readonly walletService?: WalletService,
-  ) {}
+    payoutRepo: PayoutRepository,
+    vendorRepo: VendorRepository,
+    orderRepo?: OrderRepository,
+    walletService?: WalletService,
+    movementRepo?: FinancialMovementRepository,
+    eventRepo?: FinancialEventRepository,
+  ) {
+    this.payoutRepo = payoutRepo;
+    this.vendorRepo = vendorRepo;
+    this.orderRepo = orderRepo;
+    this.walletService = walletService;
+    this.movementRepo = movementRepo;
+    this.eventRepo = eventRepo;
+  }
 
   async createPayout(
     vendorId: string,
@@ -36,7 +62,9 @@ export class PayoutService {
       bankAccount,
     });
 
-    return this.payoutRepo.save(payout);
+    await this.payoutRepo.save(payout);
+    await this.recordPayoutLedger(payout, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_REQUESTED);
+    return payout;
   }
 
   async getPayoutById(id: string, personId: string, isAdmin: boolean): Promise<Payout | null> {
@@ -90,7 +118,9 @@ export class PayoutService {
       throw new Error(PayoutError.PAYOUT_NOT_APPROVABLE);
     }
     payout.approve();
-    return this.payoutRepo.update(payout);
+    const updated = await this.payoutRepo.update(payout);
+    await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_APPROVED);
+    return updated;
   }
 
   async processPayout(id: string): Promise<Payout> {
@@ -106,7 +136,10 @@ export class PayoutService {
     }
     payout.startProcessing();
     payout.complete();
-    return this.payoutRepo.update(payout);
+    const updated = await this.payoutRepo.update(payout);
+    await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_PROCESSING);
+    await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_COMPLETED);
+    return updated;
   }
 
   async failPayout(id: string, reason: string): Promise<Payout> {
@@ -124,7 +157,9 @@ export class PayoutService {
       throw new Error(PayoutError.INVALID_AMOUNT);
     }
     payout.fail(reason);
-    return this.payoutRepo.update(payout);
+    const updated = await this.payoutRepo.update(payout);
+    await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_FAILED);
+    return updated;
   }
 
   async cancelPayout(id: string, personId: string, isAdmin: boolean): Promise<Payout> {
@@ -139,7 +174,9 @@ export class PayoutService {
     if (isAdmin) {
       if (payout.status === PayoutStatus.PENDING || payout.status === PayoutStatus.APPROVED) {
         payout.cancel();
-        return this.payoutRepo.update(payout);
+        const updated = await this.payoutRepo.update(payout);
+        await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_CANCELLED);
+        return updated;
       }
       throw new Error(PayoutError.PAYOUT_NOT_CANCELLABLE);
     }
@@ -152,6 +189,47 @@ export class PayoutService {
       throw new Error(PayoutError.PAYOUT_NOT_CANCELLABLE);
     }
     payout.cancel();
-    return this.payoutRepo.update(payout);
+    const updated = await this.payoutRepo.update(payout);
+    await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_CANCELLED);
+    return updated;
+  }
+
+  /**
+   * Records a financial movement and event for a payout state transition.
+   * Best-effort: skipped when no movement/event repository is wired.
+   */
+  private async recordPayoutLedger(
+    payout: Payout,
+    movementType: MovementType,
+    eventType: EventType,
+  ): Promise<void> {
+    const now = new Date();
+
+    if (this.movementRepo) {
+      const movement = FinancialMovementRecord.create({
+        movementType,
+        amount: payout.amount,
+        currency: 'brl',
+        relatedEntityType: 'payout',
+        relatedEntityId: payout.id,
+        orderId: payout.reference,
+        vendorId: payout.vendorId,
+        effectiveAt: now,
+        recordedAt: now,
+        idempotencyKey: `payout:${payout.id}:${movementType}`,
+      });
+      await this.movementRepo.save(movement);
+    }
+
+    if (this.eventRepo) {
+      const event = FinancialEventRecord.create({
+        eventType,
+        eventSource: 'internal',
+        eventTimestamp: now,
+        orderId: payout.reference,
+        vendorId: payout.vendorId,
+      });
+      await this.eventRepo.save(event);
+    }
   }
 }

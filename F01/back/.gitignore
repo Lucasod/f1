@@ -6,3 +6,5 @@ scripts/*.map
 .env
 .env.*
 !.env.example
+
+/storage/uploads/products/vendor-*/

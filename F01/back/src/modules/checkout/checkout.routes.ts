@@ -40,7 +40,7 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
   const router = Router();
 
   const authMw = authMiddleware(authService);
-  const requireConsumer = requireRole(PersonRole.CONSUMER, PersonRole.VENDOR);
+  const requireConsumer = requireRole(PersonRole.CONSUMER);
 
   router.use('/attempts', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   const attemptHandler = (operation: 'prepare' | 'accept' | 'read'): RequestHandler => async (request, res) => {

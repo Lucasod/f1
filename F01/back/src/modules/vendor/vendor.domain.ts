@@ -10,6 +10,7 @@ export interface VendorData {
   slug: string;
   status?: VendorStatus;
   commissionPct: number;
+  stripeAccountId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -31,6 +32,7 @@ export class Vendor {
   public readonly commissionPct: number;
   public readonly createdAt: Date;
   public updatedAt: Date;
+  public readonly stripeAccountId: string | undefined;
 
   private constructor(data: VendorData) {
     this.id = data.id || generateId();
@@ -39,6 +41,7 @@ export class Vendor {
     this.slug = data.slug;
     this.status = data.status || VendorStatus.ACTIVE;
     this.commissionPct = data.commissionPct;
+    this.stripeAccountId = data.stripeAccountId;
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
   }

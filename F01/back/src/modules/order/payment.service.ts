@@ -17,6 +17,17 @@
  */
 
 import {
+  FinancialMovementRecord,
+  MovementType,
+  FinancialMovementRepository,
+} from '../financial/financial.movement';
+import {
+  FinancialEventRecord,
+  EventType,
+  FinancialEventRepository,
+} from '../financial/financial.event';
+
+import {
   Payment,
   PaymentStatus,
   PaymentRepository,
@@ -31,13 +42,12 @@ import {
 
 import type { ProductRepository } from '../product/product.domain';
 import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
-import type { WalletService } from '../wallet/wallet.service';
+import { WalletService } from '../wallet/wallet.service';
 import type { FinancialService } from '../financial/financial.service';
-import { FinancialAllocationType } from '../financial/financial.domain';
-
-import { Transfer, TransferStatus } from '../transfer/transfer.domain';
-import { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
-import Stripe from 'stripe';
+import type { Db } from 'mongodb';
+import { MongoClient } from 'mongodb';
+import { FinancialLedger } from '../financial/financial.ledger';
+import { MovementType as DomainMovementType } from '../financial/financial.movement';
 
 export enum PaymentError {
   PAYMENT_NOT_FOUND = 'PAYMENT_NOT_FOUND',
@@ -68,8 +78,55 @@ export class PaymentService {
     private readonly walletService?: WalletService,
     private readonly financialService?: FinancialService,
     private readonly transferRepo?: MongoTransferRepository,
-    private readonly searchIndex?: ElasticsearchProductIndex
+    private readonly searchIndex?: ElasticsearchProductIndex,
+    private readonly movementRepo?: FinancialMovementRepository,
+    private readonly eventRepo?: FinancialEventRepository,
+    private readonly vendorRepo?: VendorRepository,
+    private readonly mongodb?: Db
   ) {}
+
+  /**
+   * Records a financial movement and event for a payment state transition.
+   * Both are best-effort: if a repository is not wired, the recording is skipped
+   * without failing the payment flow.
+   */
+  private async recordPaymentLedger(
+    payment: Payment,
+    vendorId: string | undefined,
+    movementType: MovementType,
+    eventType: EventType,
+  ): Promise<void> {
+    const now = new Date();
+
+    if (this.movementRepo) {
+      const movement = FinancialMovementRecord.create({
+        movementType,
+        amount: payment.amount,
+        currency: 'brl',
+        relatedEntityType: 'payment',
+        relatedEntityId: payment.id,
+        orderId: payment.orderId,
+        paymentId: payment.id,
+        vendorId,
+        effectiveAt: now,
+        recordedAt: now,
+        idempotencyKey: `payment:${payment.id}:${movementType}`,
+      });
+      await this.movementRepo.save(movement);
+    }
+
+    if (this.eventRepo) {
+      const event = FinancialEventRecord.create({
+        eventType,
+        eventSource: 'internal',
+        eventTimestamp: now,
+        orderId: payment.orderId,
+        paymentId: payment.id,
+        vendorId,
+      });
+      await this.eventRepo.save(event);
+    }
+  }
 
   async createPayment(
     orderId: unknown,
@@ -175,6 +232,13 @@ export class PaymentService {
     authorized.authorizedAt && (payment.authorizedAt = authorized.authorizedAt);
     await this.paymentRepo.update(payment);
 
+    await this.recordPaymentLedger(
+      payment,
+      order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined,
+      MovementType.CONSUMER_PAYMENT,
+      EventType.PAYMENT_AUTHORIZED
+    );
+
     return payment;
   }
 
@@ -230,6 +294,13 @@ export class PaymentService {
     captured.capturedAt && (payment.capturedAt = captured.capturedAt);
     captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
     await this.paymentRepo.update(payment);
+
+    await this.recordPaymentLedger(
+      payment,
+      order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined,
+      MovementType.CONSUMER_PAYMENT,
+      EventType.PAYMENT_CAPTURED
+    );
 
     await this.markCapturedOrderPaid(payment.orderId);
 
@@ -405,6 +476,14 @@ export class PaymentService {
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
+    const vendorId = order ? (order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined) : undefined;
+    await this.recordPaymentLedger(
+      payment,
+      vendorId,
+      MovementType.CONSUMER_PAYMENT,
+      EventType.PAYMENT_FAILED
+    );
+
     if (order) {
       // If order is PAID (after authorization), transition to FAILED_PAYMENT
       // This requires the Order domain to allow PAID -> FAILED_PAYMENT transition
@@ -481,6 +560,13 @@ export class PaymentService {
     if (!order) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
+    const refundVendorId = order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined;
+    await this.recordPaymentLedger(
+      payment,
+      refundVendorId,
+      MovementType.REFUND,
+      EventType.PAYMENT_REFUNDED
+    );
     order.refund(true);
     await this.orderRepo.update(order);
 
@@ -506,6 +592,25 @@ export class PaymentService {
       return [];
     }
     return this.paymentRepo.findByPersonId(personId);
+  }
+
+  async getPaymentEventId(paymentId: string): Promise<string | undefined> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    return payment?.eventId;
+  }
+
+  async setPaymentEventId(paymentId: string, eventId: string): Promise<void> {
+    const existing = await this.paymentRepo.findById(paymentId);
+    if (existing) {
+      existing.eventId = eventId;
+      await this.paymentRepo.save(existing).catch(() => void 0);
+    }
+  }
+
+  async getOrderByPaymentId(paymentId: string): Promise<Order | null> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment || !payment.orderId) return null;
+    return this.orderRepo.findById(payment.orderId);
   }
 
   /**
@@ -562,7 +667,17 @@ export class PaymentService {
     const vendorNet = ovgTotal * (1 - commissionPct / 100);
     const transferAmount = Math.round(vendorNet * 100) / 100; // 2 decimal precision
 
-    // Check if transfer already exists (idempotency)
+    // Resolve vendorId and look up vendor's Stripe connected account ID
+    const vendorId = vendorGroup.vendorId;
+    let destinationAccountId = '';
+    if (vendorId && this.vendorRepo) {
+      const vendor = await this.vendorRepo.findById(vendorId);
+      if (vendor && vendor.stripeAccountId) {
+        destinationAccountId = vendor.stripeAccountId;
+      }
+    }
+
+    // Create idempotency key: order_id:ovg_id:attempt
     const existingTransfer = this.transferRepo
       ? await this.transferRepo.findLastByOrderVendorGroupId(ovgId)
       : null;
@@ -620,7 +735,7 @@ apiVersion: '2026-10-28.endive',
       {
         amount: Math.round(transferAmount * 100), // Stripe expects amount in cents
         currency: 'brl',
-        destination: '', // Will be set from vendor's connected account
+        destination: destinationAccountId,
         source_transaction: chargeId,
         transfer_group: payment.orderId,
       },

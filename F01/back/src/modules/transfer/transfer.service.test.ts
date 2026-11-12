@@ -2,7 +2,22 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TransferService } from './transfer.service';
 import { Transfer, TransferStatus } from './transfer.domain';
 import { FinancialService } from '../financial/financial.service';
+import { Vendor, VendorStatus } from '../vendor/vendor.domain';
 import { InMemoryFinancialAllocationRepository } from '../financial/financial.domain';
+import {
+  InMemoryFinancialMovementRepository,
+  FinancialMovementRepository,
+} from '../financial/financial.movement';
+import {
+  InMemoryFinancialEventRepository,
+  FinancialEventRepository,
+} from '../financial/financial.event';
+import {
+  Order,
+  OrderStatus,
+  OrderVendorGroupStatus,
+  FinancialStatus,
+} from '../order/order.domain';
 
 import Stripe from 'stripe';
 
@@ -10,6 +25,11 @@ import Stripe from 'stripe';
 const mockStripeTransfers = {
   create: vi.fn(),
   retrieve: vi.fn(),
+};
+
+// Mock vendor repository for test
+const mockVendorRepo = {
+  findById: vi.fn(),
 };
 
 vi.mock('stripe', () => {
@@ -25,6 +45,7 @@ void mockStripeTransfers;
 
 describe('Transfer Service', () => {
   let transferRepo: { save: any; findLastByOrderVendorGroupId: any; findByStripeTransferId: any };
+  let orderRepo: { findById: any; save: any };
   let financialService: FinancialService;
   let service: TransferService;
 
@@ -32,6 +53,51 @@ describe('Transfer Service', () => {
     vi.clearAllMocks();
     mockStripeTransfers.create.mockReset();
     mockStripeTransfers.retrieve.mockReset();
+
+    // Set up order with vendor group for transfer tests
+    const testOrder = Order.reconstruct({
+      id: 'order-1',
+      personId: 'person-1',
+      status: OrderStatus.PAID,
+      vendorGroups: [
+        {
+          id: 'ovg-1',
+          orderId: 'order-1',
+          vendorId: 'vendor-1',
+          status: OrderVendorGroupStatus.CONFIRMED,
+          items: [],
+          subtotal: 100,
+          commissionPct: 10,
+          commissionAmount: 10,
+          vendorNet: 90,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      shippingAddress: {
+        id: 'addr-1',
+        street: 'Rua X',
+        number: '10',
+        neighborhood: 'Centro',
+        city: 'São Paulo',
+        state: 'SP',
+        isPrimary: true,
+      },
+      totalAmount: 100,
+      financialStatus: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      comment: undefined,
+      commentedAt: undefined,
+      commentedBy: undefined,
+      attemptId: undefined,
+      acceptedHash: undefined,
+    });
+
+    orderRepo = {
+      findById: vi.fn().mockResolvedValue(testOrder),
+      save: vi.fn().mockResolvedValue(undefined),
+    };
 
     transferRepo = {
       save: vi.fn().mockResolvedValue(undefined),
@@ -43,12 +109,29 @@ describe('Transfer Service', () => {
     service = new TransferService(
       transferRepo as any,
       financialService,
-      'sk_test_fake_key_for_testing_only'
+      'sk_test_fake_key_for_testing_only',
+      orderRepo as any,
+      undefined as any,       // movementRepo
+      undefined as any,       // eventRepo
+      mockVendorRepo as any   // vendorRepo
     );
   });
 
   describe('createTransferWithDetails', () => {
-    it('creates a transfer with calculated vendor net amount', async () => {
+    it('creates a transfer with calculated vendor net amount and vendor Stripe account as destination', async () => {
+      // Set up vendor with Stripe connected account ID
+      mockVendorRepo.findById.mockResolvedValue(
+        Vendor.reconstruct({
+          id: 'vendor-1',
+          personId: 'person-1',
+          storeName: 'Test Vendor',
+          slug: 'test-vendor',
+          status: VendorStatus.ACTIVE,
+          commissionPct: 10,
+          stripeAccountId: 'acct_test_vendor',
+        })
+      );
+
       mockStripeTransfers.create.mockResolvedValue({ id: 'tr_stripe_123' } as any);
 
       const result = await service.createTransferWithDetails(
@@ -67,7 +150,7 @@ describe('Transfer Service', () => {
       expect(mockStripeTransfers.create).toHaveBeenCalledWith({
         amount: 9000,
         currency: 'brl',
-        destination: '',
+        destination: 'acct_test_vendor',
         source_transaction: 'ch_stripe_456',
         transfer_group: 'order-1',
       }, { idempotencyKey: 'order-1:ovg-1:1' });
@@ -125,6 +208,128 @@ describe('Transfer Service', () => {
       transferRepo.findByStripeTransferId.mockResolvedValue(null);
       const result = await service.completeTransfer('tr_unknown');
       expect(result).toBeNull();
+    });
+  });
+
+  describe('vendorId resolution in ledger records', () => {
+    it('fills vendorId from the order vendor group in movement and event records', async () => {
+      const movementRepo = new InMemoryFinancialMovementRepository();
+      const eventRepo = new InMemoryFinancialEventRepository();
+
+      const vendorLedgerService = new TransferService(
+        transferRepo as any,
+        financialService,
+        'sk_test_fake_key_for_testing_only',
+        orderRepo as any,
+        movementRepo,
+        eventRepo,
+      );
+
+      const orderId = 'order-1';
+      const orderVendorGroupId = 'ovg-1';
+      const vendorId = 'vendor-1';
+
+      orderRepo.findById.mockResolvedValue(
+        Order.reconstruct({
+          id: orderId,
+          personId: 'person-1',
+          status: OrderStatus.PAID,
+          vendorGroups: [
+            {
+              id: orderVendorGroupId,
+              orderId,
+              vendorId,
+              status: OrderVendorGroupStatus.CONFIRMED,
+              items: [],
+              subtotal: 100,
+              commissionPct: 10,
+              commissionAmount: 10,
+              vendorNet: 90,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          shippingAddress: {
+            id: 'addr-1',
+            street: 'Rua X',
+            number: '10',
+            neighborhood: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            isPrimary: true,
+          },
+          totalAmount: 100,
+          financialStatus: FinancialStatus.PAID,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      );
+
+      const transfer = Transfer.create({
+        orderId,
+        orderVendorGroupId,
+        amount: 90,
+        currency: 'brl',
+      });
+      transfer.stripeTransferId = 'tr_123';
+      transfer.status = TransferStatus.PROCESSING;
+
+      transferRepo.findByStripeTransferId.mockResolvedValue(transfer);
+      transferRepo.save.mockResolvedValue(transfer);
+
+      await vendorLedgerService.completeTransfer('tr_123');
+
+      const movements = await movementRepo.findByEntity(
+        'transfer',
+        transfer.id,
+      );
+      expect(movements.length).toBeGreaterThan(0);
+      expect(movements[0].data.vendorId).toBe(vendorId);
+
+      const events = await eventRepo.findByOrderId(orderId);
+      expect(events.length).toBeGreaterThan(0);
+      expect(events.some(e => e.data.vendorId === vendorId)).toBe(true);
+    });
+
+    it('leaves vendorId undefined when order is not found', async () => {
+      const movementRepo = new InMemoryFinancialMovementRepository();
+      const eventRepo = new InMemoryFinancialEventRepository();
+
+      const vendorLedgerService = new TransferService(
+        transferRepo as any,
+        financialService,
+        'sk_test_fake_key_for_testing_only',
+        orderRepo as any,
+        movementRepo,
+        eventRepo,
+      );
+
+      orderRepo.findById.mockResolvedValue(null);
+
+      const transfer = Transfer.create({
+        orderId: 'order-missing',
+        orderVendorGroupId: 'ovg-1',
+        amount: 90,
+        currency: 'brl',
+      });
+      transfer.stripeTransferId = 'tr_123';
+      transfer.status = TransferStatus.PROCESSING;
+
+      transferRepo.findByStripeTransferId.mockResolvedValue(transfer);
+      transferRepo.save.mockResolvedValue(transfer);
+
+      await vendorLedgerService.completeTransfer('tr_123');
+
+      const movements = await movementRepo.findByEntity(
+        'transfer',
+        transfer.id,
+      );
+      expect(movements.length).toBeGreaterThan(0);
+      expect(movements[0].data.vendorId).toBeUndefined();
+
+      const events = await eventRepo.findByOrderId('order-missing');
+      expect(events.length).toBeGreaterThan(0);
+      expect(events.some(e => e.data.vendorId === undefined)).toBe(true);
     });
   });
 

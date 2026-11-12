@@ -1,14 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authMiddleware, requireVendor } from '../auth/auth.middleware';
+import { authMiddleware, requireVendor, AuthenticatedRequest } from '../auth/auth.middleware';
+import { VendorRepository } from '../vendor/vendor.domain';
 import { VendorFinancialDashboardService } from './financial.dashboard.service';
 import { FinancialDashboard } from './financial.dashboard.service';
 
 export interface FinancialDashboardRoutesConfig {
   vendorFinancialDashboardService: VendorFinancialDashboardService;
+  vendorRepo: VendorRepository;
 }
 
 export function createFinancialDashboardRoutes({
   vendorFinancialDashboardService,
+  vendorRepo,
 }: FinancialDashboardRoutesConfig): Router {
   const router = Router();
 
@@ -19,7 +22,15 @@ export function createFinancialDashboardRoutes({
     requireVendor,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
-        const vendorId = (req as any).user.personId;
+        // Resolve vendorId from the authenticated person via the vendor repository,
+        // instead of trusting personId as vendorId (which is wrong for non-vendor persons).
+        const user = (req as AuthenticatedRequest).user;
+        const vendor = await vendorRepo.findByPersonId(user.sub);
+        if (!vendor) {
+          res.status(404).json({ error: 'VENDOR_NOT_FOUND', message: 'Vendor profile not found for this person' });
+          return;
+        }
+        const vendorId = vendor.id;
         const periodStart = req.query.periodStart
           ? new Date(String(req.query.periodStart))
           : undefined;

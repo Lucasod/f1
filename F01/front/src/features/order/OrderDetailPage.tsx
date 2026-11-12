@@ -26,7 +26,7 @@ import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'BRL',
   }).format(value);
 }
 

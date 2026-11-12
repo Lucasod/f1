@@ -21,7 +21,7 @@ export class MongoFinancialAllocationRepository implements FinancialAllocationRe
     this.col = db.collection<Doc>('financial_allocations');
   }
 
-  async save(allocation: FinancialAllocation): Promise<FinancialAllocation> {
+  async save(allocation: FinancialAllocation, session?: unknown): Promise<FinancialAllocation> {
     const doc: Doc = {
       _id: allocation.id,
       orderId: allocation.orderId,
@@ -34,7 +34,7 @@ export class MongoFinancialAllocationRepository implements FinancialAllocationRe
       referenceId: allocation.referenceId,
       createdAt: allocation.createdAt,
     };
-    await this.col.updateOne({ _id: allocation.id }, { $set: doc }, { upsert: true });
+    await this.col.updateOne({ _id: allocation.id }, { $set: doc }, { upsert: true, session });
     return allocation;
   }
 

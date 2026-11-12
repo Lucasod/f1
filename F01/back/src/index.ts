@@ -44,6 +44,16 @@ import { FinancialService } from './modules/financial/financial.service';
 import { TransferService } from './modules/transfer/transfer.service';
 import { InMemoryFinancialAllocationRepository, FinancialAllocationRepository } from './modules/financial/financial.domain';
 import { MongoFinancialAllocationRepository } from './modules/financial/financial.mongo.repository';
+import {
+  InMemoryFinancialMovementRepository,
+  FinancialMovementRepository,
+} from './modules/financial/financial.movement';
+import { MongoFinancialMovementRepository } from './modules/financial/financial.mongo.movement';
+import {
+  InMemoryFinancialEventRepository,
+  FinancialEventRepository,
+} from './modules/financial/financial.event';
+import { MongoFinancialEventRepository } from './modules/financial/financial.mongo.event';
 import { PayoutService } from './modules/payout/payout.service';
 import { InvoiceService } from './modules/invoice/invoice.service';
 import { InMemoryReviewRepository, ReviewRepository } from './modules/review/review.domain';
@@ -98,6 +108,8 @@ let invoiceRepo: InvoiceRepository;
 let walletRepo: WalletRepository;
 let walletTxRepo: WalletTransactionRepository;
 let financialRepo: FinancialAllocationRepository;
+let movementRepo: FinancialMovementRepository;
+let eventRepo: FinancialEventRepository;
 let searchIndex: ElasticsearchProductIndex | undefined;
 let searchSync: ProductSearchSync | undefined;
 
@@ -152,17 +164,17 @@ function initializeServices(): void {
     couponService,
     checkoutAttemptRepo
   );
-  orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, config);
+  invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
+  orderService = new OrderService(orderRepo, paymentRepo, personRepo, vendorRepo, invoiceService, config);
   personService = new PersonService(personRepo);
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 walletService = new WalletService(walletRepo, walletTxRepo);
 financialService = new FinancialService(financialRepo);
-paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex);
+paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo);
   if (transferRepo) {
-    transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '');
+    transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '', orderRepo, movementRepo, eventRepo);
   }
-payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService);
-invoiceService = new InvoiceService(invoiceRepo, orderRepo, storageAdapter);
+payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService, movementRepo, eventRepo);
 }
 
 // Seed the catalog only when empty, but always reconcile demo accounts.
@@ -269,6 +281,8 @@ invoiceRepo = new MongoInvoiceRepository(db);
 walletRepo = new MongoWalletRepository(db);
 walletTxRepo = new MongoWalletTransactionRepository(db);
 financialRepo = new MongoFinancialAllocationRepository(db);
+movementRepo = new MongoFinancialMovementRepository(db);
+eventRepo = new MongoFinancialEventRepository(db);
       transferRepo = new MongoTransferRepository(db);
 
       // A failed alias check must not disable durable recovery. Only the worker's
@@ -375,6 +389,8 @@ invoiceRepo = new InMemoryInvoiceRepository();
 walletRepo = new InMemoryWalletRepository();
 walletTxRepo = new InMemoryWalletTransactionRepository();
 financialRepo = new InMemoryFinancialAllocationRepository();
+movementRepo = new InMemoryFinancialMovementRepository();
+eventRepo = new InMemoryFinancialEventRepository();
 
         // Ephemeral fallback must never compete with durable Mongo revisions in
         // the shared alias. Search falls back to the in-memory repository here.

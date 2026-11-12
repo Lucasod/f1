@@ -697,13 +697,13 @@ export function createUploadRoutes({ storageAdapter, productRepo, reviewService 
           const product = await productRepo.findById(segments[2]);
           visible = !!product && product.vendorId === segments[1]
             && (product.status === ProductStatus.ACTIVE || product.status === ProductStatus.OUT_OF_STOCK)
-            && product.images.includes(storageAdapter.getUrl(safeKey));
+            && product.images.includes(safeKey);
         } else if (segments[0] === 'reviews' && segments.length === 4 && segments.every(Boolean) && reviewService) {
           const review = await reviewService.findReviewById(segments[2]);
           const product = await productRepo.findById(segments[1]);
           visible = !!review && review.productId === segments[1] && review.status === ReviewStatus.PUBLISHED
             && !!product && (product.status === ProductStatus.ACTIVE || product.status === ProductStatus.OUT_OF_STOCK)
-            && review.images.includes(storageAdapter.getUrl(safeKey));
+            && review.images.includes(safeKey);
         }
       }
       if (!visible) {

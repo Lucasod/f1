@@ -28,9 +28,17 @@ describe('Wallet Service', () => {
   });
 
   describe('getBalance', () => {
-    it('returns 0 balance (MP-28: platform does not hold seller money)', async () => {
+    it('returns 0 balance for a newly created wallet', async () => {
       const balance = await service.getBalance('owner-1');
       expect(balance).toBe(0);
+    });
+
+    it('returns the materialized balance after credits and debits', async () => {
+      await service.credit('owner-1', 100, 'ref-1', 'Credit');
+      await service.debit('owner-1', 30, 'ref-2', 'Debit');
+
+      const balance = await service.getBalance('owner-1');
+      expect(balance).toBe(70);
     });
   });
 
@@ -41,6 +49,17 @@ describe('Wallet Service', () => {
       expect(tx.amount).toBe(100);
       expect(tx.referenceId).toBe('ref-1');
       expect(tx.orderId).toBe('order-1');
+    });
+
+    it('materializes the credit on the wallet balance and persists it', async () => {
+      await service.credit('owner-1', 100, 'ref-1', 'Credit');
+
+      const wallet = await service.getBalance('owner-1');
+      expect(wallet).toBe(100);
+
+      const txs = await service.listTransactions('owner-1');
+      expect(txs).toHaveLength(1);
+      expect(txs[0].amount).toBe(100);
     });
 
     it('returns existing transaction for duplicate reference (idempotency)', async () => {
@@ -58,14 +77,31 @@ describe('Wallet Service', () => {
 
   describe('debit', () => {
     it('creates a debit transaction with idempotency', async () => {
+      await service.credit('owner-1', 100, 'ref-fund', 'Fund');
       const tx = await service.debit('owner-1', 50, 'ref-debit-1', 'Payout', 'order-1');
       expect(tx.type).toBe(WalletTransactionType.DEBIT);
       expect(tx.amount).toBe(50);
     });
 
+    it('materializes the debit on the wallet balance and persists it', async () => {
+      await service.credit('owner-1', 100, 'ref-1', 'Credit');
+      await service.debit('owner-1', 30, 'ref-debit-2', 'Debit');
+
+      const balance = await service.getBalance('owner-1');
+      expect(balance).toBe(70);
+
+      const txs = await service.listTransactions('owner-1');
+      expect(txs).toHaveLength(2);
+    });
+
+    it('throws INSUFFICIENT_BALANCE when balance is too low', async () => {
+      await expect(service.debit('owner-1', 100, 'ref-1', 'Debit')).rejects.toThrow();
+    });
+
     it('returns existing transaction for duplicate reference (idempotency)', async () => {
-      const tx1 = await service.debit('owner-1', 50, 'ref-debit-2', 'Payout');
-      const tx2 = await service.debit('owner-1', 100, 'ref-debit-2', 'Duplicate');
+      await service.credit('owner-1', 200, 'ref-fund-2', 'Fund');
+      const tx1 = await service.debit('owner-1', 50, 'ref-debit-3', 'Payout');
+      const tx2 = await service.debit('owner-1', 100, 'ref-debit-3', 'Duplicate');
       expect(tx2.id).toBe(tx1.id);
     });
 
@@ -92,13 +128,22 @@ describe('Wallet Service', () => {
   });
 
   describe('reconcile', () => {
-    it('returns materialized 0 and computed 0 with ok true (MP-28)', async () => {
+    it('compares materialized balance vs computed balance from transactions', async () => {
       await service.credit('owner-1', 100, 'ref-1', 'Credit');
       await service.debit('owner-1', 30, 'ref-2', 'Debit');
 
       const result = await service.reconcile('owner-1');
-      expect(result.materialized).toBe(0);
-      expect(result.computed).toBe(0);
+      expect(result.materialized).toBe(70);
+      expect(result.computed).toBe(70);
+      expect(result.ok).toBe(true);
+    });
+
+    it('reports a discrepancy when materialized and computed differ', async () => {
+      await service.credit('owner-1', 100, 'ref-1', 'Credit');
+
+      const result = await service.reconcile('owner-1');
+      expect(result.materialized).toBe(100);
+      expect(result.computed).toBe(100);
       expect(result.ok).toBe(true);
     });
   });

@@ -6,6 +6,8 @@ import { useAuthStore } from '@/app/providers/authStore';
 import { VendorDashboard } from './VendorDashboard';
 import { productApi, Product } from '@/shared/api/product';
 import { vendorApi, Vendor, VendorApiException } from '@/shared/api/vendor';
+import { financialApi } from '@/shared/api/financial';
+import { orderApi } from '@/shared/api/order';
 
 // Mock the API modules
 vi.mock('@/shared/api/product', () => ({
@@ -24,8 +26,22 @@ vi.mock('@/shared/api/vendor', async (importOriginal) => {
   };
 });
 
+vi.mock('@/shared/api/financial', () => ({
+  financialApi: {
+    getVendorDashboard: vi.fn(),
+  },
+}));
+
+vi.mock('@/shared/api/order', () => ({
+  orderApi: {
+    getVendorOrderGroups: vi.fn(),
+  },
+}));
+
 const mockGetMyProducts = vi.mocked(productApi.getMyProducts);
 const mockGetMe = vi.mocked(vendorApi.getMe);
+const mockGetVendorDashboard = vi.mocked(financialApi.getVendorDashboard);
+const mockGetVendorOrderGroups = vi.mocked(orderApi.getVendorOrderGroups);
 
 // Mock AuthStore
 vi.mock('@/app/providers/authStore', () => ({
@@ -43,8 +59,8 @@ const mockUser = {
 
 const createMockStore = (overrides: Partial<ReturnType<typeof useAuthStore>> = {}) => ({
   user: mockUser,
-  accessToken: 'mock-access-token',
-  refreshToken: 'mock-refresh-token',
+  accessToken: null,
+  refreshToken: null,
   isAuthenticated: true,
   isLoading: false,
   error: null,
@@ -115,6 +131,16 @@ describe('VendorDashboard', () => {
     mockUseAuthStore.mockReturnValue(createMockStore());
     mockGetMe.mockResolvedValue({ vendor: mockVendor });
     mockGetMyProducts.mockResolvedValue({ products: mockProducts });
+    mockGetVendorDashboard.mockResolvedValue({
+      grossSales: 1000,
+      grossSalesLabel: 'pre-commission',
+      netExpectedAmount: 900,
+      receivedInStripe: 800,
+      pendingDistribution: 100,
+      bankPayout: 700,
+      history: [],
+    });
+    mockGetVendorOrderGroups.mockResolvedValue({ vendorGroups: [], total: 0, page: 1, limit: 20 });
     localStorage.clear();
   });
 

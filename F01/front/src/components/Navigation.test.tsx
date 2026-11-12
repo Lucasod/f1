@@ -143,7 +143,7 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /become a seller/i })).not.toBeInTheDocument();
   });
 
-  it('shows Vendor Dashboard and Vendor Products for VENDOR role', () => {
+  it('shows Vendor Dashboard but not Vendor Products for VENDOR role', () => {
     mockUseAuthStore.mockReturnValue(createMockStore({
       user: { id: '1', name: 'Jane', email: 'jane@example.com', roles: ['VENDOR'] },
       isAuthenticated: true,
@@ -154,7 +154,7 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /vendor dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /vendor products/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /vendor products/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument();
   });
 
@@ -185,7 +185,7 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('menuitem', { name: /browse products/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /vendor dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /vendor products/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /vendor products/i })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /admin dashboard/i })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /admin users/i })).not.toBeInTheDocument();
   });

@@ -91,7 +91,9 @@ export enum OrderError {
   DISPUTE_NOT_PENDING = 'DISPUTE_NOT_PENDING',
   DISPUTE_ALREADY_RESOLVED = 'DISPUTE_ALREADY_RESOLVED',
   DISPUTE_INVALID_TYPE = 'DISPUTE_INVALID_TYPE',
-  DISPUTE_UNAUTHORIZED = 'DISPUTE_UNAUTHORIZED'
+  DISPUTE_UNAUTHORIZED = 'DISPUTE_UNAUTHORIZED',
+  REVIEW_ALREADY_EXISTS = 'REVIEW_ALREADY_EXISTS',
+  REVIEW_CONFLICT = 'REVIEW_CONFLICT'
 }
 
 export interface Address {
@@ -188,7 +190,7 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+export const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING_PAYMENT]: [OrderStatus.PAID, OrderStatus.FAILED_PAYMENT, OrderStatus.CANCELLED],
   [OrderStatus.PAID]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED, OrderStatus.FAILED_PAYMENT],
   [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],

@@ -237,9 +237,15 @@ export const useAuthStore = create<AuthState>()(
               refreshToken,
               isAuthenticated: true
             });
-            
+
             // Trigger guest cart merge after restoring auth state
-            await get().mergeGuestCartOnLogin();
+            // Wrap in try-catch to avoid triggering logout on merge failure
+            try {
+              await get().mergeGuestCartOnLogin();
+            } catch (error) {
+              // Log merge failure but don't clear auth state
+              console.error('Guest cart merge failed during init:', error);
+            }
           } catch {
             // Invalid stored data, clear it
             get().logout();
@@ -259,14 +265,26 @@ export const useAuthStore = create<AuthState>()(
       mergeGuestCartOnLogin: async () => {
         const epoch = authEpoch;
         const guestCartId = localStorage.getItem('guestCartId');
-        if (guestCartId) {
-          try {
-            await cartApi.mergeGuestCart({ guestCartId });
-            if (epoch === authEpoch) cartApi.clearGuestCartId();
-          } catch (error) {
-            // Log error but don't fail login - guest cart merge is best effort
-            console.error('Failed to merge guest cart:', error);
+        if (!guestCartId) {
+          return;
+        }
+
+        try {
+          // Check if the guest cart has items before attempting merge
+          const cart = await cartApi.getCart();
+          if (!cart || cart.items.length === 0) {
+            // No items in guest cart, skip merge
+            return;
           }
+
+          // Attempt merge but handle errors gracefully
+          // 403 should not fail login - guest cart merge is best effort
+          await cartApi.mergeGuestCart({ guestCartId });
+          // After successful merge, clear the guestCartId
+          if (epoch === authEpoch) cartApi.clearGuestCartId();
+        } catch (error) {
+          // Log error but don't fail login - guest cart merge is best effort
+          console.error('Failed to merge guest cart:', error);
         }
       }
     }),

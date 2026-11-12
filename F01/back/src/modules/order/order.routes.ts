@@ -569,6 +569,5 @@ function disputeToResponse(dispute: Dispute) {
     resolvedAt: dispute.resolvedAt,
     resolvedBy: dispute.resolvedBy,
     createdAt: dispute.createdAt,
-    updatedAt: dispute.updatedAt,
   };
 }

@@ -96,7 +96,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
     '/',
     authMw as RequestHandler,
     requireVendor as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const personId = req.user.sub;
         const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
@@ -164,8 +164,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   // GET /api/v1/transfers/:id - Get transfer by ID
   // Authorization: owner or admin
@@ -173,7 +172,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
     '/:id',
     authMw as RequestHandler,
     requireVendor as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const id =
           Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -238,8 +237,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   // POST /api/v1/transfers - Create transfer (admin only)
   // Body: { orderVendorGroupId, amount }
@@ -247,7 +245,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
     '/',
     authMw as RequestHandler,
     requireAdmin as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const { orderVendorGroupId, amount } = req.body;
 
@@ -279,15 +277,14 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   // POST /api/v1/transfers/:id/complete - Mark transfer as complete (admin)
   router.post(
     '/:id/complete',
     authMw as RequestHandler,
     requireAdmin as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const id =
           Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -305,15 +302,14 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   // POST /api/v1/transfers/:id/fail - Mark transfer as failed (admin)
   router.post(
     '/:id/fail',
     authMw as RequestHandler,
     requireAdmin as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const id =
           Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -331,15 +327,14 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   // POST /api/v1/transfers/:id/reverse - Reverse transfer (admin)
   router.post(
     '/:id/reverse',
     authMw as RequestHandler,
     requireAdmin as RequestHandler,
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const id =
           Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -357,8 +352,7 @@ export function createTransferRoutes({ authService, transferService, vendorRepo 
       } catch (error) {
         next(error);
       }
-    }
-  ) as RequestHandler;
+    }) as RequestHandler);
 
   return router;
 }

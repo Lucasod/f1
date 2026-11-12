@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
         '@': resolve(__dirname, './src')
       }
     },
+    optimizeDeps: {
+      include: ['recharts']
+    },
     server: {
       port: 5173,
       host: true,

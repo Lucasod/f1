@@ -38,6 +38,52 @@ function handleResponseHeaders(response: Response): void {
   }
 }
 
+/**
+ * Error thrown by the apiClient when the server responds with a non-OK status.
+ * Only a safe server error code and a generic message are exposed; internal
+ * details (stack traces, debug messages, database errors, etc.) are discarded
+ * so they never reach the UI.
+ */
+export class ApiError extends Error {
+  public readonly status: number;
+  public readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+interface ErrorBody {
+  error?: string;
+  message?: unknown;
+}
+
+function isErrorBody(value: unknown): value is ErrorBody {
+  return typeof value === 'object' && value !== null && 'error' in value;
+}
+
+/**
+ * Extracts only safe error information from a non-OK response. The server
+ * error `error` code is preserved when present; any internal `message`,
+ * `stack` or debug fields are discarded.
+ */
+async function extractSafeError(response: Response): Promise<{ code?: string; message: string }> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  let code: string | undefined;
+  if (isErrorBody(body) && typeof body.error === 'string') {
+    code = body.error;
+  }
+  return { code, message: `Request failed with status ${response.status}` };
+}
+
 export const apiClient = {
   getAuthHeaders,
   getGuestCartId,
@@ -51,6 +97,10 @@ export const apiClient = {
       headers: buildHeaders(options.headers),
     });
     handleResponseHeaders(response);
+    if (!response.ok) {
+      const safeError = await extractSafeError(response);
+      throw new ApiError(safeError.message, response.status, safeError.code);
+    }
     return response;
   },
 
@@ -62,6 +112,10 @@ export const apiClient = {
       body: JSON.stringify(body),
     });
     handleResponseHeaders(response);
+    if (!response.ok) {
+      const safeError = await extractSafeError(response);
+      throw new ApiError(safeError.message, response.status, safeError.code);
+    }
     return response;
   },
 
@@ -73,6 +127,10 @@ export const apiClient = {
       body: JSON.stringify(body),
     });
     handleResponseHeaders(response);
+    if (!response.ok) {
+      const safeError = await extractSafeError(response);
+      throw new ApiError(safeError.message, response.status, safeError.code);
+    }
     return response;
   },
 
@@ -83,6 +141,10 @@ export const apiClient = {
       headers: buildHeaders(options.headers),
     });
     handleResponseHeaders(response);
+    if (!response.ok) {
+      const safeError = await extractSafeError(response);
+      throw new ApiError(safeError.message, response.status, safeError.code);
+    }
     return response;
   },
 };
