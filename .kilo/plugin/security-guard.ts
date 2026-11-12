@@ -98,7 +98,7 @@ const CONTENT_PATTERN_SOURCES: Array<[string, string]> = [
   ["github_pat_[A-Za-z0-9_]{80,}", "i"],
   ["xox[baprs]-[A-Za-z0-9-]{10,}", "i"],
   ["-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----", "i"],
-  ["\\[REDACTED]\\", "i"],
+  ["\\[REDACTED\\]", "i"],
   ["[a-zA-Z][a-zA-Z0-9+.-]*://[^\\s/:@]+:[^\\s/@]+@", "i"],
   ["(password|passwd|pwd)\\s*[:=]\\s*[\"'][^\"'\\s]{4,}", "i"],
   ["(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)\\s*[:=]\\s*[\"'][^\"'\\s]{8,}", "i"],
