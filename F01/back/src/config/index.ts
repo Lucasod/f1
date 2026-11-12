@@ -53,7 +53,7 @@ function getStorageRoot(): string {
   if (process.env.STORAGE_ROOT) {
     return process.env.STORAGE_ROOT;
   }
-  // Default: resolve from project root (where package.json is)
+  // Default: resolve from project root (F01/)
   // This file is at F01/back/src/config/index.ts, so go up 3 levels to F01/
   const projectRoot = path.resolve(__dirname, '..', '..', '..');
   return path.join(projectRoot, 'storage', 'uploads');
