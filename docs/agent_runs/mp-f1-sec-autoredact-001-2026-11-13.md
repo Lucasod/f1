@@ -19,7 +19,8 @@
 
 | Task ID | Description | Status | Dependencies | Start time | End time | Findings | Attempts | Current FIPR phase |
 |---------|-------------|--------|--------------|------------|----------|----------|----------|--------------------|
-| F1-FIRD-BOOTSTRAP-001 | FIRD bootstrap circularity repair: contract exception + developer exception + run record creation + Git verification | IN_PROGRESS | None (bootstrap) | 2026-11-13T19:00:37Z | — | — | 1 | IN_PROGRESS — AUDIT PENDING |
+| F1-FIRD-BOOTSTRAP-001 | FIRD bootstrap circularity repair: contract exception + developer exception + run record creation + Git verification | completed | None (bootstrap) | 2026-11-13T19:00:37Z | 2026-11-13T19:15:43Z | Review PASS, 0 corrective findings, all 6 acceptance criteria confirmed | 1 | docupdate |
+| MP-F1-SEC-AUTOREDACT-001-AUDIT-001 | Audit phase investigation of secret protection mechanisms (scanner, hook, contracts, rules); run record update only; no F01/F04 changes; no remediation | IN_PROGRESS | None | 2026-11-13T19:15:43Z | — | — | 1 | Audit |
 
 ## Findings Log
 
@@ -31,10 +32,12 @@
 | Timestamp (UTC) | FIPR phase | Description | Git status hash | Verified |
 |-----------------|------------|-------------|-----------------|----------|
 | 2026-11-13T19:00:37Z | IN_PROGRESS — AUDIT PENDING | Run record created; FIRD-RUN-BOOTSTRAP exception added to .kilo/fird/contratos-delegacao.md (§3.4) and .kilo/agents/code-developer.md (§1 input validation); Git state verified read-only (branch/HEAD confirmed; pre-existing F01/F04 working-tree changes preserved; no staged changes) | 3743b07020915e6637e379b2b1dec1fbb2b4ece4 + working-tree mods (3 authorized files) | ✅ |
+| 2026-11-13T19:15:43Z | review | Independent Code Reviewer PASS verdict on F1-FIRD-BOOTSTRAP-001 (0 corrective findings, all 6 acceptance criteria confirmed); run record task log marked completed, FIPR phase=docupdate | 3743b07020915e6637e379b2b1dec1fbb2b4ece4 | ✅ |
+| 2026-11-13T19:15:43Z | fix/audit transition | Audit phase started (MP-F1-SEC-AUTOREDACT-001-AUDIT-001, status IN_PROGRESS); investigation of secret protection mechanisms (scanner, hook, contracts, rules) initiated; run record updated, no F01/F04 changes, no remediation implemented | 3743b07020915e6637e379b2b1dec1fbb2b4ece4 | ✅ |
 
 ## Next action
 
-Submit the changed files to independent Code Reviewer for review of the FIRD-RUN-BOOTSTRAP exception and run record; do not implement the MP secret autocorrection mission (out of scope). No commit, push, or staging performed.
+Audit phase investigation of secret protection mechanisms (scanner, hook, contracts, rules) — MP-F1-SEC-AUTOREDACT-001-AUDIT-001 (IN_PROGRESS, phase=Audit). No remediation implementation yet (Phase I). No commit, push, or staging performed.
 
 ## Limitations and uncertainties
 
@@ -44,9 +47,10 @@ Submit the changed files to independent Code Reviewer for review of the FIRD-RUN
 - Untracked files were not verified (`--untracked-files=no` used deliberately).
 - The run record is append-only; it must not be overwritten or deleted.
 - Secret scanner (`scripts/scan-secrets.sh`) execution on the 3 modified files: executed (file mode, no git required); exit code 0, clean — no secret findings on .kilo/fird/contratos-delegacao.md, .kilo/agents/code-developer.md, docs/agent_runs/mp-f1-sec-autoredact-001-2026-11-13.md. Scanner reports paths/labels/categories only, never values.
+- Bootstrap Code Reviewer PASS obtained (0 corrective findings, all 6 acceptance criteria confirmed); secret scanner result on this run record documented in this audit cycle; scanner re-executed on the modified run record file in file mode (see Audit phase investigation, AC-5).
 
 ## Conclusion
 
 IN_PROGRESS — AUDIT PENDING
 
-Conclusion: IN_PROGRESS — AUDIT PENDING (run record created; contract and agent exception applied; Git state verified; secret scanner exit 0 clean on all 3 modified files; awaiting independent review).
+Conclusion: IN_PROGRESS — AUDIT PENDING (now Audit phase active; F1-FIRD-BOOTSTRAP-001 completed with Review PASS; MP-F1-SEC-AUTOREDACT-001-AUDIT-001 started, phase=Audit; secret scanner exit 0 clean on run record; awaiting independent review of this audit run record).
