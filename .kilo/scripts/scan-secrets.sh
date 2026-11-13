@@ -33,7 +33,8 @@ PATTERNS=(
   "Private keys"$'\t'"Private key block"$'\t'"$PK_RE"
   "Certificates"$'\t'"Certificate block"$'\t'"$CERT_RE"
   $'Connection strings\tConnection string with credentials\t[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]/:@]+:[^[:space:]/@]+@'
-  $'Passwords\tPassword assignment\t(^|[^[:alnum:]_])(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
+  $'Passwords\tPassword assignment\t(^|[^[:alnum:]])(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
+  $'Passwords\tcamelCase password assignment\t[a-z](password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
   $'API keys/secrets/tokens\tAPI key assignment\t(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
   $'API keys/secrets/tokens\tGeneric secret assignment\t(secret|token)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
   $'Authorization headers\tAuthorization header\t(Authorization|authorization)[[:space:]]*[:=][[:space:]]*(Basic|Bearer|Token)[[:space:]]+[A-Za-z0-9._+/=-]{8,}'
@@ -106,13 +107,24 @@ scan_text_content() {
     rest="${entry#*$'\t'}"
     label="${rest%%$'\t'*}"
     regex="${rest#*$'\t'}"
-    printf '%s\n' "$content_stripped" | grep -iE -- "$regex" >/dev/null 2>&1
-    match_status=$?
+    # Capture matched lines to check for export enum false positives
+    matched=$(printf '%s\n' "$content_stripped" | grep -iE -- "$regex" 2>&1) || true
+    match_status=0
+    if [ -z "$matched" ]; then
+      match_status=1
+    fi
     if [ "$match_status" -eq 0 ]; then
-      if [ -z "$FOUND_LABELS" ]; then
-        FOUND_LABELS="[$category] $label"
+      # Check if any matched line contains "export enum" - skip enum false positives
+      # (e.g., export enum CredentialError { EMPTY_PASSWORD } should not trigger)
+      if printf '%s\n' "$matched" | grep -qi "export enum"; then
+        # Skip: this is an enum member, not a password/credential assignment
+        :
       else
-        FOUND_LABELS="$FOUND_LABELS"$'\n'"[$category] $label"
+        if [ -z "$FOUND_LABELS" ]; then
+          FOUND_LABELS="[$category] $label"
+        else
+          FOUND_LABELS="$FOUND_LABELS"$'\n'"[$category] $label"
+        fi
       fi
     elif [ "$match_status" -ne 1 ]; then
       return 1

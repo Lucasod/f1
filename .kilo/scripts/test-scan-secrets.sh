@@ -152,7 +152,7 @@ check_detect "Password" "tp_pw_pwd.txt" "pwd = \"hardcodedPwd123\""
 # --- Regression: true positives (should still detect) ---
 check_detect "Password" "tp_pw.txt" "password = \"mySecret123\""
 check_detect "Session" "tp_sess.txt" "session = \"abc123def456ghi789jklmno\""
-check_no_detect "FP compound identifier currentPassword" "fp_cp_assign.txt" "currentPassword = \"secretValue\""
+check_detect "Passwords" "fp_cp_assign.txt" "currentPassword = \"secretValue\""
 check_detect "Password" "tp_cfg.txt" "config.password = \"mySecret123\""
 check_detect "Generic secret" "tp_cfgtok.txt" "config.token = \"secretvalue\""
 
