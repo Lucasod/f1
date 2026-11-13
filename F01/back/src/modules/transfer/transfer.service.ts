@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { Transfer, TransferStatus } from './transfer.domain';
 import { MongoTransferRepository } from './transfer.mongo.repository';
 import { Order, OrderVendorGroup, OrderVendorGroupStatus, OrderStatus, OrderError, OrderRepository } from '../order/order.domain';
+import { VendorRepository } from '../vendor/vendor.domain';
 import { FinancialService } from '../financial/financial.service';
 import { FinancialAllocation, FinancialAllocationType } from '../financial/financial.domain';
 

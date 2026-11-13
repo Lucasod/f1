@@ -21,6 +21,7 @@ vi.mock('@/shared/api/auth', () => ({
 
 vi.mock('@/shared/api/cart', () => ({
   cartApi: {
+    getCart: vi.fn(),
     mergeGuestCart: vi.fn(),
     clearGuestCartId: vi.fn()
   }
@@ -37,6 +38,7 @@ const mockRegister = vi.mocked(authApi.register);
 const mockRefreshToken = vi.mocked(authApi.refreshToken);
 const mockMergeGuestCart = vi.mocked(cartApi.mergeGuestCart);
 const mockClearGuestCartId = vi.mocked(cartApi.clearGuestCartId);
+const mockGetCart = vi.mocked(cartApi.getCart);
 const mockGetMe = vi.mocked(personApi.getMe);
 
 const ACCESS_TOKEN_FIXTURE = 'access-token';
@@ -376,6 +378,7 @@ describe('useAuthStore', () => {
       localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
 
       mockLogin.mockResolvedValueOnce(mockResponse);
+      mockGetCart.mockResolvedValueOnce({ cart: { items: [{ id: 'gi-1', productId: 'prod-1', quantity: 1 }], version: 1, updatedAt: new Date().toISOString() } });
       mockMergeGuestCart.mockResolvedValueOnce({ cart: { id: '1', items: [], version: 1, updatedAt: new Date().toISOString() } });
 
       await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
@@ -394,6 +397,7 @@ describe('useAuthStore', () => {
       localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
 
       mockLogin.mockResolvedValueOnce(mockResponse);
+      mockGetCart.mockResolvedValueOnce({ cart: { items: [{ id: 'gi-1', productId: 'prod-1', quantity: 1 }], version: 1, updatedAt: new Date().toISOString() } });
       mockMergeGuestCart.mockRejectedValueOnce(new Error('MERGE_FAILED'));
 
       await useAuthStore.getState().login('john@example.com', PASSWORD_FIXTURE);
@@ -426,6 +430,7 @@ describe('useAuthStore', () => {
       localStorage.setItem('user', JSON.stringify(mockUser));
       localStorage.setItem('guestCartId', 'guest:12345678-1234-4123-8123-123456789abc');
 
+      mockGetCart.mockResolvedValueOnce({ cart: { items: [{ id: 'gi-1', productId: 'prod-1', quantity: 1 }], version: 1, updatedAt: new Date().toISOString() } });
       mockMergeGuestCart.mockResolvedValueOnce({ cart: { id: '1', items: [], version: 1, updatedAt: new Date().toISOString() } });
 
       await useAuthStore.getState().initializeAuth();

@@ -1,4 +1,4 @@
-import { Collection, Db } from 'mongodb';
+import { Collection, ClientSession, Db } from 'mongodb';
 import { FinancialAllocation, FinancialAllocationData, FinancialAllocationRepository } from './financial.domain';
 
 interface Doc {
@@ -21,7 +21,7 @@ export class MongoFinancialAllocationRepository implements FinancialAllocationRe
     this.col = db.collection<Doc>('financial_allocations');
   }
 
-  async save(allocation: FinancialAllocation, session?: unknown): Promise<FinancialAllocation> {
+  async save(allocation: FinancialAllocation, session?: ClientSession): Promise<FinancialAllocation> {
     const doc: Doc = {
       _id: allocation.id,
       orderId: allocation.orderId,

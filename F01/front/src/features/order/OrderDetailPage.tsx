@@ -167,7 +167,7 @@ function VendorGroupCard({
                 <td className="px-4 py-3 text-center">
                   {orderStatus === 'delivered' && isConsumer && (
                     <OrderItemReview
-                      orderId={order.id}
+                      orderId={vendorGroup.orderId}
                       productId={item.productId}
                       productName={item.productName}
                     />

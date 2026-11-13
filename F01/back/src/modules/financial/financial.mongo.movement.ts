@@ -1,4 +1,4 @@
-import { Collection, Db } from 'mongodb';
+import { Collection, ClientSession, Db } from 'mongodb';
 import {
   FinancialMovementRecord,
   FinancialMovementData,
@@ -33,7 +33,7 @@ export class MongoFinancialMovementRepository implements FinancialMovementReposi
     this.col = db.collection<MovementDoc>('financial_movements');
   }
 
-  async save(movement: FinancialMovementRecord, session?: unknown): Promise<FinancialMovementRecord> {
+  async save(movement: FinancialMovementRecord, session?: ClientSession): Promise<FinancialMovementRecord> {
     const data = movement.data;
     const doc: MovementDoc = {
       _id: data.movementId,

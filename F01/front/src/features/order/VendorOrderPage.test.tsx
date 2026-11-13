@@ -197,7 +197,7 @@ describe('VendorOrderPage', () => {
     renderWithNav(<VendorOrderPage />);
 
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText(/carregando pedidos do vendedor/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading vendor orders/i)).toBeInTheDocument();
   });
 
   it('shows error state when fetch fails with retry button', async () => {
@@ -205,8 +205,8 @@ describe('VendorOrderPage', () => {
 
     renderWithNav(<VendorOrderPage />);
 
-    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedidos/i)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Error loading orders/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeInTheDocument();
   });
 
   it('shows empty state when no vendor order groups', async () => {
@@ -230,7 +230,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Apply a filter - this will trigger a refetch with the second mock (empty response)
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'pending' } });
     });
@@ -241,7 +241,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.getByText(/Try changing the status filter to see more order groups./i)).toBeInTheDocument());
 
     expect(screen.getByText(/No order groups found/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument();
   });
 
   it('displays vendor order groups list when data loads', async () => {
@@ -250,7 +250,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check header with total count - component uses "grupo(s) de pedido(s) encontrado(s)"
-    expect(screen.getByText(/meus pedidos \(vendedor\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/My Orders \(Seller\)/i)).toBeInTheDocument();
     expect(screen.getByText(/3 order groups founds/i)).toBeInTheDocument();
 
     // Check vendor group cards are displayed - check Order IDs
@@ -264,9 +264,9 @@ describe('VendorOrderPage', () => {
     expect(screen.getByText(/OVG-3/i)).toBeInTheDocument();
 
     // Check dates are formatted
-    expect(screen.getByText(/15\/01\/2024/i)).toBeInTheDocument();
-    expect(screen.getByText(/20\/01\/2024/i)).toBeInTheDocument();
-    expect(screen.getByText(/10\/01\/2024/i)).toBeInTheDocument();
+    expect(screen.getByText(/01\/15\/2024/i)).toBeInTheDocument();
+    expect(screen.getByText(/01\/20\/2024/i)).toBeInTheDocument();
+    expect(screen.getByText(/01\/10\/2024/i)).toBeInTheDocument();
 
     // Check items count - use specific selector for items count elements
     // ovg-1 has 2 items, ovg-2 and ovg-3 have 1 item each
@@ -275,15 +275,15 @@ describe('VendorOrderPage', () => {
     expect(itemCountOnes).toHaveLength(2);
 
     // Check financial summary
-    expect(screen.getByText(/R\$ 74,98/i)).toBeInTheDocument(); // subtotal ovg-1
-    expect(screen.getByText(/R\$ 149,97/i)).toBeInTheDocument(); // subtotal ovg-2
-    expect(screen.getByText(/R\$ 99,99/i)).toBeInTheDocument(); // subtotal ovg-3
-    expect(screen.getByText(/R\$ 7,49/i)).toBeInTheDocument(); // commission amount ovg-1
-    expect(screen.getByText(/R\$ 17,99/i)).toBeInTheDocument(); // commission amount ovg-2
-    expect(screen.getByText(/R\$ 9,99/i)).toBeInTheDocument(); // commission amount ovg-3
-    expect(screen.getByText(/R\$ 67,49/i)).toBeInTheDocument(); // vendor net ovg-1
-    expect(screen.getByText(/R\$ 131,98/i)).toBeInTheDocument(); // vendor net ovg-2
-    expect(screen.getByText(/R\$ 89,99/i)).toBeInTheDocument(); // vendor net ovg-3
+    expect(screen.getByText(/R\$74\.98/i)).toBeInTheDocument(); // subtotal ovg-1
+    expect(screen.getByText(/R\$149\.97/i)).toBeInTheDocument(); // subtotal ovg-2
+    expect(screen.getByText(/R\$99\.99/i)).toBeInTheDocument(); // subtotal ovg-3
+    expect(screen.getByText(/R\$7\.49/i)).toBeInTheDocument(); // commission amount ovg-1
+    expect(screen.getByText(/R\$17\.99/i)).toBeInTheDocument(); // commission amount ovg-2
+    expect(screen.getByText(/R\$9\.99/i)).toBeInTheDocument(); // commission amount ovg-3
+    expect(screen.getByText(/R\$67\.49/i)).toBeInTheDocument(); // vendor net ovg-1
+    expect(screen.getByText(/R\$131\.98/i)).toBeInTheDocument(); // vendor net ovg-2
+    expect(screen.getByText(/R\$89\.99/i)).toBeInTheDocument(); // vendor net ovg-3
 
     // Check commission percentage - both ovg-1 and ovg-3 have 10%, ovg-2 has 12%
     const commission10 = screen.getAllByText(/Commission \(10%\)/i);
@@ -291,7 +291,7 @@ describe('VendorOrderPage', () => {
     expect(screen.getByText(/Commission \(12%\)/i)).toBeInTheDocument();
 
     // Check View Details buttons
-    expect(screen.getAllByRole('button', { name: /ver detalhes/i })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /View details/i })).toHaveLength(3);
   });
 
   it('filters by status - Select change triggers refetch with page=1', async () => {
@@ -303,7 +303,7 @@ describe('VendorOrderPage', () => {
     expect(orderApi.getVendorOrderGroups).toHaveBeenCalledWith(expect.objectContaining({ status: undefined, page: 1, limit: 10 }));
 
     // Change status filter to 'pending'
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'pending' } });
     });
@@ -324,7 +324,7 @@ describe('VendorOrderPage', () => {
     expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
 
     // Previous button should be disabled on page 1
-    expect(screen.getByRole('button', { name: /anterior/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Previous/i })).toBeDisabled();
 
     // Mock page 2 response
     vi.mocked(orderApi.getVendorOrderGroups).mockResolvedValueOnce(mockPaginatedVendorGroupsResponsePage2);
@@ -341,14 +341,14 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.getByText(/Page 2 of 3/i)).toBeInTheDocument());
 
     // Previous button should be enabled now
-    expect(screen.getByRole('button', { name: /anterior/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Previous/i })).not.toBeDisabled();
 
     // Mock page 1 response again for going back
     vi.mocked(orderApi.getVendorOrderGroups).mockResolvedValueOnce(mockPaginatedVendorGroupsResponsePage1);
 
     // Click Previous
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /anterior/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Previous/i }));
     });
 
     // Should call API with page 1
@@ -377,19 +377,19 @@ describe('VendorOrderPage', () => {
     // Vendor Group ID
     ovg1.getByText(/OVG-1/i);
     // Status badge - pending should be warning (yellow)
-    const pendingBadge = ovg1.getByText(/PENDENTE/i);
+    const pendingBadge = ovg1.getByText(/PENDING/i);
     expect(pendingBadge).toBeInTheDocument();
     // Items count - use getByText with selector for the specific element
     ovg1.getByText('2', { selector: 'p.font-medium.text-gray-900' }); // ovg-1 has 2 items
     // Created date
-    ovg1.getByText(/15\/01\/2024/i);
+    ovg1.getByText(/01\/15\/2024/i);
     // Financial summary
     ovg1.getByText(/Subtotal/i);
-    ovg1.getByText(/R\$ 74,98/i);
+    ovg1.getByText(/R\$74\.98/i);
     ovg1.getByText(/Commission \(10%\)/i);
-    ovg1.getByText(/R\$ 7,49/i);
+    ovg1.getByText(/R\$7\.49/i);
     ovg1.getByText(/Vendor Net/i);
-    ovg1.getByText(/R\$ 67,49/i);
+    ovg1.getByText(/R\$67\.49/i);
   });
 
   it('"Atualizar status" buttons appear for valid next statuses', async () => {
@@ -403,28 +403,28 @@ describe('VendorOrderPage', () => {
     // For 'pending' status (ovg-1), valid next statuses are 'confirmed' and 'cancelled'
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
-    ovg1.getByRole('button', { name: /CONFIRMADO/i });
-    ovg1.getByRole('button', { name: /CANCELADO/i });
+    ovg1.getByRole('button', { name: /CONFIRMED/i });
+    ovg1.getByRole('button', { name: /CANCELLED/i });
 
     // For 'preparing' status (ovg-2), valid next statuses are 'shipped' and 'cancelled'
     const ovg2Card = screen.getByText(/OVG-2/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg2 = within(ovg2Card!);
-    ovg2.getByRole('button', { name: /ENVIADO/i });
-    ovg2.getByRole('button', { name: /CANCELADO/i });
+    ovg2.getByRole('button', { name: /SHIPPED/i });
+    ovg2.getByRole('button', { name: /CANCELLED/i });
 
     // For 'delivered' status (ovg-3), valid next status is 'returned'
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    ovg3.getByRole('button', { name: /DEVOLVIDO/i });
+    ovg3.getByRole('button', { name: /RETURNED/i });
   });
 
-  it('clicking "Ver detalhes" navigates to /orders/:orderId', async () => {
+  it('clicking "View details" navigates to /orders/:orderId', async () => {
     const { navigateMock } = renderWithNav(<VendorOrderPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Click Ver detalhes button for first vendor group (order-1)
-    const viewDetailsButton = screen.getAllByRole('button', { name: /ver detalhes/i })[0];
+    const viewDetailsButton = screen.getAllByRole('button', { name: /View details/i })[0];
     fireEvent.click(viewDetailsButton);
 
     // Should call navigate with /orders/order-1
@@ -442,19 +442,19 @@ describe('VendorOrderPage', () => {
     // Pending badge (ovg-1) - warning (yellow) -> bg-yellow-100 text-yellow-800
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
-    const pendingBadge = ovg1.getByText(/PENDENTE/i).closest('span[class*="bg-yellow-100"]') as HTMLElement;
+    const pendingBadge = ovg1.getByText(/PENDING/i).closest('span[class*="bg-yellow-100"]') as HTMLElement;
     expect(pendingBadge).toBeInTheDocument();
 
     // Preparing badge (ovg-2) - info (cyan) -> bg-cyan-100 text-cyan-800
     const ovg2Card = screen.getByText(/OVG-2/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg2 = within(ovg2Card!);
-    const preparingBadge = ovg2.getByText(/PREPARANDO/i).closest('span[class*="bg-cyan-100"]') as HTMLElement;
+    const preparingBadge = ovg2.getByText(/PREPARING/i).closest('span[class*="bg-cyan-100"]') as HTMLElement;
     expect(preparingBadge).toBeInTheDocument();
 
     // Delivered badge (ovg-3) - success (green) -> bg-green-100 text-green-800
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    const deliveredBadge = ovg3.getByText(/ENTREGUE/i).closest('span[class*="bg-green-100"]') as HTMLElement;
+    const deliveredBadge = ovg3.getByText(/DELIVERED/i).closest('span[class*="bg-green-100"]') as HTMLElement;
     expect(deliveredBadge).toBeInTheDocument();
   });
 
@@ -467,25 +467,25 @@ describe('VendorOrderPage', () => {
     const { within } = await import('@testing-library/react');
 
     // Check label mappings from getVendorGroupStatusConfig:
-    // pending -> PENDENTE
-    // confirmed -> CONFIRMADO
-    // preparing -> PREPARANDO
-    // shipped -> ENVIADO
-    // delivered -> ENTREGUE
-    // cancelled -> CANCELADO
-    // returned -> DEVOLVIDO
+    // pending -> PENDING
+    // confirmed -> CONFIRMED
+    // preparing -> PREPARING
+    // shipped -> SHIPPED
+    // delivered -> DELIVERED
+    // cancelled -> CANCELLED
+    // returned -> RETURNED
 
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
-    ovg1.getByText(/PENDENTE/i);
+    ovg1.getByText(/PENDING/i);
 
     const ovg2Card = screen.getByText(/OVG-2/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg2 = within(ovg2Card!);
-    ovg2.getByText(/PREPARANDO/i);
+    ovg2.getByText(/PREPARING/i);
 
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    ovg3.getByText(/ENTREGUE/i);
+    ovg3.getByText(/DELIVERED/i);
   });
 
   it('clear filter button works when filter is active', async () => {
@@ -500,7 +500,7 @@ describe('VendorOrderPage', () => {
     vi.mocked(orderApi.getVendorOrderGroups).mockResolvedValueOnce(mockFilteredEmptyResponse);
 
     // Apply a filter first
-    const select = screen.getByLabelText(/filtrar por status/i);
+    const select = screen.getByLabelText(/Filter by status/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'pending' } });
     });
@@ -508,10 +508,10 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(orderApi.getVendorOrderGroups).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending', page: 1 })));
 
     // Wait for the empty state to render with clear filter button
-    await waitFor(() => expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument());
 
     // Clear filter
-    const clearButton = screen.getByRole('button', { name: /limpar filtro/i });
+    const clearButton = screen.getByRole('button', { name: /Clear filter/i });
     await act(async () => {
       fireEvent.click(clearButton);
     });
@@ -530,8 +530,8 @@ describe('VendorOrderPage', () => {
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
 
-    // Click the CONFIRMADO button for the first vendor group (pending -> confirmed)
-    const confirmButton = ovg1.getByRole('button', { name: /CONFIRMADO/i });
+    // Click the CONFIRMED button for the first vendor group (pending -> confirmed)
+    const confirmButton = ovg1.getByRole('button', { name: /CONFIRMED/i });
     await act(async () => {
       fireEvent.click(confirmButton);
     });
@@ -574,37 +574,37 @@ describe('VendorOrderPage', () => {
     // Pending (ovg-1): confirmed, cancelled
     const ovg1Card = screen.getByText(/OVG-1/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg1 = within(ovg1Card!);
-    ovg1.getByRole('button', { name: /CONFIRMADO/i });
-    ovg1.getByRole('button', { name: /CANCELADO/i });
+    ovg1.getByRole('button', { name: /CONFIRMED/i });
+    ovg1.getByRole('button', { name: /CANCELLED/i });
 
     // Confirmed (ovg-2): preparing, cancelled
     const ovg2Card = screen.getByText(/OVG-2/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg2 = within(ovg2Card!);
-    ovg2.getByRole('button', { name: /PREPARANDO/i });
-    ovg2.getByRole('button', { name: /CANCELADO/i });
+    ovg2.getByRole('button', { name: /PREPARING/i });
+    ovg2.getByRole('button', { name: /CANCELLED/i });
 
     // Preparing (ovg-3): shipped, cancelled
     const ovg3Card = screen.getByText(/OVG-3/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg3 = within(ovg3Card!);
-    ovg3.getByRole('button', { name: /ENVIADO/i });
-    ovg3.getByRole('button', { name: /CANCELADO/i });
+    ovg3.getByRole('button', { name: /SHIPPED/i });
+    ovg3.getByRole('button', { name: /CANCELLED/i });
 
     // Shipped (ovg-4): delivered, cancelled, returned
     const ovg4Card = screen.getByText(/OVG-4/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg4 = within(ovg4Card!);
-    ovg4.getByRole('button', { name: /ENTREGUE/i });
-    ovg4.getByRole('button', { name: /CANCELADO/i });
-    ovg4.getByRole('button', { name: /DEVOLVIDO/i });
+    ovg4.getByRole('button', { name: /DELIVERED/i });
+    ovg4.getByRole('button', { name: /CANCELLED/i });
+    ovg4.getByRole('button', { name: /RETURNED/i });
 
     // Delivered (ovg-5): returned
     const ovg5Card = screen.getByText(/OVG-5/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg5 = within(ovg5Card!);
-    ovg5.getByRole('button', { name: /DEVOLVIDO/i });
+    ovg5.getByRole('button', { name: /RETURNED/i });
 
     // Delivered (ovg-6): returned
     const ovg6Card = screen.getByText(/OVG-6/i).closest('[class*="rounded-xl"]') as HTMLElement;
     const ovg6 = within(ovg6Card!);
-    ovg6.getByRole('button', { name: /DEVOLVIDO/i });
+    ovg6.getByRole('button', { name: /RETURNED/i });
 
     // Cancelled (ovg-7): no next statuses (no buttons)
     // Refunded (ovg-8): no next statuses (no buttons)
@@ -629,14 +629,14 @@ describe('VendorOrderPage', () => {
     const ovg1 = within(ovg1Card!);
 
     // Click a status button to trigger mutation
-    const confirmButton = ovg1.getByRole('button', { name: /CONFIRMADO/i });
+    const confirmButton = ovg1.getByRole('button', { name: /CONFIRMED/i });
     await act(async () => {
       fireEvent.click(confirmButton);
     });
 
     // During mutation, buttons should be disabled - wait for the state to update
     await waitFor(() => {
-      const confirmButtonDuringMutation = ovg1.getByRole('button', { name: /CONFIRMADO/i });
+      const confirmButtonDuringMutation = ovg1.getByRole('button', { name: /CONFIRMED/i });
       expect(confirmButtonDuringMutation).toBeDisabled();
     });
 
@@ -648,7 +648,7 @@ describe('VendorOrderPage', () => {
 
     // After mutation resolves, buttons should be enabled again - wait for state update
     await waitFor(() => {
-      const confirmButtonAfterMutation = ovg1.getByRole('button', { name: /CONFIRMADO/i });
+      const confirmButtonAfterMutation = ovg1.getByRole('button', { name: /CONFIRMED/i });
       expect(confirmButtonAfterMutation).not.toBeDisabled();
     });
   });

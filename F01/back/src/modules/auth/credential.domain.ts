@@ -12,7 +12,7 @@ const MIN_PASSWORD_LENGTH = 8;
 // Use fewer rounds in test environment for faster tests
 const BCRYPT_ROUNDS = process.env.NODE_ENV === 'test' ? 4 : 12;
 
-function validatePasswordStrength(password: string): void {
+export function validatePasswordStrength(password: string): void {
   if (!password || password.length === 0) {
     throw new Error(CredentialError.EMPTY_PASSWORD);
   }

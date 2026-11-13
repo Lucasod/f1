@@ -249,13 +249,13 @@
 |----|------|-------------|--------------|---------------------|--------|
 | T-1201 | Integration test suite | API contract, cross-service flows | T-601..T-1107 | CI passes | ✅ completed: auth E2E root cause fixed (localStorage SecurityError via clearAuth()); 1 auth Playwright test passes reliably across consecutive runs |
 | T-1202 | E2E test suite | Critical user journeys | T-601..T-1107 | Playwright/Cypress passes | ✅ completed: 7/7 Playwright tests pass reliably across two consecutive runs (6 guest cart + 1 auth); root causes fixed — product catalog empty (seed.ts instead of reset-database.cjs), localStorage SecurityError (clearAuth()), cart selector case (text=Shopping cart matches CartPage.tsx line 277) |
-| T-1203 | Performance/load test | Search, checkout, payment latency | T-802, T-902, T-1001 | Metrics meet NFR | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1204 | Deploy frontend (prod) | Separate deploy per Stage 7 | T-504, T-502 | Live URL accessible | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1205 | Deploy backend (prod) | Separate deploy per Stage 7 | T-504, T-501 | API live, healthy | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1206 | Record/create demo | Functional walkthrough | T-1204, T-1205 | Video or live demo ready | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1207 | Prepare final presentation | 10-min slides + talking points | All prior | Presentation file ready | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1208 | Write individual reflection | Learning & contribution document | All prior | Reflection submitted | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
-| T-1209 | Final repo cleanup | README, setup instructions, commit hygiene | All prior | Repo meets deliverable std | 🔴 blocked: MAX_AUTHORIZED_PHASE = 4 |
+| T-1203 | Performance/load test | Search, checkout, payment latency | T-802, T-902, T-1001 | Metrics meet NFR | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1204 | Deploy frontend (prod) | Separate deploy per Stage 7 | T-504, T-502 | Live URL accessible | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1205 | Deploy backend (prod) | Separate deploy per Stage 7 | T-504, T-501 | API live, healthy | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1206 | Record/create demo | Functional walkthrough | T-1204, T-1205 | Video or live demo ready | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1207 | Prepare final presentation | 10-min slides + talking points | All prior | Presentation file ready | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1208 | Write individual reflection | Learning & contribution document | All prior | Reflection submitted | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
+| T-1209 | Final repo cleanup | README, setup instructions, commit hygiene | All prior | Repo meets deliverable std | 🟡 eligible: MAX_AUTHORIZED_PHASE = 5 (P5 authorized) |
 | T-1210 | MP-P5-S3-IMAGE-RECOVERY: Restore seeded product images in S3 | Restore all 12 seeded product images in real AWS S3 development bucket `fs01-marketplace-dev-20261105` (us-east-2); republish seed images idempotently; validate objects and end-to-end HTTP delivery | — | 12/12 S3 objects present and validated; backend 302 → S3 200 → image/webp delivery verified; independent reviewer PASS (0 defects); run record `orch-p5-s3-image-recovery-2026-11-10` created | ✅ completed |
 | T-1211 | MP-P5-MVP-REALITY-CHECK MVP-01: Storage fora do F01 | Identify external storage `f1/storage/`; remove cwd fallback from publish-seed-images.ts; add storage/ to .gitignore | — | External storage identified; fallback removed; storage/ gitignored; run record `orch-p5-mvp-reality-check-2026-11-10` created | ✅ completed |
 | T-1212 | MP-P5-MVP-REALITY-CHECK MVP-02: Imagens ausentes no carrinho | Product images stored as bare S3 keys; update MongoDB to full URLs; add toImageUrl() helper | — | Cart images delivered via full URLs; toImageUrl() helper added; run record `orch-p5-mvp-reality-check-2026-11-10` created | ✅ completed |
@@ -280,7 +280,7 @@ P0–P3 prerequisites → P4 implementation (authorized through phase 4)
                                   Admin metrics and Q-003 permissions require task-specific research;
                                   coupon application depends on checkout and implementing the approved CD-050/Q-016 mixed-cart rule;
                                   invoice retention/automation decisions remain Q-018
-P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
+P5 (T-1201..T-1209) is now authorized: MAX_AUTHORIZED_PHASE = 5.
 ```
 
 **Execution rule:** A decision or external integration blocks only the work that depends on it. Do not infer phase-wide blocking from one dependent feature.
@@ -304,7 +304,7 @@ P5 (T-1201..T-1209) remains blocked: MAX_AUTHORIZED_PHASE = 4.
 - **T-1110:** Completed in MP-AFIRDD-CYCLE-EXEC-02 — Product Review Submission via Orders implemented (backend + frontend), tests pass. Reviews submitted via eligible delivered orders; eligibility: delivered-order review submission only.
 - **Item-Level Delivery and Delivery Disputes:** Deferred — complex new features, not implemented in this cycle.
 - **PDFKit implementation:** Installed and used for on-demand PDF generation via StorageAdapter (local).
-- **P5:** All P5 tasks remain blocked by `MAX_AUTHORIZED_PHASE = 4`; no phase authorization was changed. Safe task-focused tests supporting authorized P4 work are distinct from the P5 test-suite and deployment tasks.
+- **P5:** P5 tasks are now authorized (`MAX_AUTHORIZED_PHASE = 5`); phase authorization was changed from 4 to 5. Safe task-focused tests supporting authorized P4 work are distinct from the P5 test-suite and deployment tasks.
 - **MP-31 Verification (2026-11-05):** 
   - Backend: 33 payment service test failures fixed (payment.service.ts), 1 invoice domain test fixed (invoice.domain.ts status/PDF URL), 1 invoice routes test fixed (invoice.routes.pdfUrl via generateInvoiceKey). Total: 990/996 backend passing (3 pre-existing SKIPped, 3 skipped).
   - Frontend: 8 of 15 original TestingLibraryElementError failures resolved by updating text query patterns to match actual rendered DOM. Total: 577/584 frontend passing (7 failed — 3 files with Portuguese text query mismatches).

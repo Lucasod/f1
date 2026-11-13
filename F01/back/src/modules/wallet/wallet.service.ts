@@ -5,13 +5,17 @@ import {
   WalletError,
   WalletRepository,
   WalletTransactionRepository,
+} from './wallet.domain';
+import {
   MovementType,
   FinancialMovementRecord,
   FinancialMovementRepository,
+} from '../financial/financial.movement';
+import {
   FinancialEventRecord,
   EventType,
   FinancialEventRepository,
-} from './wallet.domain';
+} from '../financial/financial.event';
 import { FinancialLedger } from '../financial/financial.ledger';
 
 export class WalletService {
@@ -109,9 +113,9 @@ export class WalletService {
     amount: number,
     referenceId: string,
     reason: string,
-    orderId?: string,
     movementRepo: FinancialMovementRepository,
     eventRepo?: FinancialEventRepository,
+    orderId?: string,
   ): Promise<WalletTransaction> {
     // Idempotency check (best-effort; the transaction will also be atomic)
     const existing = await this.txRepo.findByReferenceId(referenceId);
@@ -163,9 +167,9 @@ export class WalletService {
     amount: number,
     referenceId: string,
     reason: string,
-    orderId?: string,
     movementRepo: FinancialMovementRepository,
     eventRepo?: FinancialEventRepository,
+    orderId?: string,
   ): Promise<WalletTransaction> {
     const existing = await this.txRepo.findByReferenceId(referenceId);
     if (existing) {
@@ -210,7 +214,7 @@ export class WalletService {
    * Reconciles the wallet by comparing the materialized balance vs the computed
    * balance from transactions. Returns any discrepancy.
    */
-  async reconcileWallet(ownerId: string): Promise<{ materialized: number; computed: number; ok: boolean; discrepancy?: number }> {
+  async reconcile(ownerId: string): Promise<{ materialized: number; computed: number; ok: boolean; discrepancy?: number }> {
     const wallet = await this.getOrCreateWallet(ownerId);
     const materialized = wallet.balance;
 

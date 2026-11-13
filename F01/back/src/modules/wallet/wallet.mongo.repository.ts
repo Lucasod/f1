@@ -1,4 +1,4 @@
-import { Collection, Db } from 'mongodb';
+import { Collection, ClientSession, Db } from 'mongodb';
 import {
   Wallet,
   WalletData,
@@ -35,7 +35,7 @@ export class MongoWalletRepository implements WalletRepository {
     this.col = db.collection<WalletDoc>('wallets');
   }
 
-  async save(wallet: Wallet, session?: unknown): Promise<Wallet> {
+  async save(wallet: Wallet, session?: ClientSession): Promise<Wallet> {
     const now = new Date();
     await this.col.updateOne(
       { _id: wallet.id },
@@ -91,7 +91,7 @@ export class MongoWalletTransactionRepository implements WalletTransactionReposi
     this.col = db.collection<WalletTxDoc>('wallet_transactions');
   }
 
-  async save(tx: WalletTransaction, session?: unknown): Promise<WalletTransaction> {
+  async save(tx: WalletTransaction, session?: ClientSession): Promise<WalletTransaction> {
     const doc: WalletTxDoc = {
       _id: tx.id,
       walletId: tx.walletId,

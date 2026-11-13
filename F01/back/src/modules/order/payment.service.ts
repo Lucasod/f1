@@ -48,6 +48,10 @@ import type { Db } from 'mongodb';
 import { MongoClient } from 'mongodb';
 import { FinancialLedger } from '../financial/financial.ledger';
 import { MovementType as DomainMovementType } from '../financial/financial.movement';
+import Stripe from 'stripe';
+import type { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
+import { Transfer, TransferStatus } from '../transfer/transfer.domain';
+import type { VendorRepository } from '../vendor/vendor.domain';
 
 export enum PaymentError {
   PAYMENT_NOT_FOUND = 'PAYMENT_NOT_FOUND',

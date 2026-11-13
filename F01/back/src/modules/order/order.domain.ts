@@ -829,7 +829,7 @@ export class Payment {
   public refundedAt?: Date;
   public readonly createdAt: Date;
   public updatedAt: Date;
-  public readonly eventId?: string;
+  public eventId?: string;
   public readonly originalEventId?: string;
   public readonly eventType?: string;
   public readonly eventSource?: string;

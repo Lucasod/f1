@@ -6,6 +6,7 @@ import {
   OrderVendorGroup,
   OrderVendorGroupStatus,
   VendorOrderGroupsParams,
+  OrderApiException,
 } from '@/shared/api/order';
 import { Card, CardFooter } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -245,7 +246,7 @@ export function VendorOrderPage() {
             [orderId]: order.financialStatus,
           }));
         },
-        (error) => {
+        () => {
           setOrderFinancialStatusMap((prev) => ({
             ...prev,
             [orderId]: 'pending_payment',

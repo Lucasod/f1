@@ -272,7 +272,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Check if the guest cart has items before attempting merge
           const cart = await cartApi.getCart();
-          if (!cart || cart.items.length === 0) {
+          if (!cart || cart.cart.items.length === 0) {
             // No items in guest cart, skip merge
             return;
           }

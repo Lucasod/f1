@@ -1,4 +1,4 @@
-import { Collection, Db } from 'mongodb';
+import { Collection, ClientSession, Db } from 'mongodb';
 import {
   FinancialEventRecord,
   FinancialEventData,
@@ -28,7 +28,7 @@ export class MongoFinancialEventRepository implements FinancialEventRepository {
     this.col = db.collection<EventDoc>('financial_events');
   }
 
-  async save(event: FinancialEventRecord, session?: unknown): Promise<FinancialEventRecord> {
+  async save(event: FinancialEventRecord, session?: ClientSession): Promise<FinancialEventRecord> {
     const data = event.data;
     const doc: EventDoc = {
       _id: data.eventId,

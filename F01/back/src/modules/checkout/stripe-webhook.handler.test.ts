@@ -32,7 +32,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any,
       { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
     );
@@ -155,7 +155,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { completeCheckoutPayment, isPaymentFinalized, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any,
       { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
     );
@@ -531,6 +531,9 @@ describe('Stripe webhook handler', () => {
           isPaymentFinalized,
           getPaymentById: vi.fn().mockResolvedValue(null),
           orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [{ items: [{ productId: 'product-a', quantity: 2 }] }] }) },
+          getPaymentEventId: vi.fn().mockResolvedValue(null),
+          setPaymentEventId: vi.fn().mockResolvedValue(undefined),
+          getOrderByPaymentId: vi.fn().mockResolvedValue({ vendorGroups: [{ items: [{ productId: 'product-a', quantity: 2 }] }] }),
         } as unknown as PaymentService,
         { removeItemQuantity } as any,
         { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any

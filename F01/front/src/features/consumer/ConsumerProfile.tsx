@@ -123,13 +123,6 @@ export function ConsumerProfile() {
     },
   });
 
-  const updateAddressesMutation = useMutation({
-    mutationFn: (addresses: Address[]) => personApi.updateAddresses(addresses),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: personQueryKey });
-    },
-  });
-
   const addAddressMutation = useMutation({
     mutationFn: (address: Omit<Address, 'id'>) => personApi.addAddress(address),
     onSuccess: () => {
@@ -143,13 +136,6 @@ export function ConsumerProfile() {
         state: '',
         isPrimary: false,
       });
-    },
-  });
-
-  const removeAddressMutation = useMutation({
-    mutationFn: (addressId: string) => personApi.removeAddress(addressId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: personQueryKey });
     },
   });
 
@@ -274,11 +260,6 @@ export function ConsumerProfile() {
     await addAddressMutation.mutateAsync(newAddressForm);
   }, [newAddressForm, validateAddressForm, addAddressMutation]);
 
-  const handleRemoveAddress = useCallback(async (addressId: string) => {
-    if (!window.confirm('Are you sure you want to remove this address?')) return;
-    await removeAddressMutation.mutateAsync(addressId);
-  }, [removeAddressMutation]);
-
   const validateContactForm = useCallback((): boolean => {
     const errors: Partial<ContactFormData> = {};
     if (!newContactForm.value.trim()) errors.value = 'Value is required';
@@ -311,15 +292,6 @@ export function ConsumerProfile() {
     }));
     await updateContactsMutation.mutateAsync(updatedContacts);
   }, [person, updateContactsMutation]);
-
-  const handlePrimaryAddressChange = useCallback(async (addressId: string) => {
-    if (!person) return;
-    const updatedAddresses = person.addresses.map((address) => ({
-      ...address,
-      isPrimary: address.id === addressId,
-    }));
-    await updateAddressesMutation.mutateAsync(updatedAddresses);
-  }, [person, updateAddressesMutation]);
 
   // Loading state
   if (isLoading) {

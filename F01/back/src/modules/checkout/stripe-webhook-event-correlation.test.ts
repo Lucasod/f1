@@ -50,7 +50,7 @@ describe('Stripe webhook event correlation', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPaymentWithEventId as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue({ vendorGroups: [] }), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
@@ -101,7 +101,7 @@ describe('Stripe webhook event correlation', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPaymentNew as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
+      { findById, getPaymentById, isPaymentFinalized: vi.fn().mockResolvedValue(false), completeCheckoutPayment, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue({ vendorGroups: [] }), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) } } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
