@@ -17,7 +17,23 @@ MP-F04-013 completed all test-infrastructure stabilization work with full integr
 
 Integration acceptance: PASS. Reviewer verdict: PASS. Mission status: COMPLETE.
 
-This README is the only project artifact. No application, dependencies, tests, or runtime environment have been created yet.
+### MP-F04-014 — Concurrency Hardening & Step 4 Implementation (completed)
+
+MP-F04-014 completed Step 4 features (Celery, internal notifications, asynchronous reports, outgoing webhooks) plus concurrency hardening, with full integration acceptance:
+- Concurrency-safe issue numbering: atomic allocation via `select_for_update` + `Project.next_issue_number` (monotonic counter, unique per board).
+- PostgreSQL test integration: Django 111/111 PASS against PostgreSQL.
+- SQLite fallback: Django 109/109 PASS + 2 skips against SQLite.
+- Celery task infrastructure: `TenantAwareTask` base class, `enqueue_after_commit` helper, bounded retries, tenant context established and cleared on every exit.
+- Internal notifications: `Notification` model, API (list, unread count, mark read, bulk read), Celery `generate_notification` task.
+- Asynchronous reporting: `Report` model, API (create/get), background `generate_report` task, 4 report types (issues by status, issues by assignee, sprint completion, project progress).
+- Outgoing webhooks: `WebhookSubscription` + `WebhookDelivery` models, API (CRUD, deliveries), SSRF protection, HMAC-SHA256 signing, durable delivery records, bounded retries with exponential backoff.
+- Frontend integration: React components and API modules for notifications, reports, and webhooks.
+- Playwright: 53/53 PASS ×3 consecutive stable cycles, 0 skipped.
+- Secret scanner: clean (exit 0), zero credential disclosure; only synthetic test fixtures used.
+
+Integration acceptance: PASS. Reviewer verdict: PASS. Mission status: COMPLETE.
+
+See [Step 4 Implementation](#step-4-implementation) for detailed documentation.
 
 The first product milestone is an end-to-end flow: sign in, create a workspace, create a project, view a board, and create or move an issue. Its first implementation slice covers authentication, workspaces, and memberships. Cross-company data exposure is the primary risk; isolation and authorization must be tested before expanding functionality.
 
@@ -453,12 +469,152 @@ Steps define the delivery order, not a daily schedule. Multiple steps may be com
 | 1 | Django/React/PostgreSQL base, authentication, workspace, memberships, Docker, test CI | Authentication and isolation between two companies |
 | 2 | Projects, boards, issues, persistent drag-and-drop | Browser flow, authorized movement, visual rollback on API error |
 | 3 | Sprints, configurable workflows, comments, attachments, audit log | Valid transitions, protected files, atomic history |
-| 4 | Celery, internal notifications, asynchronous report, outgoing webhooks | Jobs after commit, bounded retries, duplicate-effect protection |
+| 4 | Celery, internal notifications, asynchronous report, outgoing webhooks | Jobs after commit, bounded retries, duplicate-effect protection | COMPLETE (MP-F04-014) |
 | 5 | Stripe test mode, subscriptions, plan limits, workspace soft deletion | Per-workspace subscription, authenticated idempotent webhook, enforced limits |
 | 6 | Final integration, security/query review, deployed or recorded demo | Regression checks, measured results, reproducible execution |
 | 7 | Documentation, 10-minute presentation, individual reflection, delivery review | Complete checklist in one Google Drive folder |
 
 Keep each feature small: one workflow per board, internal notifications, one report, and two subscription plans. Additional integrations, advanced analytics, and predictive features are outside scope. Automated deployment requires a hosting decision; a recorded demo is accepted by the brief.
+
+## Step 4 Implementation
+
+MP-F04-014 delivered Step 4 of the delivery sequence: Celery background jobs, internal notifications, asynchronous reports, and outgoing webhooks, plus concurrency hardening for issue numbering. All changes are confined to F04; no F01 (Marketplace) or shared `.kilo` files were modified.
+
+### Concurrency-safe issue numbering
+
+Issue numbers are server-allocated monotonic counters, unique within each board. Allocation uses `select_for_update` to lock the project row within a transaction, reads `Project.next_issue_number`, assigns it to the new issue, and increments the counter—all atomically. This prevents duplicate issue numbers under concurrent creation requests.
+
+- `Project.next_issue_number` (`PositiveBigIntegerField`, default 1) stores the next available number for the project's board.
+- `Issue.number` is `PositiveBigIntegerField` with `unique_together = (("board", "number"),)` at the database level.
+- Allocation runs inside `transaction.atomic()` with `select_for_update()` on the project, so concurrent creators serialize on the project row and each receives a distinct number.
+- Database uniqueness on `(board, number)` provides a backstop constraint even if application-level locking is bypassed.
+
+### PostgreSQL test integration
+
+Django tests run against PostgreSQL when `DB_ENGINE=django.db.backends.postgresql` is set (test database name `test_<DB_NAME>`). SQLite remains the default local fallback when no `DB_*` variables are set.
+
+Verified results:
+- PostgreSQL: Django 111/111 PASS (all backend tests including Celery, notifications, reports, webhooks).
+- SQLite: Django 109/109 PASS + 2 skips (skips are environment-dependent, not defects).
+- Playwright: 53/53 PASS ×3 consecutive stable cycles, 0 skipped.
+
+### Celery task infrastructure
+
+Celery is configured in `backend/conf/celery.py` with Django settings in `backend/conf/settings.py`. `CELERY_TASK_ALWAYS_EAGER` defaults to `true` for local/test execution (no Redis broker required); production overrides via environment variable to use Redis as broker.
+
+**`TenantAwareTask`** (abstract base class in `backend/workspaces/tasks.py`):
+- Receives a validated workspace identifier (`_workspace_id`).
+- Resolves and validates the workspace explicitly before task body executes.
+- Establishes tenant context via `django-multitenant` `set_current_tenant`.
+- Queries only authorized tenant data.
+- Clears tenant context in `finally`, including failure paths.
+- Sets `acks_late = True` and `reject_on_worker_lost = True` for reliable delivery.
+
+**`enqueue_after_commit`** helper:
+- Defers `task.apply_async()` via `transaction.on_commit()`, so background work is only enqueued after the database transaction commits successfully.
+- Maps `_workspace_id` to `workspace_id` for signature validation before `apply_async`.
+
+**Tasks implemented:**
+- `ping_task` — verifies Celery execution and tenant context.
+- `generate_notification` — creates a `Notification` for a user in a workspace (tenant-aware).
+- `generate_report` — generates a `Report` in the background with 4 report types, marks completed/failed, raises on error for retry.
+- `deliver_webhook` — delivers a webhook with HMAC signing, SSRF protection, bounded retries with exponential backoff (`min(60 * 2^(attempt-1), 3600)` seconds), max 3 attempts.
+
+### Internal notifications
+
+**Model** (`Notification` in `backend/workspaces/models.py`):
+- Tenant-scoped via `django-multitenant` (`tenant_id`).
+- Fields: `user`, `workspace`, `notification_type` (issue_assigned, issue_status_changed, comment_added, sprint_started, sprint_completed), `entity_type`, `entity_id`, `payload` (JSON), `is_read`, `created_at`.
+- Ordered newest first.
+
+**API** (under `/api/v1/notifications/`):
+- `GET` — list own notifications for a workspace (`workspace_id` query param required), ordered newest first, workspace-scoped (403 for non-members).
+- `GET /unread_count/` — unread notification count for a workspace.
+- `PATCH /{id}/read/` — mark a single notification as read (owner only, 403 for another user's notification).
+- `POST /read_bulk/` — mark multiple notifications as read (only caller's own notifications are updated).
+- Cross-workspace access returns `403`; missing `workspace_id` returns `400`; nonexistent workspace returns `404`.
+
+**Celery task:** `generate_notification` creates a notification for a user in a workspace, tenant-aware, with error handling for missing user/workspace.
+
+### Asynchronous reporting
+
+**Model** (`Report` in `backend/workspaces/models.py`):
+- Tenant-scoped via `django-multitenant` (`tenant_id`).
+- Fields: `user`, `workspace`, `report_type` (issues_by_status, issues_by_assignee, sprint_completion, project_progress), `status` (pending/completed/failed), `result` (JSON), `error`, `created_at`, `completed_at`.
+
+**API** (under `/api/v1/reports/`):
+- `POST` — create a report with `report_type` and `workspace_id`; returns `201` with `pending` status.
+- `GET /{id}/` — retrieve a report (owner only); returns status, result, error.
+- Cross-user access returns `403`; missing `workspace_id` returns `400`; nonexistent workspace/report returns `404`.
+
+**Background generation:** `generate_report` Celery task runs tenant-aware, dispatches to one of 4 report-type generators based on `report_type`, saves result/error, marks completed or failed.
+
+**4 report types:**
+1. `issues_by_status` — issue counts grouped by workflow status name.
+2. `issues_by_assignee` — issue counts grouped by assignee username (unassigned excluded).
+3. `sprint_completion` — list of sprints with id, name, status, project key.
+4. `project_progress` — per-project totals: total issues, done issues, completion percentage.
+
+### Outgoing webhooks
+
+**Models** (`backend/workspaces/models.py`):
+- `WebhookSubscription` — tenant-scoped; fields: `workspace`, `url` (URLField, max 2000), `events` (JSON list), `is_enabled`, `signing_secret` (CharField, max 255, write-only in serializer), `created_at`, `updated_at`.
+- `WebhookDelivery` — tenant-scoped; fields: `subscription`, `event_type`, `event_id`, `delivery_id` (unique UUID), `status` (pending/delivered/failed/max_retries), `attempt`, `max_attempts` (default 3), `request_payload` (JSON), `response_status`, `response_body`, `error_message`, `created_at`, `updated_at`, `next_attempt_at`.
+
+**SSRF protection:**
+- `validate_webhook_destination` rejects IP literals, loopback/private/link-local/reserved addresses, cloud metadata destinations, and DNS resolutions containing non-public addresses.
+- Validation runs at subscription creation and at delivery time.
+- HTTPS only; no redirects (`allow_redirects=False`); TLS verification (`verify=True`).
+
+**HMAC signing:**
+- Payload signed with `HMAC-SHA256` using the subscription's `signing_secret`.
+- Header `X-Webhook-Signature: sha256=<hex>`, `X-Webhook-Delivery`, `X-Webhook-Event`.
+- Signing secret is write-only (never returned in API responses).
+- Plaintext storage at rest documented as a known limitation; production requires field-level encryption.
+
+**Durable delivery:**
+- Delivery record created before enqueue; status transitions pending → delivered/failed/max_retries.
+- Bounded retries: max 3 attempts, exponential backoff with cap at 1 hour.
+- Failed deliveries retain attempt history, error message, response status/body (truncated to 2000 chars).
+- `next_attempt_at` scheduled for retries.
+
+**API** (under `/api/v1/webhooks/`):
+- `POST` — create subscription (SSRF validation on URL).
+- `GET` — list subscriptions for a workspace.
+- `PATCH /{id}/` — update subscription.
+- `DELETE /{id}/` — delete subscription.
+- `GET /{id}/deliveries/` — list delivery records for a subscription.
+- Cross-workspace access returns `403`; signing secret never included in responses.
+
+### Frontend integration
+
+New frontend API modules and React components for Step 4:
+
+**API modules** (`frontend/src/api/`):
+- `notifications.ts` — `listNotifications`, `getUnreadCount`, `markNotificationRead`, `markNotificationsReadBulk`.
+- `reports.ts` — `createReport`, `getReport`.
+- `webhooks.ts` — `listWebhookSubscriptions`, `createWebhookSubscription`, `getWebhookSubscription`, `updateWebhookSubscription`, `deleteWebhookSubscription`, `listWebhookDeliveries`.
+
+**React components** (`frontend/src/components/`):
+- `notifications/NotificationList.tsx` — notification list UI.
+- `reports/ReportList.tsx` — report list UI.
+- `webhooks/WebhookList.tsx` — webhook subscription list UI.
+
+All frontend API calls use the existing `request` client with CSRF and session credentials; workspace isolation is enforced by the backend on every request.
+
+### Test results
+
+| Suite | Database | Result | Skips | Cycles |
+|-------|----------|--------|-------|--------|
+| Django | PostgreSQL | 111/111 PASS | 0 | 3 consecutive stable |
+| Django | SQLite | 109/109 PASS | 2 | 3 consecutive stable |
+| Playwright | — | 53/53 PASS | 0 | 3 consecutive stable |
+
+3 consecutive stable verification cycles were executed for all suites. No secret values were disclosed; only synthetic test fixtures (e.g. `testpass123`, `whsec_test123`) are used.
+
+### Next step
+
+Step 5 — Stripe Billing test mode, quotas and soft deletion.
 
 ## Test and security strategy
 

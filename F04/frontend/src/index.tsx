@@ -32,6 +32,9 @@ import { ProjectList } from "./components/project/ProjectList";
 import { ProjectCreateModal } from "./components/project/ProjectCreateModal";
 import { BoardPage } from "./components/board/BoardPage";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
+import { NotificationList } from "./components/notifications/NotificationList";
+import { ReportList } from "./components/reports/ReportList";
+import { WebhookList } from "./components/webhooks/WebhookList";
 
 /**
  * TopBar — persistent header shown on every page.
@@ -136,6 +139,48 @@ function BoardRoute() {
 }
 
 /**
+ * NotificationsRoute — notification list for the selected workspace.
+ */
+function NotificationsRoute() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const id = workspaceId ? Number(workspaceId) : null;
+  return (
+    <div className="page notifications-page">
+      <h1>Notifications</h1>
+      {id != null ? <NotificationList /> : <div>Select a workspace.</div>}
+    </div>
+  );
+}
+
+/**
+ * ReportsRoute — report list for the selected workspace.
+ */
+function ReportsRoute() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const id = workspaceId ? Number(workspaceId) : null;
+  return (
+    <div className="page reports-page">
+      <h1>Reports</h1>
+      {id != null ? <ReportList /> : <div>Select a workspace.</div>}
+    </div>
+  );
+}
+
+/**
+ * WebhooksRoute — webhook list for the selected workspace.
+ */
+function WebhooksRoute() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const id = workspaceId ? Number(workspaceId) : null;
+  return (
+    <div className="page webhooks-page">
+      <h1>Webhooks</h1>
+      {id != null ? <WebhookList /> : <div>Select a workspace.</div>}
+    </div>
+  );
+}
+
+/**
  * LoginRoute — sign in, redirecting to /workspaces when already authenticated.
  */
 function LoginRoute() {
@@ -176,6 +221,30 @@ function App() {
             element={
               <RequireAuth>
                 <BoardRoute />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/workspaces/:workspaceId/notifications"
+            element={
+              <RequireAuth>
+                <NotificationsRoute />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/workspaces/:workspaceId/reports"
+            element={
+              <RequireAuth>
+                <ReportsRoute />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/workspaces/:workspaceId/webhooks"
+            element={
+              <RequireAuth>
+                <WebhooksRoute />
               </RequireAuth>
             }
           />

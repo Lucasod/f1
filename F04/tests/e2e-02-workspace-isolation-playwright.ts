@@ -123,8 +123,9 @@ test.describe('Workspace Isolation E2E', () => {
     // Login as alice (helper fetches fresh CSRF token after login rotation)
     const freshCsrfToken = await loginAsAlice(request);
 
-    // Create Workspace A
-    const createA = await createWorkspace(request, 'Workspace A', freshCsrfToken);
+    // Create Workspace A with a unique, deterministic name
+    const nameA = `Isolation-Test-WS-A-${Date.now()}`;
+    const createA = await createWorkspace(request, nameA, freshCsrfToken);
     expect(createA.status()).toBe(201);
     const bodyA = await createA.json();
     workspaceAId = bodyA.workspace.id;
@@ -135,7 +136,7 @@ test.describe('Workspace Isolation E2E', () => {
     const body = await listResp.json();
     expect(body.error).toBeNull();
     const names = body.results?.map((w: any) => w.name) || [];
-    expect(names).toContain('Workspace A');
+    expect(names).toContain(nameA);
   });
 
   // ── Test 2: Create Workspace B ────────────────────────────────────
@@ -163,7 +164,8 @@ test.describe('Workspace Isolation E2E', () => {
     const freshCsrfToken = postLoginCsrfBody.csrf_token;
 
     // Step 5: Create workspace B with the fresh CSRF token
-    const createB = await createWorkspace(request, 'Workspace B', freshCsrfToken);
+    const nameB = `Isolation-Test-WS-B-${Date.now()}`;
+    const createB = await createWorkspace(request, nameB, freshCsrfToken);
     expect(createB.status()).toBe(201);
     const bodyB = await createB.json();
     workspaceBId = bodyB.workspace.id;
@@ -174,7 +176,7 @@ test.describe('Workspace Isolation E2E', () => {
     const body = await listResp.json();
     expect(body.error).toBeNull();
     const names = body.results?.map((w: any) => w.name) || [];
-    expect(names).toContain('Workspace B');
+    expect(names).toContain(nameB);
   });
 
   // ── Test 3: User A only member of A ───────────────────────────────

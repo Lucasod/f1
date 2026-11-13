@@ -1,3 +1,8 @@
+import socket
+import ipaddress
+from urllib.parse import urlparse
+import uuid
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
@@ -7,14 +12,17 @@ from django.contrib.auth import authenticate, login as auth_login, get_user_mode
 from django.http import Http404
 from django.db import transaction
 from django.middleware.csrf import get_token
-from django.db.models import F, Q, Max, Max
+from django.db.models import F, Q
 
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery
 from .serializers import (
     WorkspaceSerializer, MembershipSerializer, MembershipCreateSerializer,
     ProjectSerializer, BoardSerializer, BoardCreateSerializer,
-    WorkflowStatusSerializer, IssueSerializer, SprintSerializer, CommentSerializer,
+    WorkflowStatusSerializer, IssueSerializer, SprintSerializer, CommentSerializer, NotificationSerializer,
+    ReportSerializer, ReportCreateSerializer,
+    WebhookSubscriptionSerializer, WebhookSubscriptionCreateSerializer, WebhookDeliverySerializer,
 )
+from .tasks import enqueue_after_commit, generate_report
 
 
 User = get_user_model()
@@ -661,11 +669,6 @@ def create_issue(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    # Allocate monotonic issue number (max existing + 1, or 1)
-    from django.db.models import Max
-    last_number = Issue.objects.aggregate(Max("number"))["number__max"]
-    next_number = (last_number or 0) + 1
-
     # Determine assignee (optional)
     assignee_username = request.data.get("assignee", None)
     assignee = None
@@ -721,11 +724,19 @@ def create_issue(request, project_id):
         # Set reporter to the current user
         reporter = user
 
+        # Atomically allocate the next issue number for this project.
+        # select_for_update() serializes concurrent issue creation within
+        # the same project so two requests never compute the same number.
+        project = Project.objects.select_for_update().get(id=project.id)
+        next_number = project.next_issue_number
+        project.next_issue_number = next_number + 1
+        project.save(update_fields=["next_issue_number"])
+
         issue = Issue.objects.create(
             board=board,
             number=next_number,
             title=title,
-            description=description if description else None,
+            description=description if description else "",
             status_id=status_obj,
             assignee=assignee,
             reporter=reporter,
@@ -791,6 +802,10 @@ def list_issues(request):
     issues = Issue.objects.select_related(
         "board__project", "status_id", "assignee", "reporter", "sprint_id"
     ).filter(board__project__workspace__in=workspaces)
+
+    # Apply project filter when project_id is provided
+    if project_id:
+        issues = issues.filter(board__project__id=project_id)
 
     # Apply filters
     status_filter = request.query_params.get("status", None)
@@ -1432,6 +1447,139 @@ def comments(request, issue_id):
         return _list_comments(request, issue_id)
     return _create_comment(request, issue_id)
 
+
+# ---- Notification endpoints ----
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_notifications(request):
+    """List current user's notifications for a workspace.
+
+    Query param: workspace_id (required)
+    Returns user's notifications for that workspace, ordered newest first.
+    """
+    user = request.user
+    workspace_id = request.query_params.get("workspace_id")
+    if not workspace_id:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        workspace = Workspace.objects.get(id=workspace_id)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Security: user must be a member of the workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view notifications."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    notifications = Notification.objects.filter(
+        user=user, workspace=workspace
+    ).order_by("-created_at")
+    serializer = NotificationSerializer(notifications, many=True, context={"request": request})
+    return Response(
+        {"error": None, "results": serializer.data}
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notification_unread_count(request):
+    """Get unread notification count for a workspace.
+
+    Query param: workspace_id (required)
+    """
+    user = request.user
+    workspace_id = request.query_params.get("workspace_id")
+    if not workspace_id:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        workspace = Workspace.objects.get(id=workspace_id)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Security: user must be a member of the workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view notifications."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    count = Notification.objects.filter(
+        user=user, workspace=workspace, is_read=False
+    ).count()
+    return Response(
+        {"error": None, "unread_count": count}
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def mark_notification_read(request, notification_id):
+    """Mark a notification as read.
+
+    Security: user must own the notification.
+    """
+    user = request.user
+    try:
+        notification = Notification.objects.get(id=notification_id)
+    except Notification.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Notification not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Security: user must own the notification
+    if notification.user != user:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "You may only mark your own notifications as read."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    notification.is_read = True
+    notification.save(update_fields=["is_read"])
+    return Response(
+        {"error": None, "notification": NotificationSerializer(notification, context={"request": request}).data}
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def notification_read_bulk(request):
+    """Bulk mark notifications as read.
+
+    Body: {"notification_ids": [1, 2, 3]}
+    Security: only the caller's own notifications are marked.
+    """
+    user = request.user
+    notification_ids = request.data.get("notification_ids", [])
+    if not isinstance(notification_ids, list):
+        return Response(
+            {"error": {"code": "validation_error", "message": "notification_ids must be a list.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Security: only mark own notifications
+    updated = Notification.objects.filter(
+        id__in=notification_ids, user=user
+    ).update(is_read=True)
+    return Response(
+        {"error": None, "updated": updated}
+    )
+
+
 # ---- Sprint lifecycle endpoints ----
 
 @api_view(["GET"])
@@ -1707,3 +1855,218 @@ def issue_sprint_assignment(request, issue_id):
             "issue": serializer.data,
         }
     )
+
+
+# ---- Report endpoints ----
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_report(request):
+    """Create a report and enqueue background generation."""
+    user = request.user
+    serializer = ReportCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(
+            {"error": {"code": "validation_error", "message": "The request contains invalid data.", "fields": serializer.errors}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    report_type = serializer.validated_data["report_type"]
+    workspace_id = request.data.get("workspace_id")
+    if not workspace_id:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        workspace = Workspace.objects.get(id=workspace_id)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Check membership
+    has_membership = Membership.objects.filter(
+        user=user, workspace=workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may create reports."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    report = Report.objects.create(
+        user=user,
+        workspace=workspace,
+        report_type=report_type,
+        status="pending",
+    )
+    # Enqueue background task after commit
+    enqueue_after_commit(generate_report, kwargs={
+        '_workspace_id': workspace.id,
+        'report_id': report.id,
+    })
+    report_serializer = ReportSerializer(report, context={"request": request})
+    return Response(
+        {"error": None, "report": report_serializer.data},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_report(request, report_id):
+    """Get report status and result."""
+    user = request.user
+    try:
+        report = Report.objects.get(id=report_id)
+    except Report.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Report not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Security: user must own the report
+    if report.user != user:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "You may only view your own reports."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    report_serializer = ReportSerializer(report, context={"request": request})
+    return Response(
+        {"error": None, "report": report_serializer.data}
+    )
+
+
+# ---- Webhook endpoints ----
+
+PRIVATE_IP_RANGES = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def validate_webhook_destination(url):
+    """Validate that a webhook destination URL is not private/reserved (SSRF protection).
+
+    Returns (is_valid, error_message). When is_valid is True, error_message is None.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Invalid URL."
+    if parsed.scheme not in ("http", "https"):
+        return False, "Only http and https schemes are allowed."
+    if not parsed.hostname:
+        return False, "Hostname is required."
+    if parsed.hostname in ("localhost", "localhost.localdomain"):
+        return False, "Localhost destinations are not allowed."
+    try:
+        addr_infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False, "Unable to resolve hostname."
+    for family, socktype, proto, canonname, sockaddr in addr_infos:
+        ip = sockaddr[0]
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+            return False, f"Destination IP {ip} is in a private/reserved range."
+        for private_range in PRIVATE_IP_RANGES:
+            if ip_obj in private_range:
+                return False, f"Destination IP {ip} is in a private range."
+    return True, None
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def webhook_subscriptions(request):
+    """List or create webhook subscriptions for a workspace.
+
+    GET: requires workspace_id query param; returns the workspace's subscriptions.
+    POST: requires workspace_id in body; creates a subscription for the workspace.
+    """
+    user = request.user
+    if request.method == "GET":
+        workspace_id = request.query_params.get("workspace_id")
+        if not workspace_id:
+            return Response({"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            workspace = Workspace.objects.get(id=workspace_id)
+        except Workspace.DoesNotExist:
+            return Response({"error": {"code": "not_found", "message": "Workspace not found."}}, status=status.HTTP_404_NOT_FOUND)
+        if not Membership.objects.filter(user=user, workspace=workspace).exists():
+            return Response({"error": {"code": "permission_denied", "message": "Only workspace members may view webhooks."}}, status=status.HTTP_403_FORBIDDEN)
+        subscriptions = WebhookSubscription.objects.filter(workspace=workspace)
+        serializer = WebhookSubscriptionSerializer(subscriptions, many=True, context={"request": request})
+        return Response({"error": None, "results": serializer.data})
+    elif request.method == "POST":
+        workspace_id = request.data.get("workspace_id")
+        if not workspace_id:
+            return Response({"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            workspace = Workspace.objects.get(id=workspace_id)
+        except Workspace.DoesNotExist:
+            return Response({"error": {"code": "not_found", "message": "Workspace not found."}}, status=status.HTTP_404_NOT_FOUND)
+        if not Membership.objects.filter(user=user, workspace=workspace).exists():
+            return Response({"error": {"code": "permission_denied", "message": "Only workspace members may create webhooks."}}, status=status.HTTP_403_FORBIDDEN)
+        url = request.data.get("url", "")
+        is_valid, error_msg = validate_webhook_destination(url)
+        if not is_valid:
+            return Response({"error": {"code": "validation_error", "message": error_msg, "fields": {"url": [error_msg]}}}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = WebhookSubscriptionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"error": {"code": "validation_error", "message": "The request contains invalid data.", "fields": serializer.errors}}, status=status.HTTP_400_BAD_REQUEST)
+        subscription = serializer.save(workspace=workspace)
+        response_serializer = WebhookSubscriptionSerializer(subscription, context={"request": request})
+        return Response({"error": None, "subscription": response_serializer.data}, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def webhook_subscription_detail(request, subscription_id):
+    """Retrieve, update, or delete a single webhook subscription."""
+    user = request.user
+    try:
+        subscription = WebhookSubscription.objects.get(id=subscription_id)
+    except WebhookSubscription.DoesNotExist:
+        return Response({"error": {"code": "not_found", "message": "Webhook subscription not found."}}, status=status.HTTP_404_NOT_FOUND)
+    if not Membership.objects.filter(user=user, workspace=subscription.workspace).exists():
+        return Response({"error": {"code": "permission_denied", "message": "Only workspace members may manage webhooks."}}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == "GET":
+        serializer = WebhookSubscriptionSerializer(subscription, context={"request": request})
+        return Response({"error": None, "subscription": serializer.data})
+    elif request.method == "PATCH":
+        if "url" in request.data:
+            is_valid, error_msg = validate_webhook_destination(request.data["url"])
+            if not is_valid:
+                return Response({"error": {"code": "validation_error", "message": error_msg, "fields": {"url": [error_msg]}}}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = WebhookSubscriptionSerializer(subscription, data=request.data, partial=True, context={"request": request})
+        if not serializer.is_valid():
+            return Response({"error": {"code": "validation_error", "message": "The request contains invalid data.", "fields": serializer.errors}}, status=status.HTTP_400_BAD_REQUEST)
+        subscription = serializer.save()
+        response_serializer = WebhookSubscriptionSerializer(subscription, context={"request": request})
+        return Response({"error": None, "subscription": response_serializer.data})
+    elif request.method == "DELETE":
+        subscription.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def webhook_deliveries(request, subscription_id):
+    """List delivery records for a webhook subscription, newest first."""
+    user = request.user
+    try:
+        subscription = WebhookSubscription.objects.get(id=subscription_id)
+    except WebhookSubscription.DoesNotExist:
+        return Response({"error": {"code": "not_found", "message": "Webhook subscription not found."}}, status=status.HTTP_404_NOT_FOUND)
+    if not Membership.objects.filter(user=user, workspace=subscription.workspace).exists():
+        return Response({"error": {"code": "permission_denied", "message": "Only workspace members may view deliveries."}}, status=status.HTTP_403_FORBIDDEN)
+    deliveries = WebhookDelivery.objects.filter(subscription=subscription).order_by("-created_at")
+    serializer = WebhookDeliverySerializer(deliveries, many=True, context={"request": request})
+    return Response({"error": None, "results": serializer.data})

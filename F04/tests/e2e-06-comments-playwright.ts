@@ -104,6 +104,10 @@ test.describe('Comments E2E', () => {
     expect(body.comment).toHaveProperty('text', 'This is a test comment');
     expect(body.comment).toHaveProperty('created_at');
     expect(body.comment).toHaveProperty('is_active', true);
+
+    // Cleanup: delete the comment created in this test
+    const deleteResp = await deleteComment(request, body.comment.id, csrfToken);
+    expect(deleteResp.status()).toBe(204);
   });
 
   test('2. List Comments - GET /api/v1/issues/{issue_id}/comments/', async ({ request }, testInfo) => {
@@ -145,7 +149,8 @@ test.describe('Comments E2E', () => {
     const issueId = issueBody.issue.id;
 
     // Create a comment first
-    await createComment(request, issueId, 'Existing comment to list', csrfToken);
+    const createCommentResp = await createComment(request, issueId, 'Existing comment to list', csrfToken);
+    const commentId = (await createCommentResp.json()).comment.id;
 
     // List comments
     const resp = await listComments(request, issueId, csrfToken);
@@ -161,6 +166,10 @@ test.describe('Comments E2E', () => {
     // Should see at least the comment we created
     const commentTexts = body.results.map((c: any) => c.text);
     expect(commentTexts).toContain('Existing comment to list');
+
+    // Cleanup: delete the comment created in this test
+    const deleteResp = await deleteComment(request, commentId, csrfToken);
+    expect(deleteResp.status()).toBe(204);
   });
 
   test('3. Delete Comment - DELETE /api/v1/comments/{comment_id}/', async ({ request }, testInfo) => {

@@ -92,13 +92,40 @@ REST_FRAMEWORK = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Database
-# Using SQLite for development; Docker compose will provision PostgreSQL
+# Configured via environment variables; falls back to SQLite when no DB_*
+# variables are set, preserving existing local development behaviour.
+# Set DB_ENGINE=django.db.backends.postgresql to run against PostgreSQL.
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.sqlite3"),
+        "NAME": os.getenv("DB_NAME", BASE_DIR / "db.sqlite3"),
+        "USER": os.getenv("DB_USER", ""),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", ""),
+        "PORT": os.getenv("DB_PORT", ""),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0") or 0),
     }
 }
+
+# SQLite-specific connection options (busy timeout + WAL journal mode).
+# PRAGMA/init_command are not supported by PostgreSQL, so these apply only
+# when the SQLite backend is in use.
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    DATABASES["default"]["OPTIONS"] = {
+        "timeout": 30,
+        "init_command": "PRAGMA journal_mode=WAL;",
+    }
+
+# Test database configuration. Django requires the TEST key for every backend.
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    DATABASES["default"]["TEST"] = {
+        "NAME": BASE_DIR / "test_db.sqlite3",
+    }
+else:
+    # Empty NAME makes Django use "test_<DB_NAME>" for the test database.
+    DATABASES["default"]["TEST"] = {
+        "NAME": "",
+    }
 
 # Static files
 STATIC_URL = "static/"
@@ -112,3 +139,17 @@ CSRF_COOKIE_SECURE = False
 # Static files
 import pathlib
 BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+
+
+# Celery configuration
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'true').lower() == 'true'
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', '300') or 300)
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', '600') or 600)
+CELERY_TASK_DEFAULT_RETRY_DELAY = 60
+CELERY_TASK_MAX_RETRIES = 3

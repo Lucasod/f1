@@ -157,8 +157,14 @@ test.describe('Projects, Boards & Issues E2E', () => {
     const projectBody = await createProjectResp.json();
     const projectId = projectBody.project.id;
 
-    await createIssue(request, freshCsrfToken, projectId, 'Issue number one');
-    await createIssue(request, freshCsrfToken, projectId, 'Issue number two');
+    const ts4 = Date.now().toString();
+    const title1 = `List Issue ${ts4} one`;
+    const title2 = `List Issue ${ts4} two`;
+
+    const createIssue1 = await createIssue(request, freshCsrfToken, projectId, title1);
+    expect(createIssue1.status()).toBe(201);
+    const createIssue2 = await createIssue(request, freshCsrfToken, projectId, title2);
+    expect(createIssue2.status()).toBe(201);
 
     // List issues
     const resp = await listIssues(request, freshCsrfToken, projectId);
@@ -173,8 +179,8 @@ test.describe('Projects, Boards & Issues E2E', () => {
     expect(Array.isArray(body.results)).toBe(true);
     // Should see at least the two issues we created
     const issueTitles = body.results.map((i: any) => i.title);
-    expect(issueTitles).toContain('Issue number one');
-    expect(issueTitles).toContain('Issue number two');
+    expect(issueTitles).toContain(title1);
+    expect(issueTitles).toContain(title2);
   });
 
   test('5. List Issues Filter by Status - GET /api/v1/issues/?status=in_progress', async ({ request }, testInfo) => {

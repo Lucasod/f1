@@ -297,8 +297,7 @@ class Issue(TenantModelMixin, models.Model):
     )
     number = models.PositiveBigIntegerField(
         "number",
-        unique=True,
-        help_text="Server-allocated monotonic positive bigint",
+        help_text="Server-allocated monotonic positive bigint, unique within its board",
     )
     title = models.CharField("title", max_length=200)
     description = models.TextField(
@@ -423,6 +422,103 @@ class AuditLog(TenantModelMixin, models.Model):
         verbose_name_plural = "audit logs"
 
 
+class Notification(TenantModelMixin, models.Model):
+    """Internal notification for a workspace member."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="user",
+        related_name="notifications",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="notifications",
+    )
+    NOTIFICATION_TYPE_CHOICES = [
+        ("issue_assigned", "Issue Assigned"),
+        ("issue_status_changed", "Issue Status Changed"),
+        ("comment_added", "Comment Added"),
+        ("sprint_started", "Sprint Started"),
+        ("sprint_completed", "Sprint Completed"),
+    ]
+    notification_type = models.CharField(
+        "notification type",
+        max_length=30,
+        choices=NOTIFICATION_TYPE_CHOICES,
+    )
+    entity_type = models.CharField("entity type", max_length=30, blank=True)
+    entity_id = models.PositiveBigIntegerField("entity id", null=True, blank=True)
+    payload = models.JSONField("payload", default=dict, blank=True)
+    is_read = models.BooleanField("is read", default=False)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "notification"
+        verbose_name_plural = "notifications"
+
+    def __str__(self):
+        return f"Notification for {self.user.username}: {self.notification_type}"
+
+
+class Report(TenantModelMixin, models.Model):
+    """Asynchronous background report for a workspace."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="user",
+        related_name="reports",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="reports",
+    )
+
+    REPORT_TYPE_CHOICES = [
+        ("issues_by_status", "Issues by Status"),
+        ("issues_by_assignee", "Issues by Assignee"),
+        ("sprint_completion", "Sprint Completion"),
+        ("project_progress", "Project Progress"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    report_type = models.CharField("report type", max_length=30, choices=REPORT_TYPE_CHOICES)
+    status = models.CharField("status", max_length=20, choices=STATUS_CHOICES, default="pending")
+    result = models.JSONField("result", default=dict, blank=True)
+    error = models.TextField("error", blank=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    completed_at = models.DateTimeField("completed at", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "report"
+        verbose_name_plural = "reports"
+
+    def __str__(self):
+        return f"Report {self.report_type} for {self.workspace.name} ({self.status})"
+
+
 class Comment(TenantModelMixin, models.Model):
     """A comment on an issue."""
 
@@ -455,3 +551,79 @@ class Comment(TenantModelMixin, models.Model):
 
     def __str__(self):
         return f"Comment by {self.author} on #{self.issue.number}" if self.author else f"Comment on #{self.issue.number}"
+
+
+class WebhookSubscription(TenantModelMixin, models.Model):
+    """Tenant-scoped outgoing webhook subscription."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="webhook_subscriptions",
+    )
+    url = models.URLField("destination URL", max_length=2000)
+    events = models.JSONField("events", default=list)
+    is_enabled = models.BooleanField("enabled", default=True)
+    # NOTE: signing_secret is stored in plaintext at rest. In production,
+    # encrypt at rest (e.g., Django field encryption or application-level
+    # encryption before storage). The write_only serializer setting prevents
+    # the secret from being returned in API responses, but database-level
+    # encryption is required for production deployment.
+    signing_secret = models.CharField("signing secret", max_length=255)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+
+    class Meta:
+        verbose_name = "webhook subscription"
+        verbose_name_plural = "webhook subscriptions"
+
+    def __str__(self):
+        return f"Webhook {self.url} for {self.workspace.name}"
+
+
+class WebhookDelivery(TenantModelMixin, models.Model):
+    """Durable delivery record for outgoing webhooks."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    subscription = models.ForeignKey(
+        WebhookSubscription,
+        on_delete=models.CASCADE,
+        verbose_name="subscription",
+        related_name="deliveries",
+    )
+    event_type = models.CharField("event type", max_length=50)
+    event_id = models.CharField("event id", max_length=100, blank=True)
+    delivery_id = models.CharField("delivery id", max_length=100, unique=True)
+    status = models.CharField(
+        "status",
+        max_length=20,
+        default="pending",
+        choices=[("pending", "Pending"), ("delivered", "Delivered"), ("failed", "Failed"), ("max_retries", "Max Retries")],
+    )
+    attempt = models.PositiveIntegerField("attempt", default=0)
+    max_attempts = models.PositiveIntegerField("max attempts", default=3)
+    request_payload = models.JSONField("request payload", default=dict, blank=True)
+    response_status = models.PositiveIntegerField("response status", null=True, blank=True)
+    response_body = models.TextField("response body", blank=True)
+    error_message = models.TextField("error message", blank=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+    next_attempt_at = models.DateTimeField("next attempt at", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "webhook delivery"
+        verbose_name_plural = "webhook deliveries"
+
+    def __str__(self):
+        return f"Delivery {self.delivery_id} for {self.event_type}"

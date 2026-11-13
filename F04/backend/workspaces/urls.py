@@ -28,6 +28,11 @@ urlpatterns = [
     # Comment endpoints
     path("issues/<int:issue_id>/comments/", views.comments, name="comments"),
     path("comments/<int:comment_id>/", views.delete_comment, name="delete_comment"),
+    # Notification endpoints
+    path("notifications/", views.list_notifications, name="list_notifications"),
+    path("notifications/unread_count/", views.notification_unread_count, name="notification_unread_count"),
+    path("notifications/<int:notification_id>/read/", views.mark_notification_read, name="mark_notification_read"),
+    path("notifications/read_bulk/", views.notification_read_bulk, name="notification_read_bulk"),
     # Board endpoints
     path("boards/<int:board_id>/workflow/", views.board_workflow, name="board_workflow"),
     # Sprint lifecycle endpoints
@@ -35,4 +40,10 @@ urlpatterns = [
     path("sprints/create/", views.create_sprint, name="create_sprint"),
     path("sprints/<int:sprint_id>/", views.update_sprint, name="update_sprint"),
     path("issues/<int:issue_id>/assign-sprint/", views.issue_sprint_assignment, name="issue_sprint_assignment"),
+    # Report endpoints
+    path("reports/", views.create_report, name="create_report"),
+    path("reports/<int:report_id>/", views.get_report, name="get_report"),
+    path("webhooks/", views.webhook_subscriptions, name="webhook_subscriptions"),
+    path("webhooks/<int:subscription_id>/", views.webhook_subscription_detail, name="webhook_subscription_detail"),
+    path("webhooks/<int:subscription_id>/deliveries/", views.webhook_deliveries, name="webhook_deliveries"),
 ]

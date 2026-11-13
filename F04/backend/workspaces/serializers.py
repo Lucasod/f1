@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, Notification, Report, WebhookSubscription, WebhookDelivery
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -240,3 +240,69 @@ class CommentSerializer(serializers.ModelSerializer):
             "created_at", "is_active",
         ]
         read_only_fields = ["id", "issue", "author", "author_username", "created_at"]
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer for notification representation."""
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id", "notification_type", "entity_type", "entity_id",
+            "payload", "is_read", "created_at",
+        ]
+        read_only_fields = ["id", "user", "workspace", "notification_type",
+                            "entity_type", "entity_id", "payload", "created_at"]
+
+
+class ReportSerializer(serializers.ModelSerializer):
+    """Serializer for report representation."""
+
+    class Meta:
+        model = Report
+        fields = [
+            "id", "report_type", "status", "result", "error",
+            "created_at", "completed_at",
+        ]
+        read_only_fields = ["id", "user", "workspace", "report_type", "status", "result", "error", "created_at", "completed_at"]
+
+
+class ReportCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating a report."""
+
+    class Meta:
+        model = Report
+        fields = ["report_type"]
+
+
+class WebhookSubscriptionSerializer(serializers.ModelSerializer):
+    """Serializer for webhook subscription representation."""
+
+    class Meta:
+        model = WebhookSubscription
+        fields = ["id", "url", "events", "is_enabled", "created_at", "updated_at"]
+        read_only_fields = ["id", "workspace", "created_at", "updated_at"]
+
+
+class WebhookSubscriptionCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating a webhook subscription."""
+
+    class Meta:
+        model = WebhookSubscription
+        fields = ["url", "events", "is_enabled", "signing_secret"]
+        extra_kwargs = {"signing_secret": {"write_only": True}}
+
+
+class WebhookDeliverySerializer(serializers.ModelSerializer):
+    """Serializer for webhook delivery representation."""
+
+    class Meta:
+        model = WebhookDelivery
+        fields = [
+            "id", "event_type", "event_id", "delivery_id", "status",
+            "attempt", "max_attempts", "response_status", "error_message",
+            "created_at", "updated_at", "next_attempt_at",
+        ]
+        read_only_fields = ["id", "subscription", "delivery_id", "status",
+                            "attempt", "response_status", "response_body",
+                            "error_message", "created_at", "updated_at", "next_attempt_at"]

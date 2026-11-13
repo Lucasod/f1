@@ -1,8 +1,10 @@
 """Project tests for F04 Step 2."""
 
 import os
+import unittest
 
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from workspaces.models import Workspace, Project, Board, Membership, WorkflowStatus, Issue
@@ -196,7 +198,7 @@ class ProjectTestCase(TestCase):
         )
 
 
-class IssueTestCase(TestCase):
+class IssueTestCase(TransactionTestCase):
     """Test suite for issue endpoints (Step 2)."""
 
     def setUp(self):
@@ -606,3 +608,93 @@ class IssueTestCase(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 404)
+
+    @unittest.skipIf(connection.vendor == 'sqlite', "Concurrency test requires PostgreSQL for select_for_update()")
+    def test_concurrent_issue_number_allocation_same_project(self):
+        """Two simultaneous issue creations in same project get distinct numbers."""
+        import threading
+        ws_id = self._create_workspace()
+        proj_resp = self._create_project("Concurrent Project", "CON", ws_id)
+        project_id = proj_resp.data["project"]["id"]
+        # bob must be a workspace member to create issues in this project
+        workspace = Workspace.objects.get(id=ws_id)
+        Membership.objects.create(user=self.bob, workspace=workspace, role="member")
+
+        results = {}
+        errors = {}
+
+        def create_issue_thread(tag, client):
+            try:
+                resp = client.post(
+                    f"/api/v1/projects/{project_id}/issues/",
+                    {"title": f"Concurrent Issue {tag}"},
+                    format="json",
+                )
+                results[tag] = resp
+            except Exception as exc:
+                errors[tag] = exc
+
+        t1 = threading.Thread(target=create_issue_thread, args=("first", self.client))
+        t2 = threading.Thread(target=create_issue_thread, args=("second", self.bob_client))
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Both should succeed (no IntegrityError)
+        self.assertNotIn("first", errors)
+        self.assertNotIn("second", errors)
+        self.assertEqual(results["first"].status_code, 201)
+        self.assertEqual(results["second"].status_code, 201)
+
+        # Numbers must be distinct
+        num1 = results["first"].data["issue"]["number"]
+        num2 = results["second"].data["issue"]["number"]
+        self.assertNotEqual(num1, num2)
+        self.assertGreater(num1, 0)
+        self.assertGreater(num2, 0)
+
+    @unittest.skipIf(connection.vendor == 'sqlite', "Concurrency test requires PostgreSQL for select_for_update()")
+    def test_concurrent_issue_number_allocation_different_projects(self):
+        """Simultaneous issue creation in different projects proceeds independently."""
+        import threading
+        ws_id = self._create_workspace()
+        proj1_resp = self._create_project("Concurrent Proj 1", "CP1", ws_id)
+        proj1_id = proj1_resp.data["project"]["id"]
+        proj2_resp = self._create_project("Concurrent Proj 2", "CP2", ws_id)
+        proj2_id = proj2_resp.data["project"]["id"]
+        # bob must be a workspace member to create issues in this project
+        workspace = Workspace.objects.get(id=ws_id)
+        Membership.objects.create(user=self.bob, workspace=workspace, role="member")
+
+        results = {}
+        errors = {}
+
+        def create_in_proj(tag, pid, client):
+            try:
+                resp = client.post(
+                    f"/api/v1/projects/{pid}/issues/",
+                    {"title": f"Concurrent Issue {tag}"},
+                    format="json",
+                )
+                results[tag] = resp
+            except Exception as exc:
+                errors[tag] = exc
+
+        # Use separate client instances per thread to avoid session sharing
+        t1 = threading.Thread(target=create_in_proj, args=("proj1", proj1_id, self.client))
+        t2 = threading.Thread(target=create_in_proj, args=("proj2", proj2_id, self.bob_client))
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertNotIn("proj1", errors)
+        self.assertNotIn("proj2", errors)
+        self.assertEqual(results["proj1"].status_code, 201)
+        self.assertEqual(results["proj2"].status_code, 201)
+        # Different projects can both have number 1 (per-project numbering scope)
+        self.assertEqual(results["proj1"].data["issue"]["number"], 1)
+        self.assertEqual(results["proj2"].data["issue"]["number"], 1)
