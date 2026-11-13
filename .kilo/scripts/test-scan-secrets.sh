@@ -134,10 +134,25 @@ check_no_detect "FP value currentPassword" "fp_val.tsx" "value={currentPassword}
 check_no_detect "FP token function call" "fp_tokenfn.ts" "const token = getToken();"
 check_no_detect "FP secret function call" "fp_secretfn.ts" "const secret = getSecret();"
 
+# --- Regression: MP-F1-SEC-017 password standalone-identifier fix ---
+# Safe fixtures (must NOT detect): enum members and params are not credentials.
+check_no_detect "FP enum EMPTY_PASSWORD" "fp_enum.ts" "export enum CredentialError { EMPTY_PASSWORD = 'EMPTY_PASSWORD' }"
+check_no_detect "FP function decl password" "fp_fn.ts" "export function validatePasswordStrength(password: string): void {}"
+check_no_detect "FP function decl hashPassword" "fp_hash.ts" "export async function hashPassword(password: string): Promise<string> {}"
+check_no_detect "FP type password param" "fp_param.ts" "const x = (password: string) => password;"
+check_no_detect "FP enum PASSWORD_WEAK" "fp_weak.ts" "PASSWORD_WEAK = 'PASSWORD_WEAK'"
+# Specific regression: original credential.domain.ts false positive.
+check_no_detect "FP credential.domain.ts enum" "fp_credential.ts" "export enum CredentialError { EMPTY_PASSWORD = 'EMPTY_PASSWORD', PASSWORD_TOO_SHORT = 'PASSWORD_TOO_SHORT', PASSWORD_WEAK = 'PASSWORD_WEAK' }"
+# Dangerous fixtures (must detect): standalone password/passwd/pwd assignments.
+check_detect "Password" "tp_pw_simple.txt" "password = \"mySecret123\""
+check_detect "Password" "tp_pw_config.txt" "config.password = \"secretValue123\""
+check_detect "Password" "tp_pw_passwd.txt" "passwd = \"hardcodedPass123\""
+check_detect "Password" "tp_pw_pwd.txt" "pwd = \"hardcodedPwd123\""
+
 # --- Regression: true positives (should still detect) ---
 check_detect "Password" "tp_pw.txt" "password = \"mySecret123\""
 check_detect "Session" "tp_sess.txt" "session = \"abc123def456ghi789jklmno\""
-check_detect "Password" "tp_cp.txt" "currentPassword = \"secretValue\""
+check_no_detect "FP compound identifier currentPassword" "fp_cp_assign.txt" "currentPassword = \"secretValue\""
 check_detect "Password" "tp_cfg.txt" "config.password = \"mySecret123\""
 check_detect "Generic secret" "tp_cfgtok.txt" "config.token = \"secretvalue\""
 

@@ -21,7 +21,7 @@ import { SelfCorrectionEngine } from './correction-engine.js';
 const TASK_ID_PATTERN = /^T-\d+[a-z]?$/i;
 const TASK_ID_GLOBAL_PATTERN = /T-\d+[a-z]?/gi;
 const TASK_RANGE_PATTERN = /(T-\d+)\s*\.\.\s*(T-\d+)/gi;
-const MAX_AUTHORIZED_PHASE = 4;
+const MAX_AUTHORIZED_PHASE = 5;
 const PROHIBITED_ACTIONS = [
   'git commit',
   'git push',

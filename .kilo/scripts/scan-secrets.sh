@@ -33,7 +33,7 @@ PATTERNS=(
   "Private keys"$'\t'"Private key block"$'\t'"$PK_RE"
   "Certificates"$'\t'"Certificate block"$'\t'"$CERT_RE"
   $'Connection strings\tConnection string with credentials\t[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]/:@]+:[^[:space:]/@]+@'
-  $'Passwords\tPassword assignment\t(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
+  $'Passwords\tPassword assignment\t(^|[^[:alnum:]_])(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{4,}'
   $'API keys/secrets/tokens\tAPI key assignment\t(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?secret)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
   $'API keys/secrets/tokens\tGeneric secret assignment\t(secret|token)[[:space:]]*[:=][[:space:]]*["'\''][^"'\''[:space:]]{8,}'
   $'Authorization headers\tAuthorization header\t(Authorization|authorization)[[:space:]]*[:=][[:space:]]*(Basic|Bearer|Token)[[:space:]]+[A-Za-z0-9._+/=-]{8,}'
