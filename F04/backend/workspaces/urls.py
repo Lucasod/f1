@@ -25,6 +25,11 @@ urlpatterns = [
     path("issues/<int:issue_id>/", views.issue_detail, name="issue_detail"),
     path("issues/<int:issue_id>/update/", views.update_issue, name="update_issue"),
     path("issues/<int:issue_id>/transitions/", views.transition_issue, name="transition_issue"),
+    # Comment endpoints
+    path("issues/<int:issue_id>/comments/", views.comments, name="comments"),
+    path("comments/<int:comment_id>/", views.delete_comment, name="delete_comment"),
+    # Board endpoints
+    path("boards/<int:board_id>/workflow/", views.board_workflow, name="board_workflow"),
     # Sprint lifecycle endpoints
     path("sprints/", views.list_sprints, name="list_sprints"),
     path("sprints/create/", views.create_sprint, name="create_sprint"),

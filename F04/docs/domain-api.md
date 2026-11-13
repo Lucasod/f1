@@ -87,7 +87,7 @@ Partial unique constraint on project where state is `active`: at most one active
 
 ## Workflow and transition rules
 
-Default statuses: To do (`todo`, position 0), In progress (`in_progress`, 1), Done (`done`, 2). Default directed transitions permit To do → In progress, In progress → To do, In progress → Done, Done → In progress.
+Default statuses: To do (`to_do`, position 0), In progress (`in_progress`, 1), Done (`done`, 2). Default directed transitions permit To do → In progress, In progress → To do, In progress → Done, Done → In progress.
 
 - Owners/admins edit workflow configuration; any current member can move an issue along an allowed directed edge.
 - Replacing a workflow sends the entire ordered status list and directed edge list, with the board version. Existing statuses retain their IDs; new statuses use request-local `ref` values. Edges refer to these refs. Return assigned IDs and the new board version. Every status item has a unique `ref`; refs live only within this request.

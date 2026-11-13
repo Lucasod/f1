@@ -70,6 +70,8 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     workspace_name = serializers.ReadOnlyField(source="workspace.name")
     board_exists = serializers.SerializerMethodField()
+    board_id = serializers.SerializerMethodField()
+    board = serializers.SerializerMethodField()
     role = serializers.SerializerMethodField()
 
     class Meta:
@@ -77,13 +79,23 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = [
             "id", "key", "name", "description", "workspace_name",
             "membership_limit", "project_limit_per_plan",
-            "next_issue_number", "board_exists", "role", "created_at",
+            "next_issue_number", "board_exists", "board_id", "board", "role", "created_at",
         ]
-        read_only_fields = ["id", "key", "workspace_name", "board_exists", "created_at", "role"]
+        read_only_fields = ["id", "key", "workspace_name", "board_exists", "board_id", "board", "created_at", "role"]
 
     def get_board_exists(self, obj):
         """Check if the project has an initial board."""
         return hasattr(obj, 'board')
+
+    def get_board_id(self, obj):
+        """Return the ID of the project's board, if any."""
+        return obj.board.id if hasattr(obj, 'board') else None
+
+    def get_board(self, obj):
+        """Return a minimal board representation with id, if any."""
+        if hasattr(obj, 'board'):
+            return {"id": obj.board.id}
+        return None
 
     def get_role(self, obj):
         """Return the caller's role in this project's workspace."""
@@ -205,14 +217,15 @@ class SprintSerializer(serializers.ModelSerializer):
 
     project_name = serializers.ReadOnlyField(source="project.name")
     project_key = serializers.ReadOnlyField(source="project.key")
+    project_id = serializers.ReadOnlyField(source="project.id")
 
     class Meta:
         model = Sprint
         fields = [
-            "id", "name", "project_name", "project_key",
+            "id", "name", "project_name", "project_key", "project_id",
             "status", "start_date", "end_date", "created_at",
         ]
-        read_only_fields = ["id", "project_name", "project_key", "created_at"]
+        read_only_fields = ["id", "project_name", "project_key", "project_id", "created_at"]
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -226,4 +239,4 @@ class CommentSerializer(serializers.ModelSerializer):
             "id", "issue", "author", "author_username", "text",
             "created_at", "is_active",
         ]
-        read_only_fields = ["id", "author", "author_username", "created_at"]
+        read_only_fields = ["id", "issue", "author", "author_username", "created_at"]

@@ -1,0 +1,20 @@
+{
+  "name": "f04",
+  "version": "1.0.0",
+  "description": "A Jira-like product where each company has an isolated workspace with projects, boards, issues, sprints, and billing.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.65.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

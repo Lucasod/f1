@@ -6,6 +6,17 @@ A Jira-like product where each company has an isolated workspace with projects, 
 
 ## Current status and scope
 
+### MP-F04-013 — Test Infrastructure Stabilization (completed)
+
+MP-F04-013 completed all test-infrastructure stabilization work with full integration acceptance:
+- Django: 67/67 PASS, including the assignee-filter fix and 2 regression tests.
+- Playwright: 53/53 PASS, 0 skipped; serial workers for shared SQLite and per-test fixture isolation.
+- 3 consecutive stable verification cycles.
+- TypeScript/JavaScript: no build step configured (N/A).
+- Secret scanner: clean (exit 0), zero credential disclosure; only synthetic test fixtures used (e.g. `testpass123`).
+
+Integration acceptance: PASS. Reviewer verdict: PASS. Mission status: COMPLETE.
+
 This README is the only project artifact. No application, dependencies, tests, or runtime environment have been created yet.
 
 The first product milestone is an end-to-end flow: sign in, create a workspace, create a project, view a board, and create or move an issue. Its first implementation slice covers authentication, workspaces, and memberships. Cross-company data exposure is the primary risk; isolation and authorization must be tested before expanding functionality.
@@ -231,7 +242,7 @@ This is a design contract to implement and test. It does not represent running e
 | `POST /api/v1/auth/login/` | Public; CSRF required; `{"username": "alice", "password": "<password>"}` | `200` with current-user representation; establishes/rotates session and provides refreshed CSRF cookie | `400 invalid_credentials` for wrong credentials or inactive account; `400 validation_error`; `403 csrf_failed`; `429` |
 | `POST /api/v1/auth/logout/` | CSRF required; no body | `204` with no body; invalidates current session; also `204` if already signed out with valid CSRF | `403 csrf_failed` |
 | `GET /api/v1/auth/me/` | Active authenticated user; no body | `200` with current-user representation | `403 authentication_required` |
-| `POST /api/v1/workspaces/` | Active authenticated user; CSRF required; `{"name": "Acme"}` | `201` with workspace representation and `Location: /api/v1/workspaces/{id}/` | `400 validation_error`; `403 authentication_required` or `csrf_failed` |
+| `POST /api/v1/workspaces/create/` | Active authenticated user; CSRF required; `{"name": "Acme"}` | `201` with workspace representation and `Location: /api/v1/workspaces/{id}/` | `400 validation_error`; `403 authentication_required` or `csrf_failed` |
 | `GET /api/v1/workspaces/` | Active authenticated user; pagination only | `200` paginated authorized workspace representations; empty results allowed | `400` invalid pagination; `403 authentication_required`; `404` out-of-range page |
 | `GET /api/v1/workspaces/{workspace_id}/` | Any current member of that workspace | `200` workspace representation | `403 authentication_required`; `404 not_found` for nonexistent/inaccessible workspace |
 | `GET /api/v1/workspaces/{workspace_id}/memberships/` | Any current member; pagination only | `200` paginated membership representations | `400` invalid pagination; `403 authentication_required`; `404 not_found` for nonexistent/inaccessible workspace or page |

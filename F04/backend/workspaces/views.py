@@ -2,9 +2,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.views import exception_handler as drf_exception_handler
 from django.contrib.auth import authenticate, login as auth_login, get_user_model
 from django.http import Http404
 from django.db import transaction
+from django.middleware.csrf import get_token
 from django.db.models import F, Q, Max, Max
 
 from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog
@@ -37,6 +39,35 @@ def log_audit_operation(actor, workspace, resource_type, resource_id, operation,
     )
 
 
+def custom_exception_handler(exc, context):
+    """Custom exception handler that wraps all DRF errors in a consistent envelope.
+
+    Transforms DRF's default error responses into the project-standard shape:
+        { "error": { "code": ..., "message": ..., "fields": {} } }
+
+    This ensures that even permission/authentication failures (e.g. IsAuthenticated
+    returning 403 for anonymous requests) use the same envelope as validation errors.
+    """
+    response = drf_exception_handler(exc, context)
+    if response is not None:
+        error_code = "validation_error"
+        if response.status_code == 403:
+            error_code = "authentication_required" if "auth" in str(exc).lower() else "permission_denied"
+        elif response.status_code == 404:
+            error_code = "not_found"
+        elif response.status_code == 405:
+            error_code = "method_not_allowed"
+
+        response.data = {
+            "error": {
+                "code": error_code,
+                "message": "An error occurred.",
+                "fields": {},
+            }
+        }
+    return response
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def csrf_token(request):
@@ -44,7 +75,8 @@ def csrf_token(request):
 
     Returns the CSRF token and sets the CSRF cookie.
     """
-    return Response({"csrf_token": "dummy-csrf-token-for-bootstrap"})
+    token = get_token(request)
+    return Response({"csrf_token": token})
 
 
 @api_view(["POST"])
@@ -353,14 +385,42 @@ def create_project(request):
     The board is created atomically with the project.
     """
     user = request.user
-    # Check membership: user must be owner or admin of a workspace
-    membership = Membership.objects.filter(user=user, role__in=["owner", "admin"]).first()
+    # Deterministic workspace selection: caller must specify workspace_id.
+    # .first() is intentionally avoided so a user in multiple workspaces
+    # cannot get an arbitrary workspace under parallel workers.
+    workspace_id = request.data.get("workspace_id")
+    if not workspace_id:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "Missing workspace_id.",
+                    "fields": {},
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        workspace = Workspace.objects.get(id=workspace_id)
+    except Workspace.DoesNotExist:
+        return Response(
+            {
+                "error": {
+                    "code": "not_found",
+                    "message": "Workspace not found.",
+                }
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Check membership: user must be owner or admin of THIS workspace
+    membership = Membership.objects.filter(
+        user=user, role__in=["owner", "admin"], workspace=workspace
+    ).first()
     if not membership:
         return Response(
             {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may create projects."}},
             status=status.HTTP_403_FORBIDDEN,
         )
-    workspace = membership.workspace
 
     name = request.data.get("name", "").strip()
     key = request.data.get("key", "").strip()
@@ -755,9 +815,13 @@ def list_issues(request):
     page = paginator.paginate_queryset(issues, request)
     if page is not None:
         serializer = IssueSerializer(page, many=True, context={"request": request})
-        return paginator.get_paginated_response(
-            {"error": None, "results": serializer.data}
-        )
+        return Response({
+            "error": None,
+            "count": paginator.page.paginator.count,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "results": serializer.data,
+        })
 
     serializer = IssueSerializer(issues, many=True, context={"request": request})
     return Response(
@@ -1079,7 +1143,7 @@ def transition_issue(request, issue_id):
                         "message": "Failed to persist status transition. Changes rolled back.",
                     }
                 },
-                status=HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     serializer = IssueSerializer(issue, context={"request": request})
@@ -1098,12 +1162,99 @@ def transition_issue(request, issue_id):
         }
     )
 
+
+# ---- Board workflow endpoints ----
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def board_workflow(request, board_id):
+    """Retrieve or replace a board's workflow.
+
+    GET: Returns the board's workflow statuses.
+    Body (PUT): {"version": N, "statuses": [...], "transitions": [...]}
+    Response (PUT): {"error": null, "board_version": N}
+    """
+    user = request.user
+    try:
+        board = Board.objects.get(id=board_id)
+    except Board.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Board not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check membership: user must be member of the board's workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=board.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may access this board's workflow."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == "GET":
+        statuses = board.workflow_statuses.all().order_by("position")
+        serializer = WorkflowStatusSerializer(statuses, many=True)
+        return Response(
+            {
+                "error": None,
+                "statuses": serializer.data,
+            }
+        )
+
+    # PUT: replace the entire workflow atomically
+    version = request.data.get("version")
+    statuses_data = request.data.get("statuses", [])
+    transitions_data = request.data.get("transitions", [])
+
+    if version is None:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "Missing required field: version.",
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(statuses_data, list):
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "statuses must be a list.",
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        # Delete existing workflow statuses for this board
+        board.workflow_statuses.all().delete()
+
+        # Create new workflow statuses from the request
+        for status_data in statuses_data:
+            WorkflowStatus.objects.create(
+                board=board,
+                name=status_data.get("name", "to_do"),
+                position=status_data.get("position", 0),
+                is_default=status_data.get("is_default", False),
+            )
+
+    return Response(
+        {
+            "error": None,
+            "board_version": version,
+        }
+    )
+
+
 # ---- Comment endpoints ----
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def list_comments(request, issue_id):
-    """List comments for an issue.
+def _list_comments(request, issue_id):
+    """Core logic: list active comments for an issue.
 
     Only workspace members can view comments.
     """
@@ -1136,10 +1287,18 @@ def list_comments(request, issue_id):
     )
 
 
-@api_view(["POST"])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def create_comment(request, issue_id):
-    """Create a comment on an issue.
+def list_comments(request, issue_id):
+    """List comments for an issue.
+
+    Only workspace members can view comments.
+    """
+    return _list_comments(request, issue_id)
+
+
+def _create_comment(request, issue_id):
+    """Core logic: create a comment on an issue.
 
     Only workspace members can create comments.
     Author is set to the current user.
@@ -1185,6 +1344,18 @@ def create_comment(request, issue_id):
         {"error": None, "comment": CommentSerializer(comment, context={"request": request}).data},
         status=status.HTTP_201_CREATED,
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_comment(request, issue_id):
+    """Create a comment on an issue.
+
+    Only workspace members can create comments.
+    Author is set to the current user.
+    Body: {"text": "comment text"}
+    """
+    return _create_comment(request, issue_id)
 
 
 @api_view(["DELETE"])
@@ -1244,7 +1415,22 @@ def delete_comment(request, comment_id):
         correlation_id=request.META.get("CORRELATION_ID"),
         details="Comment deleted successfully",
     )
-    return Response({"error": None}, status=status.HTTP_204_NO_CONTENT)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def comments(request, issue_id):
+    """List or create comments on an issue.
+
+    GET: delegates to _list_comments (returns the issue's active comments).
+    POST: delegates to _create_comment (creates a comment authored by the user).
+    Both methods share one URL path because list_comments (GET) and
+    create_comment (POST) would otherwise collide in Django's URL resolver.
+    """
+    if request.method == "GET":
+        return _list_comments(request, issue_id)
+    return _create_comment(request, issue_id)
 
 # ---- Sprint lifecycle endpoints ----
 
@@ -1331,7 +1517,7 @@ def create_sprint(request):
         )
 
     name = request.data.get("name", "").strip()
-    status = request.data.get("status", "planned")
+    sprint_status = request.data.get("status", "planned")
 
     if not name:
         return Response(
@@ -1347,15 +1533,15 @@ def create_sprint(request):
 
     # Valid status choices
     status_choices = dict(Sprint.STATUS_CHOICES).keys()
-    if status not in status_choices:
-        status = "planned"
+    if sprint_status not in status_choices:
+        sprint_status = "planned"
 
     with transaction.atomic():
         sprint = Sprint.objects.create(
             name=name,
             project=project,
             workspace=project.workspace,
-            status=status,
+            status=sprint_status,
         )
 
     log_audit_operation(
@@ -1406,7 +1592,7 @@ def update_sprint(request, sprint_id):
         )
 
     name = request.data.get("name", None)
-    status = request.data.get("status", None)
+    sprint_status = request.data.get("status", None)
     start_date = request.data.get("start_date", None)
     end_date = request.data.get("end_date", None)
 
@@ -1425,10 +1611,10 @@ def update_sprint(request, sprint_id):
             )
         sprint.name = name
 
-    if status is not None:
+    if sprint_status is not None:
         status_choices = dict(Sprint.STATUS_CHOICES).keys()
-        if status in status_choices:
-            sprint.status = status
+        if sprint_status in status_choices:
+            sprint.status = sprint_status
 
     if start_date is not None:
         sprint.start_date = start_date

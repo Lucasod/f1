@@ -27,11 +27,13 @@ class ProjectTestCase(TestCase):
         self.assertEqual(resp.status_code, 201)
         return resp.data["workspace"]["id"]
 
-    def _create_project(self, name="Acme Project", key="ABC"):
+    def _create_project(self, name="Acme Project", key="ABC", workspace_id=None):
         """Helper: create a project and return the response."""
+        if workspace_id is None:
+            workspace_id = self._create_workspace()
         return self.client.post(
             "/api/v1/projects/create/",
-            {"name": name, "key": key},
+            {"name": name, "key": key, "workspace_id": workspace_id},
             format="json",
         )
 
@@ -46,7 +48,7 @@ class ProjectTestCase(TestCase):
     def test_create_project_valid(self):
         """POST /api/v1/projects/ with valid name and key creates project with board."""
         ws_id = self._create_workspace()
-        response = self._create_project("Acme Project", "ABC")
+        response = self._create_project("Acme Project", "ABC", ws_id)
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["project"]["name"], "Acme Project")
         self.assertEqual(response.data["project"]["key"], "ABC")
@@ -55,44 +57,88 @@ class ProjectTestCase(TestCase):
         # Verify board was created atomically
         self.assertTrue(Board.objects.exists())
 
+    def test_create_project_missing_workspace_id(self):
+        """POST without workspace_id returns 400 validation_error."""
+        ws_id = self._create_workspace()
+        response = self.client.post(
+            "/api/v1/projects/create/",
+            {"name": "Acme Project", "key": "ABC"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertEqual(response.data["error"]["message"], "Missing workspace_id.")
+
+    def test_create_project_nonexistent_workspace_id(self):
+        """POST with unknown workspace_id returns 404 not_found."""
+        response = self.client.post(
+            "/api/v1/projects/create/",
+            {"name": "Acme Project", "key": "ABC", "workspace_id": 999999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["error"]["code"], "not_found")
+        self.assertEqual(response.data["error"]["message"], "Workspace not found.")
+
+    def test_create_project_not_member_of_workspace(self):
+        """POST in a workspace the user does not own/admin returns 403."""
+        # Create a workspace owned by bob
+        bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob_client = APIClient()
+        bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob_ws_resp = bob_client.post(
+            "/api/v1/workspaces/create/", {"name": "Bob's Workspace"}, format="json"
+        )
+        self.assertEqual(bob_ws_resp.status_code, 201)
+        bob_ws_id = bob_ws_resp.data["workspace"]["id"]
+
+        # alice (owner/admin of her own workspace only) tries to create in bob's workspace
+        response = self.client.post(
+            "/api/v1/projects/create/",
+            {"name": "Acme Project", "key": "ABC", "workspace_id": bob_ws_id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "permission_denied")
+
     def test_create_project_invalid_key_format(self):
         """POST /api/v1/projects/ with invalid key format fails."""
         ws_id = self._create_workspace()
-        response = self._create_project("Acme Project", "abc")  # lowercase, invalid
+        response = self._create_project("Acme Project", "abc", ws_id)  # lowercase, invalid
         self.assertEqual(response.status_code, 400)
 
     def test_create_project_key_too_short(self):
         """Key too short (1 char) fails."""
         ws_id = self._create_workspace()
-        response = self._create_project("Acme Project", "A")  # only 1 char
+        response = self._create_project("Acme Project", "A", ws_id)  # only 1 char
         self.assertEqual(response.status_code, 400)
 
     def test_create_project_key_too_long(self):
         """Key too long (11 chars) fails."""
         ws_id = self._create_workspace()
-        response = self._create_project("Acme Project", "ABCDEFGHIJK")  # 11 chars
+        response = self._create_project("Acme Project", "ABCDEFGHIJK", ws_id)  # 11 chars
         self.assertEqual(response.status_code, 400)
 
     def test_create_project_key_starts_with_digit(self):
         """Key starting with digit fails."""
         ws_id = self._create_workspace()
-        response = self._create_project("Acme Project", "1ABC")
+        response = self._create_project("Acme Project", "1ABC", ws_id)
         self.assertEqual(response.status_code, 400)
 
     def test_create_project_duplicate_key_fails(self):
         """Duplicate key within workspace fails."""
         ws_id = self._create_workspace()
         # Create first project
-        response = self._create_project("Acme Project", "ABC")
+        response = self._create_project("Acme Project", "ABC", ws_id)
         self.assertEqual(response.status_code, 201)
         # Try second project with same key
-        response = self._create_project("Second", "ABC")
+        response = self._create_project("Second", "ABC", ws_id)
         self.assertEqual(response.status_code, 400)
 
     def test_create_project_list_accessible(self):
         """GET /api/v1/projects/ lists user's projects."""
         ws_id = self._create_workspace()
-        self._create_project("Acme Project", "ABC")
+        self._create_project("Acme Project", "ABC", ws_id)
         response = self.client.get("/api/v1/projects/", format="json")
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(len(response.data.get("results", [])), 1)
@@ -100,7 +146,7 @@ class ProjectTestCase(TestCase):
     def test_project_detail_accessible(self):
         """GET /api/v1/projects/{id}/ accessible to member."""
         ws_id = self._create_workspace()
-        proj_resp = self._create_project("Acme Project", "ABC")
+        proj_resp = self._create_project("Acme Project", "ABC", ws_id)
         project_id = proj_resp.data["project"]["id"]
         response = self.client.get(
             f"/api/v1/projects/{project_id}/",
@@ -123,7 +169,11 @@ class ProjectTestCase(TestCase):
         self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
         ws1_resp = self.client.post("/api/v1/workspaces/create/", {"name": "Acme"}, format="json")
         ws1_id = ws1_resp.data["workspace"]["id"]
-        self.client.post("/api/v1/projects/create/", {"name": "Proj A", "key": "ABC"}, format="json")
+        self.client.post(
+            "/api/v1/projects/create/",
+            {"name": "Proj A", "key": "ABC", "workspace_id": ws1_id},
+            format="json",
+        )
 
         # Create second workspace/project as bob
         bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
@@ -131,7 +181,11 @@ class ProjectTestCase(TestCase):
         bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
         ws2_resp = bob_client.post("/api/v1/workspaces/create/", {"name": "Other"}, format="json")
         ws2_id = ws2_resp.data["workspace"]["id"]
-        bob_client.post("/api/v1/projects/create/", {"name": "Proj B", "key": "ABC"}, format="json")
+        bob_client.post(
+            "/api/v1/projects/create/",
+            {"name": "Proj B", "key": "ABC", "workspace_id": ws2_id},
+            format="json",
+        )
 
         # Both projects should exist with same key but different workspaces
         self.assertTrue(
@@ -168,7 +222,7 @@ class IssueTestCase(TestCase):
             workspace_id = self._create_workspace()
         return self.client.post(
             "/api/v1/projects/create/",
-            {"name": name, "key": key},
+            {"name": name, "key": key, "workspace_id": workspace_id},
             format="json",
         )
 
@@ -302,13 +356,51 @@ class IssueTestCase(TestCase):
     def test_list_issues_filter_by_assignee(self):
         """Filter issues by assignee."""
         ws_id = self._create_workspace()
+        workspace = Workspace.objects.get(id=ws_id)
         proj_resp = self._create_project("Acme Project", "ABC", ws_id)
         project_id = proj_resp.data["project"]["id"]
+        # bob must be a workspace member to be assignable to an issue in this workspace
+        Membership.objects.create(user=self.bob, workspace=workspace, role="member")
         # Create issue assigned to bob
-        self._create_issue(project_id, "Issue assigned", assignee_username=self.bob.username)
+        self._create_issue(project_id, "Issue assigned", assignee=self.bob.username)
         response = self._list_issues(project_id, assignee=self.bob.id)
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(len(response.data.get("results", [])), 1)
+
+    def test_list_issues_filter_by_assignee_different_member(self):
+        """Filter by a member who has no assigned issues returns 0 results."""
+        ws_id = self._create_workspace()
+        workspace = Workspace.objects.get(id=ws_id)
+        proj_resp = self._create_project("Acme Project", "ABC", ws_id)
+        project_id = proj_resp.data["project"]["id"]
+        # bob and charlie are both members of the workspace
+        Membership.objects.create(user=self.bob, workspace=workspace, role="member")
+        charlie = User.objects.create_user("charlie", "charlie@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        Membership.objects.create(user=charlie, workspace=workspace, role="member")
+        # Create an issue assigned to bob only
+        self._create_issue(project_id, "Issue assigned to bob", assignee_username=self.bob.username)
+        # Filter by charlie (member, no assigned issues) → 0 results
+        response = self._list_issues(project_id, assignee=charlie.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data.get("results", [])), 0)
+
+    def test_list_issues_filter_by_assignee_no_assignee(self):
+        """Create issue without assignee; unassigned issue appears when no assignee filter."""
+        ws_id = self._create_workspace()
+        workspace = Workspace.objects.get(id=ws_id)
+        proj_resp = self._create_project("Acme Project", "ABC", ws_id)
+        project_id = proj_resp.data["project"]["id"]
+        # bob must be a member to be assignable (contrast case)
+        Membership.objects.create(user=self.bob, workspace=workspace, role="member")
+        # Create one issue with an assignee and one without
+        self._create_issue(project_id, "Assigned Issue", assignee_username=self.bob.username)
+        self._create_issue(project_id, "Unassigned Issue")
+        # List issues without an assignee filter (assignee=none/empty) → works, unassigned issue present
+        response = self._list_issues(project_id, assignee="")
+        self.assertEqual(response.status_code, 200)
+        results = response.data.get("results", [])
+        self.assertGreaterEqual(len(results), 1)
+        self.assertTrue(any(issue.get("assignee_username") is None for issue in results))
 
     def test_list_issues_filter_by_sprint(self):
         """Filter issues by sprint (null allowed)."""

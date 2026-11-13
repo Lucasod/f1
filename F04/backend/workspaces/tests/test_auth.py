@@ -20,10 +20,14 @@ class AuthTestCase(TestCase):
         self.user.save()
 
     def test_csrf_bootstrap(self):
-        """GET /api/v1/auth/csrf/ returns CSRF token."""
+        """GET /api/v1/auth/csrf/ returns CSRF token and sets the CSRF cookie."""
         response = self.client.get("/api/v1/auth/csrf/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("csrf_token", response.data)
+        # The CSRF cookie must be set on the response so browsers can read it.
+        self.assertIn("csrftoken", response.cookies)
+        # The token must be a real CSRF token, never the bootstrap dummy string.
+        self.assertNotEqual(response.data["csrf_token"], "dummy-csrf-token-for-bootstrap")
 
     def test_login_valid_credentials(self):
         """POST /api/v1/auth/login/ with valid credentials returns user."""
