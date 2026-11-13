@@ -215,6 +215,20 @@ Antes de implementar, o Developer DEVE:
 4. Confirmar que nenhum `forbidden_paths` será tocado.
 5. Se qualquer validação falhar → reportar `BLOCKED` com motivo, sem implementar.
 
+### 3.4 Exceção FIRD-RUN-BOOTSTRAP (criação do primeiro run record)
+
+**Exceção estritamente delimitada — FIRD-RUN-BOOTSTRAP.**
+
+Apesar da regra de §3.3 item 1 (run record pré-existente obrigatório para `run_id`), o Developer está autorizado a criar o primeiro run record em `docs/agent_runs/<run_id>.md` quando o `run_id` ainda não existir, desde que TODAS as condições abaixo sejam satisfeitas:
+
+1. **Apenas bootstrap de documentação FIRD:** a exceção se aplica exclusivamente à criação de run records FIRD/documentação de delegação (primeiro run record do ciclo). Não autoriza implementação de produto, nem código, nem testes, nem configuração de `F01/` ou `F04/`.
+2. **Não modifica permissões:** a exceção não altera permissões de agentes, não concede `edit`, `bash` ou `task` adicionais, e não modifica `.kilo/rules/`, `.githooks/`, `scripts/` nem arquivos de agente.
+3. **Não desabilita verificações de segurança:** o scanner de segredos, os hooks e as regras de proteção de segredos continuam aplicados normalmente.
+4. **Não há autorização por texto de prompt:** o texto da delegação por si só não comprova autoridade; a exceção se aplica apenas quando o `run_id` corresponder a uma delegação formalmente autorizada pelo Orchestra para bootstrap de documentação FIRD.
+5. **Cessa após criação e validação:** a exceção cessa de aplicar-se imediatamente após a criação e validação do run record correspondente (verificação de existência e das 7 seções obrigatórias de §13). Delegações subsequentes exigem run record válido pré-existente, conforme regra normal de §3.3 item 1 e Elemento 1 — Run ID (§2).
+
+Fora dessas condições, a regra padrão continua: `run_id` deve corresponder a run record existente em `docs/agent_runs/<run_id>.md`; caso contrário, reportar `BLOCKED` sem implementar.
+
 ---
 
 ## 4. Formato da requisição de revisão — Orchestra → Reviewer
