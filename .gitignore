@@ -27,3 +27,5 @@ F01/back/test-storage-cleanup/uploads/products/vendor1/product1/main.jpg
 F01/back/test-storage-cleanup/uploads/products/vendor1/product1/gallery/01.jpg
 F04/backend/conf/db.sqlite3
 F04/backend/.env.example
+F04/backend/db.sqlite3
+F04/backend/db.sqlite3
