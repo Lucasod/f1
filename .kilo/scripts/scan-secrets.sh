@@ -82,14 +82,17 @@ is_binary_file() {
   return 1
 }
 
-# Content scan for a single file. Sets FOUND_LABELS (newline list) via global.
+# Content scan for a single file. Sets FOUND_LABELS (newline list) and
+# FOUND_LABELS_WITH_LINES (newline list with line-number context) via globals.
 FOUND_LABELS=""
+FOUND_LABELS_WITH_LINES=""
 
 scan_text_content() {
   # $1 = file containing the snapshot; $2 = original name for format detection.
   scan_path="$1"
   scan_name="$2"
   FOUND_LABELS=""
+  FOUND_LABELS_WITH_LINES=""
   content=$(cat "$scan_path" 2>/dev/null) || return 1
 
   # Strip inline code spans (backtick-quoted content) to avoid
@@ -107,8 +110,8 @@ scan_text_content() {
     rest="${entry#*$'\t'}"
     label="${rest%%$'\t'*}"
     regex="${rest#*$'\t'}"
-    # Capture matched lines to check for export enum false positives
-    matched=$(printf '%s\n' "$content_stripped" | grep -iE -- "$regex" 2>&1) || true
+    # Capture matched lines with line numbers (-n) for finding context.
+    matched=$(printf '%s\n' "$content_stripped" | grep -niE -- "$regex" 2>&1) || true
     match_status=0
     if [ -z "$matched" ]; then
       match_status=1
@@ -120,10 +123,22 @@ scan_text_content() {
         # Skip: this is an enum member, not a password/credential assignment
         :
       else
+        # Extract matched line numbers from "grep -n" output ("42:content").
+        line_numbers=$(printf '%s\n' "$matched" | sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | tr '\n' ',' | sed 's/,$//')
+        case "$line_numbers" in
+          *,*) line_ctx="lines $line_numbers" ;;
+          *)   [ -n "$line_numbers" ] && line_ctx="line $line_numbers" || line_ctx="" ;;
+        esac
+        label_entry="[$category] $label"
+        if [ -n "$line_ctx" ]; then
+          label_entry="$label_entry: $line_ctx"
+        fi
         if [ -z "$FOUND_LABELS" ]; then
           FOUND_LABELS="[$category] $label"
+          FOUND_LABELS_WITH_LINES="$label_entry"
         else
           FOUND_LABELS="$FOUND_LABELS"$'\n'"[$category] $label"
+          FOUND_LABELS_WITH_LINES="$FOUND_LABELS_WITH_LINES"$'\n'"$label_entry"
         fi
       fi
     elif [ "$match_status" -ne 1 ]; then
@@ -134,6 +149,7 @@ scan_text_content() {
 }
 
 found=0
+find_counter=0
 
 cleanup_temp() {
   if ! rm -f -- "$temp_pending" 2>/dev/null; then
@@ -198,7 +214,8 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
   for f in "${staged_files[@]}"; do
     base="${f##*/}"
     if is_sensitive_name "$base"; then
-      printf 'BLOCKED: [Sensitive file] sensitive file name: %s\n' "$f" >&2
+      find_counter=$((find_counter + 1))
+      printf 'BLOCKED: [FIND-%d] [Sensitive file] sensitive file name: %s\n' "$find_counter" "$f" >&2
       found=1
       continue
     fi
@@ -218,7 +235,8 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
     if [ "$binary_status" -eq 0 ]; then
       cleanup_temp || exit 2
       trap - EXIT
-      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$staged_name" >&2
+      find_counter=$((find_counter + 1))
+      printf 'BLOCKED: [FIND-%d] [Binary file] binary file not inspected: %s\n' "$find_counter" "$staged_name" >&2
       found=1
       continue
     elif [ "$binary_status" -ne 1 ]; then
@@ -231,11 +249,12 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
     fi
     cleanup_temp || exit 2
     trap - EXIT
-    if [ -n "$FOUND_LABELS" ]; then
+    if [ -n "$FOUND_LABELS_WITH_LINES" ]; then
       while IFS= read -r lbl; do
         [ -z "$lbl" ] && continue
-        printf 'BLOCKED: %s: %s\n' "$lbl" "$staged_name" >&2
-      done <<< "$FOUND_LABELS"
+        find_counter=$((find_counter + 1))
+        printf 'BLOCKED: [FIND-%d] %s: %s\n' "$find_counter" "$lbl" "$staged_name" >&2
+      done <<< "$FOUND_LABELS_WITH_LINES"
       found=1
     fi
   done
@@ -253,14 +272,16 @@ else
     fi
     base="${f##*/}"
     if is_sensitive_name "$base"; then
-      printf 'BLOCKED: [Sensitive file] sensitive file name: %s\n' "$f" >&2
+      find_counter=$((find_counter + 1))
+      printf 'BLOCKED: [FIND-%d] [Sensitive file] sensitive file name: %s\n' "$find_counter" "$f" >&2
       found=1
       continue
     fi
     is_binary_file "$f"
     binary_status=$?
     if [ "$binary_status" -eq 0 ]; then
-      printf 'BLOCKED: [Binary file] binary file not inspected: %s\n' "$f" >&2
+      find_counter=$((find_counter + 1))
+      printf 'BLOCKED: [FIND-%d] [Binary file] binary file not inspected: %s\n' "$find_counter" "$f" >&2
       found=1
       continue
     elif [ "$binary_status" -ne 1 ]; then
@@ -271,11 +292,12 @@ else
       printf 'ERROR: cannot scan file: %s\n' "$f" >&2
       exit 2
     fi
-    if [ -n "$FOUND_LABELS" ]; then
+    if [ -n "$FOUND_LABELS_WITH_LINES" ]; then
       while IFS= read -r lbl; do
         [ -z "$lbl" ] && continue
-        printf 'BLOCKED: %s: %s\n' "$lbl" "$f" >&2
-      done <<< "$FOUND_LABELS"
+        find_counter=$((find_counter + 1))
+        printf 'BLOCKED: [FIND-%d] %s: %s\n' "$find_counter" "$lbl" "$f" >&2
+      done <<< "$FOUND_LABELS_WITH_LINES"
       found=1
     fi
   done
