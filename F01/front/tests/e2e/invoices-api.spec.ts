@@ -16,7 +16,7 @@ test.describe('LC-21: Invoice API', () => {
 
     // Consumer trying to list invoices → 403 (admin only)
     const resp = await apiFetch(page, 'GET', '/api/v1/invoices', undefined, token);
-    expect(resp.status).toBe(403);
+    expect(resp.status()).toBe(403);
   });
 
   test('invoice for non-existent order returns 404', async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe('LC-21: Invoice API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/invoices/order/non-existent-order', undefined, token);
-    expect(resp.status).toBe(404);
+    expect(resp.status()).toBe(404);
   });
 
   test('invoice download for non-existent invoice returns 404', async ({ page }) => {
@@ -34,6 +34,6 @@ test.describe('LC-21: Invoice API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/invoices/non-existent-invoice/download', undefined, token);
-    expect(resp.status).toBe(404);
+    expect(resp.status()).toBe(404);
   });
 });

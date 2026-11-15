@@ -144,6 +144,7 @@ type RegistrationData = {
 
 export async function registerUser(page: Page, userData: RegistrationData) {
   await page.goto('/register');
+  await page.waitForSelector('#name', { timeout: 5000 });
   
   // Fill form fields
   await page.fill('#name', userData.name);

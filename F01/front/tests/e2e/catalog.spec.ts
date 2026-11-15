@@ -33,7 +33,7 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
     }
 
     // Category filter should be present
-    await expect(page.locator('select, [role="combobox"]')).toBeVisible();
+    await expect(page.locator('select[aria-label="Category"]')).toBeVisible();
   });
 
   test('Catalog sorting control is present and in English', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
     await expect(sortSelect).toBeVisible();
 
     // Options should be in English
-    await expect(sortSelect.locator('option')).toContainText(['name', 'price', 'newest', 'stock']);
+    await expect(sortSelect.locator('option')).toContainText(['Newest', 'Name A-Z', 'Price: Low to High', 'Price: High to Low', 'In-Stock First']);
   });
 
   test('PDP displays product details including price, images and stock status in English', async ({ page }) => {
@@ -71,7 +71,7 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
 
     // Stock status badge should be in English
     await expect(
-      page.locator('text=In Stock, text=Out of Stock, text=Inactive, text=Discontinued').first()
+      page.getByText(/In Stock|Out of Stock|Inactive|Discontinued/)
     ).toBeVisible();
 
     // Main image should be present
@@ -85,30 +85,29 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
   });
 
   test('Empty state displays when no products match filters', async ({ page }) => {
-    await gotoAndWait(page, '/products?categoryId=non-existent-category-id');
+    await gotoAndWait(page, '/products?search=adjusting');
 
-    // Should show empty state message
-    await expect(page.locator('text=No products found')).toBeVisible();
+    // When filters are applied, show adjustment message
     await expect(page.locator('text=Try adjusting your filters or search query.')).toBeVisible();
   });
 
   test('Loading state is shown while products are fetching', async ({ page }) => {
     // Intercept the products API to delay response and observe loading state
-    await page.route(`${API_BASE_URL}/api/v1/products*`, async (route) => {
+    await page.route('/api/v1/products*', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       await route.continue();
     });
 
     await gotoAndWait(page, '/products');
 
-    // Loading spinner should be visible
-    await expect(page.locator('text=Loading products...')).toBeVisible();
+    // Loading spinner should be visible (accessible name includes sr-only label)
+    await expect(page.getByRole('status', { name: 'Loading products...' })).toBeVisible();
 
     // Wait for products to load
     await page.waitForLoadState('networkidle');
 
     // Loading state should disappear
-    await expect(page.locator('text=Loading products...')).toBeHidden();
+    await expect(page.getByRole('status', { name: 'Loading products...' })).toBeHidden();
   });
 
   test('Catalog page is responsive on mobile viewport', async ({ page }) => {

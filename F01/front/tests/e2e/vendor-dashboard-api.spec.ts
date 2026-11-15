@@ -6,6 +6,7 @@ import {
   API_BASE_URL,
   generateUniqueEmail,
   getVendorRegistrationData,
+  getConsumerRegistrationData,
 } from './fixtures';
 
 test.describe('LC-24: Vendor Dashboard API', () => {
@@ -15,7 +16,7 @@ test.describe('LC-24: Vendor Dashboard API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/financial/', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data).toHaveProperty('grossSales');
     expect(data).toHaveProperty('netExpectedAmount');
@@ -31,6 +32,6 @@ test.describe('LC-24: Vendor Dashboard API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/financial/', undefined, token);
-    expect(resp.status).toBe(403);
+    expect(resp.status()).toBe(403);
   });
 });

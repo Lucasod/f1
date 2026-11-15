@@ -15,12 +15,12 @@ test.describe('LC-25: Admin Dashboard API', () => {
         role: 'ADMIN',
       },
     });
-    expect(registerResp.status).toBe(201);
+    expect(registerResp.status()).toBe(201);
     const registerData = await registerResp.json();
     const token = registerData.tokens.accessToken;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/admin/metrics', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data).toHaveProperty('orders');
     expect(data).toHaveProperty('vendors');
@@ -43,11 +43,11 @@ test.describe('LC-25: Admin Dashboard API', () => {
     const loginResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/login`, {
       data: { email, password: userPw },
     });
-    expect(loginResp.status).toBe(200);
+    expect(loginResp.status()).toBe(200);
     const loginData = await loginResp.json();
     const token = loginData.tokens.accessToken;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/admin/metrics', undefined, token);
-    expect(resp.status).toBe(403);
+    expect(resp.status()).toBe(403);
   });
 });

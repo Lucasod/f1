@@ -20,7 +20,7 @@ test.describe('LC-19: Buyer Orders API', () => {
 
     // List orders (should be empty initially)
     const listResp = await apiFetch(page, 'GET', '/api/v1/orders', undefined, token);
-    expect(listResp.status).toBe(200);
+    expect(listResp.status()).toBe(200);
     const listData = await listResp.json();
     expect(listData.orders).toEqual([]);
     expect(listData.total).toBe(0);
@@ -33,7 +33,7 @@ test.describe('LC-19: Buyer Orders API', () => {
 
     // Try to access a non-existent order → 404
     const resp = await apiFetch(page, 'GET', '/api/v1/orders/non-existent-order', undefined, token);
-    expect(resp.status).toBe(404);
+    expect(resp.status()).toBe(404);
   });
 
   test('vendor can list orders containing their vendor groups', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('LC-19: Buyer Orders API', () => {
 
     const resp = await apiFetch(page, 'GET', '/api/v1/vendor/orders', undefined, token);
     // Vendor without orders should get empty list
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data.vendorGroups).toEqual([]);
   });
@@ -57,20 +57,20 @@ test.describe('LC-19: Buyer Orders API', () => {
         taxIdType: 'CNPJ',
         taxIdValue: '11222333000262',
         email: generateUniqueEmail('admin'),
-        password: e2ePwd,
+        password: process.env.TEST_USER_PASSWORD ?? 'TestPassword1!',
         role: 'ADMIN',
       },
     });
-    expect(registerResp.status).toBe(201);
+    expect(registerResp.status()).toBe(201);
     const registerData = await registerResp.json();
     const token = registerData.tokens.accessToken;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/orders', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
   });
 
   test('unauthenticated request to orders returns 401', async ({ page }) => {
     const resp = await page.request.get(`${API_BASE_URL}/api/v1/orders`);
-    expect(resp.status).toBe(401);
+    expect(resp.status()).toBe(401);
   });
 });

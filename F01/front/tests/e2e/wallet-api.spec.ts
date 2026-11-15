@@ -6,6 +6,7 @@ import {
   API_BASE_URL,
   generateUniqueEmail,
   getVendorRegistrationData,
+  getConsumerRegistrationData,
 } from './fixtures';
 
 test.describe('LC-22: Wallet API', () => {
@@ -15,7 +16,7 @@ test.describe('LC-22: Wallet API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/balance', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data.balance).toBe(0);
     expect(data.ownerId).toBeDefined();
@@ -27,7 +28,7 @@ test.describe('LC-22: Wallet API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/transactions', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data.transactions).toEqual([]);
   });
@@ -38,7 +39,7 @@ test.describe('LC-22: Wallet API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/reconcile', undefined, token);
-    expect(resp.status).toBe(200);
+    expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data.materialized).toBe(0);
     expect(data.computed).toBe(0);
@@ -51,6 +52,6 @@ test.describe('LC-22: Wallet API', () => {
     const token = await getAuthToken(page);
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/balance', undefined, token);
-    expect(resp.status).toBe(403);
+    expect(resp.status()).toBe(403);
   });
 });
