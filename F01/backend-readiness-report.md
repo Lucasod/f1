@@ -176,7 +176,7 @@ cd /home/workstation/source/f1/F01/back && npx tsx src/index.ts &
 curl -s http://localhost:3000/api/v1/products | head -20
 
 # Verify wallet balance (requires VENDOR/ADMIN token)
-[REDACTED] # redaction placeholder"
+[REDACTED] # redaction placeholder
 curl -s http://localhost:3000/api/v1/wallet/balance -H "Authorization: Bearer $TOKEN"
 
 # Verify checkout (requires CONSUMER token)

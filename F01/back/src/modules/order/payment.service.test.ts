@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PaymentService, PaymentError } from './payment.service';
-import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, FinancialStatus, InMemoryOrderRepository } from './order.domain';
+import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, FinancialStatus, InMemoryOrderRepository, OrderVendorGroupStatus } from './order.domain';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
 import { Product, InMemoryProductRepository } from '../product/product.domain';
 import { config } from '../../config';
@@ -752,6 +752,250 @@ describe('Payment Service', () => {
       expect(result).toBe(true);
       const updatedOrder = await orderRepo.findById(testOrder.id);
       expect(updatedOrder!.status).toBe(OrderStatus.PAID);
+    });
+  });
+
+  describe('FIND-A02-P0-001: OVGs set to PENDING after Order PAID', () => {
+    it('sets all vendor groups to PENDING when multi-vendor order is captured', async () => {
+      const multiOrder = Order.create({
+        personId: testPerson.id,
+        vendorGroups: [
+          {
+            vendorId: 'vendor-1',
+            items: [{
+              productId: 'product-1',
+              productName: 'Product 1',
+              vendorId: 'vendor-1',
+              quantity: 1,
+              unitPrice: 50
+            }],
+            commissionPct: config.commissionPct
+          },
+          {
+            vendorId: 'vendor-2',
+            items: [{
+              productId: 'product-2',
+              productName: 'Product 2',
+              vendorId: 'vendor-2',
+              quantity: 1,
+              unitPrice: 30
+            }],
+            commissionPct: config.commissionPct
+          }
+        ],
+        shippingAddress: {
+          id: 'addr-2',
+          street: 'Test Street',
+          number: '123',
+          neighborhood: 'Test Neighborhood',
+          city: 'Test City',
+          state: 'TS',
+          isPrimary: true
+        }
+      });
+      await orderRepo.save(multiOrder);
+
+      const payment = await paymentService.createPayment(multiOrder.id, testPerson.id, multiOrder.totalAmount);
+      await paymentService.authorizePayment(payment.id, 'txn_test_multi');
+      await paymentService.capturePayment(payment.id);
+
+      const updatedOrder = await orderRepo.findById(multiOrder.id);
+      expect(updatedOrder!.status).toBe(OrderStatus.PAID);
+      for (const vg of updatedOrder!.vendorGroups) {
+        expect(vg.status).toBe(OrderVendorGroupStatus.PENDING);
+      }
+    });
+  });
+
+  describe('FIND-A02-P0-003: recordPaymentLedger iterates all vendor groups', () => {
+    it('creates ledger entries for each vendor group on authorize', async () => {
+      const movements: any[] = [];
+      const events: any[] = [];
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+      const eventRepo = { save: async (e: any) => events.push(e) };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo
+      );
+
+      const multiOrder = Order.create({
+        personId: testPerson.id,
+        vendorGroups: [
+          {
+            vendorId: 'vendor-1',
+            items: [{
+              productId: 'product-1',
+              productName: 'Product 1',
+              vendorId: 'vendor-1',
+              quantity: 1,
+              unitPrice: 50
+            }],
+            commissionPct: config.commissionPct
+          },
+          {
+            vendorId: 'vendor-2',
+            items: [{
+              productId: 'product-2',
+              productName: 'Product 2',
+              vendorId: 'vendor-2',
+              quantity: 1,
+              unitPrice: 30
+            }],
+            commissionPct: config.commissionPct
+          }
+        ],
+        shippingAddress: {
+          id: 'addr-3',
+          street: 'Test Street',
+          number: '123',
+          neighborhood: 'Test Neighborhood',
+          city: 'Test City',
+          state: 'TS',
+          isPrimary: true
+        }
+      });
+      await orderRepo.save(multiOrder);
+
+      const payment = await svc.createPayment(multiOrder.id, testPerson.id, multiOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_ledger');
+
+      expect(movements).toHaveLength(2);
+      expect(events).toHaveLength(2);
+      const vendorIds = movements.map((m: any) => m.data.vendorId);
+      expect(vendorIds).toContain('vendor-1');
+      expect(vendorIds).toContain('vendor-2');
+    });
+
+    it('creates ledger entries for each vendor group on refund', async () => {
+      const movements: any[] = [];
+      const eventRepo = { save: async () => { } };
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo
+      );
+
+      const multiOrder = Order.create({
+        personId: testPerson.id,
+        vendorGroups: [
+          {
+            vendorId: 'vendor-1',
+            items: [{
+              productId: 'product-1',
+              productName: 'Product 1',
+              vendorId: 'vendor-1',
+              quantity: 1,
+              unitPrice: 50
+            }],
+            commissionPct: config.commissionPct
+          },
+          {
+            vendorId: 'vendor-2',
+            items: [{
+              productId: 'product-2',
+              productName: 'Product 2',
+              vendorId: 'vendor-2',
+              quantity: 1,
+              unitPrice: 30
+            }],
+            commissionPct: config.commissionPct
+          }
+        ],
+        shippingAddress: {
+          id: 'addr-4',
+          street: 'Test Street',
+          number: '123',
+          neighborhood: 'Test Neighborhood',
+          city: 'Test City',
+          state: 'TS',
+          isPrimary: true
+        }
+      });
+      await orderRepo.save(multiOrder);
+
+      const payment = await svc.createPayment(multiOrder.id, testPerson.id, multiOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_refund_ledger');
+      await svc.capturePayment(payment.id);
+      await svc.refundPayment(payment.id);
+
+      const refundMovements = movements.filter((m: any) => m.data.movementType === 'refund');
+      expect(refundMovements).toHaveLength(2);
+      const vendorIds = refundMovements.map((m: any) => m.data.vendorId);
+      expect(vendorIds).toContain('vendor-1');
+      expect(vendorIds).toContain('vendor-2');
+    });
+  });
+
+  describe('FIND-A02-P0-002: Transfer creation per OVG', () => {
+    it('calls transferService.createTransferWithDetails for each vendor group', async () => {
+      const transferCalls: any[] = [];
+      const mockTransferService = {
+        createTransferWithDetails: async (...args: any[]) => {
+          transferCalls.push(args);
+          return { transfer: {} as any, entity: {} as any };
+        }
+      };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        undefined, undefined,
+        undefined, undefined,
+        mockTransferService
+      );
+
+      const multiOrder = Order.create({
+        personId: testPerson.id,
+        vendorGroups: [
+          {
+            vendorId: 'vendor-1',
+            items: [{
+              productId: 'product-1',
+              productName: 'Product 1',
+              vendorId: 'vendor-1',
+              quantity: 1,
+              unitPrice: 50
+            }],
+            commissionPct: config.commissionPct
+          },
+          {
+            vendorId: 'vendor-2',
+            items: [{
+              productId: 'product-2',
+              productName: 'Product 2',
+              vendorId: 'vendor-2',
+              quantity: 1,
+              unitPrice: 30
+            }],
+            commissionPct: config.commissionPct
+          }
+        ],
+        shippingAddress: {
+          id: 'addr-5',
+          street: 'Test Street',
+          number: '123',
+          neighborhood: 'Test Neighborhood',
+          city: 'Test City',
+          state: 'TS',
+          isPrimary: true
+        }
+      });
+      await orderRepo.save(multiOrder);
+
+      const payment = await svc.createPayment(multiOrder.id, testPerson.id, multiOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_transfer');
+      await svc.capturePayment(payment.id);
+
+      expect(transferCalls).toHaveLength(2);
+      // Each call should include orderId, ovgId, subtotal, commissionPct, chargeId
+      expect(transferCalls[0][0]).toBe(multiOrder.id);
+      expect(transferCalls[1][0]).toBe(multiOrder.id);
+      const ovgIds = transferCalls.map((c: any[]) => c[1]);
+      expect(ovgIds).toHaveLength(2);
     });
   });
 });

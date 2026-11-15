@@ -37,6 +37,7 @@ import {
   OrderStatus,
   FinancialStatus,
   OrderVendorGroup,
+  OrderVendorGroupStatus,
   VALID_STATUS_TRANSITIONS
 } from './order.domain';
 
@@ -51,6 +52,7 @@ import { MovementType as DomainMovementType } from '../financial/financial.movem
 import Stripe from 'stripe';
 import type { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
 import { Transfer, TransferStatus } from '../transfer/transfer.domain';
+import { TransferService } from '../transfer/transfer.service';
 import type { VendorRepository } from '../vendor/vendor.domain';
 
 export enum PaymentError {
@@ -86,7 +88,8 @@ export class PaymentService {
     private readonly movementRepo?: FinancialMovementRepository,
     private readonly eventRepo?: FinancialEventRepository,
     private readonly vendorRepo?: VendorRepository,
-    private readonly mongodb?: Db
+    private readonly mongodb?: Db,
+    private readonly transferService?: TransferService
   ) {}
 
   /**
@@ -236,12 +239,15 @@ export class PaymentService {
     authorized.authorizedAt && (payment.authorizedAt = authorized.authorizedAt);
     await this.paymentRepo.update(payment);
 
-    await this.recordPaymentLedger(
-      payment,
-      order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined,
-      MovementType.CONSUMER_PAYMENT,
-      EventType.PAYMENT_AUTHORIZED
-    );
+    // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    for (const vg of order.vendorGroups) {
+      await this.recordPaymentLedger(
+        payment,
+        vg.vendorId,
+        MovementType.CONSUMER_PAYMENT,
+        EventType.PAYMENT_AUTHORIZED
+      );
+    }
 
     return payment;
   }
@@ -299,14 +305,33 @@ export class PaymentService {
     captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
     await this.paymentRepo.update(payment);
 
-    await this.recordPaymentLedger(
-      payment,
-      order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined,
-      MovementType.CONSUMER_PAYMENT,
-      EventType.PAYMENT_CAPTURED
-    );
+    // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    for (const vg of order.vendorGroups) {
+      await this.recordPaymentLedger(
+        payment,
+        vg.vendorId,
+        MovementType.CONSUMER_PAYMENT,
+        EventType.PAYMENT_CAPTURED
+      );
+    }
 
     await this.markCapturedOrderPaid(payment.orderId);
+
+    // FIND-A02-P0-002: Trigger transfer creation per OVG after order is PAID
+    if (this.transferService) {
+      const paidOrder = await this.orderRepo.findById(payment.orderId);
+      if (paidOrder && paidOrder.status === OrderStatus.PAID) {
+        for (const vg of paidOrder.vendorGroups) {
+          await this.transferService.createTransferWithDetails(
+            paidOrder.id,
+            vg.id,
+            vg.subtotal,
+            vg.commissionPct,
+            payment.providerTransactionId!,
+          );
+        }
+      }
+    }
 
     return payment;
   }
@@ -341,6 +366,13 @@ export class PaymentService {
         // Advanced/terminal state: do not overwrite.
         return;
       }
+    }
+    // FIND-A02-P0-001: Set all vendor groups to PENDING after order is PAID
+    if (order.status === OrderStatus.PAID) {
+      for (const vg of order.vendorGroups) {
+        vg.updateStatus(OrderVendorGroupStatus.PENDING);
+      }
+      await this.orderRepo.update(order);
     }
   }
 
@@ -480,13 +512,17 @@ export class PaymentService {
     await this.paymentRepo.update(payment);
 
     const order = await this.orderRepo.findById(payment.orderId);
-    const vendorId = order ? (order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined) : undefined;
-    await this.recordPaymentLedger(
-      payment,
-      vendorId,
-      MovementType.CONSUMER_PAYMENT,
-      EventType.PAYMENT_FAILED
-    );
+    // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    if (order) {
+      for (const vg of order.vendorGroups) {
+        await this.recordPaymentLedger(
+          payment,
+          vg.vendorId,
+          MovementType.CONSUMER_PAYMENT,
+          EventType.PAYMENT_FAILED
+        );
+      }
+    }
 
     if (order) {
       // If order is PAID (after authorization), transition to FAILED_PAYMENT
@@ -564,13 +600,15 @@ export class PaymentService {
     if (!order) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
-    const refundVendorId = order.vendorGroups.length > 0 ? order.vendorGroups[0].vendorId : undefined;
-    await this.recordPaymentLedger(
-      payment,
-      refundVendorId,
-      MovementType.REFUND,
-      EventType.PAYMENT_REFUNDED
-    );
+    // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    for (const vg of order.vendorGroups) {
+      await this.recordPaymentLedger(
+        payment,
+        vg.vendorId,
+        MovementType.REFUND,
+        EventType.PAYMENT_REFUNDED
+      );
+    }
     order.refund(true);
     await this.orderRepo.update(order);
 
