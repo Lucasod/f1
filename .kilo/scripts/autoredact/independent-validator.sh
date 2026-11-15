@@ -99,7 +99,7 @@ if [ "$SCANNER_EXIT" -ne 0 ]; then
 fi
 
 # Validate output does not contain secret patterns
-if printf '%s\n' "$SCANNER_OUTPUT" | grep -qiE "sk_|AKIA|ghp_|whsec_|password=|secret=s"; then
+if printf '%s\n' "$SCANNER_OUTPUT" | grep -qiE "sk_|AKIA|ghp_|whsec_|password=|secret=[\"']"; then
     printf 'STATUS=invalid\n'
     exit 1
 fi

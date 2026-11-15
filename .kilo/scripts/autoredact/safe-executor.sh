@@ -174,7 +174,10 @@ fi
 chmod "$ORIGINAL_PERMS" "$TMP_FILE" 2>/dev/null || true
 
 # Atomic move
-mv "$TMP_FILE" "$FILE_PATH"
+if ! mv "$TMP_FILE" "$FILE_PATH"; then
+    printf 'STATUS=error\n' >&2
+    exit 1
+fi
 
 printf 'STATUS=ok\n'
 exit 0

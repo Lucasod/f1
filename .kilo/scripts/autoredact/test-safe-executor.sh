@@ -116,6 +116,22 @@ run_executor --file "$FIXTURE_DIR/det.txt" --start-line 2 --end-line 4 --replace
 a2=$(autoredact_sha256 "$FIXTURE_DIR/det.txt")
 [ "$a1" = "$a2" ] && ok "deterministic (same after-checksum)" || bad "non-deterministic ($a1 vs $a2)"
 
+# --- Write failure: read-only destination directory prevents mv (fail-closed) ---
+make_file "readonly-dir.txt" "keep" "secret" "keep"
+before=$(autoredact_sha256 "$FIXTURE_DIR/readonly-dir.txt")
+chmod 555 "$FIXTURE_DIR"
+out=$("$EXECUTOR" --file "$FIXTURE_DIR/readonly-dir.txt" --start-line 2 --end-line 2 --replacement "[REDACTED]" --expected-checksum "$before" 2>&1)
+rc=$?
+chmod 755 "$FIXTURE_DIR"   # restore so trap cleanup can remove files
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "STATUS=error"; then
+  ok "write failure produces STATUS=error and non-zero exit (fail-closed)"
+else
+  bad "write failure not reported as error (rc=$rc)"; printf '%s\n' "$out" >&2
+fi
+# File unchanged after failed write
+after=$(autoredact_sha256 "$FIXTURE_DIR/readonly-dir.txt")
+[ "$before" = "$after" ] && ok "file unchanged after failed write" || bad "file modified despite failed write"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 if [ "$FAIL" -eq 0 ]; then exit 0; else exit 1; fi
