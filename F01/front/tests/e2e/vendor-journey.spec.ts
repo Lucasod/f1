@@ -186,11 +186,6 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
     }));
     console.log('localStorage after / navigation:', JSON.stringify(lsDebug));
     // Must set individual keys that initializeAuth reads: accessToken, refreshToken, user
-    const vendorUserId = vendorLoginData.person.id;
-    const vendorUserName = vendorLoginData.person.name;
-    const vendorUserEmail = vendorLoginData.person.email;
-    const vendorUserRoles = vendorLoginData.person.roles;
-    const vendorRefreshToken = vendorLoginData.tokens.refreshToken;
     await page.evaluate(({token, userId, userName, userEmail, userRoles, refreshToken}) => {
       localStorage.setItem('accessToken', token);
       localStorage.setItem('refreshToken', refreshToken);

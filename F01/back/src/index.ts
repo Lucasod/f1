@@ -24,7 +24,7 @@ import { CouponRepository, InMemoryCouponRepository } from './modules/coupon/cou
 import { MongoCouponRepository } from './modules/coupon/coupon.mongo.repository';
 import { CouponService } from './modules/coupon/coupon.service';
 import { createCouponRoutes } from './modules/coupon/coupon.routes';
-import { createStripeClientFromEnvironment, StripeCheckoutProvider } from './modules/checkout/stripe-checkout.provider';
+import { createStripeClientFromEnvironment, StripeCheckoutProvider, MockCheckoutProvider } from './modules/checkout/stripe-checkout.provider';
 import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
 import { createOrderRoutes } from './modules/order/order.routes';
 import { createAdminMetricsRoutes, MongoAdminMetricsRepository } from './modules/admin/admin.metrics';
@@ -139,7 +139,32 @@ cartRepo = new RedisCartRepository();
 let transferRepo: MongoTransferRepository;
 
 function initializeServices(): void {
-  const stripeClient = createStripeClientFromEnvironment();
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
+  const isPlaceholderKey = stripeSecretKey === 'sk_test_replace_me' || stripeSecretKey === '';
+  const isTestKey = stripeSecretKey.startsWith('sk_test_');
+  const useRealStripeInDev = process.env.USE_REAL_STRIPE_IN_DEV === 'true';
+
+  // In development, use MockCheckoutProvider by default unless:
+  // - USE_REAL_STRIPE_IN_DEV=true is set, OR
+  // - The key is a live key (sk_live_)
+  const useMockCheckout = config.nodeEnv === 'development' && 
+    !useRealStripeInDev && 
+    !stripeSecretKey.startsWith('sk_live_');
+
+  let checkoutProvider;
+  if (useMockCheckout) {
+    const reason = isPlaceholderKey ? 'placeholder/empty key' : 'development mode (set USE_REAL_STRIPE_IN_DEV=true to use real Stripe)';
+    console.log(`🔧 Development mode with ${reason}: using MockCheckoutProvider`);
+    checkoutProvider = new MockCheckoutProvider();
+  } else {
+    const stripeClient = createStripeClientFromEnvironment();
+    checkoutProvider = new StripeCheckoutProvider(
+      stripeClient,
+      config.frontendUrl,
+      config.stripePaymentMethodConfiguration
+    );
+  }
+
   authService = new AuthService(personRepo, config.jwtSecret, config.jwtExpiresIn, '30d');
   vendorService = new VendorService(vendorRepo, personRepo, config);
   productService = new ProductService(productRepo, categoryRepo, vendorRepo, config, searchIndex);
@@ -154,11 +179,7 @@ function initializeServices(): void {
     personRepo,
     cartService,
     config,
-    new StripeCheckoutProvider(
-      stripeClient,
-      config.frontendUrl,
-      config.stripePaymentMethodConfiguration
-    ),
+    checkoutProvider,
     categoryRepo,
     searchIndex,
     couponService,

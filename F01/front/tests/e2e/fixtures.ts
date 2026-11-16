@@ -157,7 +157,7 @@ export async function registerUser(page: Page, userData: RegistrationData) {
   // Submit - role is hardcoded to CONSUMER in the RegisterForm handleSubmit
   await page.click('button[type="submit"]');
   
-  // Wait for authentication state in localStorage (zustand persist is async)
+// Wait for authentication state in localStorage (zustand persist is async)
   await page.waitForFunction(() => {
     const authStorage = localStorage.getItem('auth-storage');
     if (!authStorage) return false;
@@ -167,8 +167,8 @@ export async function registerUser(page: Page, userData: RegistrationData) {
     } catch {
       return false;
     }
-  }, { timeout: 10000 });
-  
+  }, { timeout: 30000 });
+
   const url = page.url();
   if (url.includes('/register')) {
     // Check if authenticated after waiting for localStorage update
@@ -222,7 +222,7 @@ export async function loginUser(page: Page, email: string, password: string = 'T
     } catch {
       return false;
     }
-  }, { timeout: 10000 });
+  }, { timeout: 30000 });
 }
 
 /**

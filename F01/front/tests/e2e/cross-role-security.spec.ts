@@ -10,6 +10,7 @@ import {
   clearAuth,
   API_BASE_URL,
   loginViaApi,
+  generateValidCPF,
 } from './fixtures';
 
 const testPassword = `Test-${randomUUID()}aA1!`;
@@ -111,8 +112,8 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
       data: {
         name: 'Consumer 1',
         taxIdType: 'CPF',
-        taxIdValue: '52998224725',
-        email: consumer2Email,
+        taxIdValue: generateValidCPF(),
+        email: consumer1Email,
         password: testPassword,
         role: 'CONSUMER',
       } });
@@ -131,7 +132,7 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
       data: {
         name: 'Consumer 2',
         taxIdType: 'CPF',
-        taxIdValue: '52998224725',
+        taxIdValue: generateValidCPF(),
         email: consumer2Email,
         password: testPassword,
         role: 'CONSUMER',
@@ -250,7 +251,7 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
       data: {
         name: 'Test Consumer',
         taxIdType: 'CPF',
-        taxIdValue: '52998224725',
+        taxIdValue: generateValidCPF(),
         email: consumerEmail,
         password: testPassword,
         role: 'CONSUMER',
