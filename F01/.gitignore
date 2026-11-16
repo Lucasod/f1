@@ -1,3 +1,4 @@
 
 # Generated product images stored in S3
 /storage/uploads/products/vendor-*/
+/front/playwright-report
