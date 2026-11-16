@@ -33,19 +33,22 @@ async function createProject(request, csrfToken, name, key, workspaceId) {
   return resp;
 }
 
-async function listSprints(request, csrfToken, projectId?) {
-  const params: Record<string, string> = {};
-  if (projectId !== undefined) params.project_id = String(projectId);
-  const resp = await request.get(BASE_URL + '/sprints/', { params, headers: {
-    'X-CSRFToken': csrfToken as string,
-    'Content-Type': 'application/json',
-  }});
+async function listSprints(request, csrfToken, projectId) {
+  const url = projectId
+    ? BASE_URL + '/projects/' + projectId + '/sprints/'
+    : BASE_URL + '/sprints/';
+  const resp = await request.get(url, {
+    headers: {
+      'X-CSRFToken': csrfToken as string,
+      'Content-Type': 'application/json',
+    }
+  });
   return resp;
 }
 
 async function createSprint(request, csrfToken, projectId, name, status = 'planned') {
-  const resp = await request.post(BASE_URL + '/sprints/create/', {
-    data: { name, project_id: projectId, status },
+  const resp = await request.post(BASE_URL + '/projects/' + projectId + '/sprints/create/', {
+    data: { name, status },
     headers: {
       'X-CSRFToken': csrfToken as string,
       'Content-Type': 'application/json',
@@ -171,8 +174,8 @@ test.describe.serial('Sprint Lifecycle E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
     test.info().csrfToken = csrfToken;
 
-    // List all sprints (no filter)
-    const resp = await listSprints(request, csrfToken);
+    // List sprints for the project (backend only exposes a project-scoped list)
+    const resp = await listSprints(request, csrfToken, projectId);
     expect(resp.status()).toBe(200);
 
     const body = await resp.json();

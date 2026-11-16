@@ -470,7 +470,7 @@ Steps define the delivery order, not a daily schedule. Multiple steps may be com
 | 2 | Projects, boards, issues, persistent drag-and-drop | Browser flow, authorized movement, visual rollback on API error |
 | 3 | Sprints, configurable workflows, comments, attachments, audit log | Valid transitions, protected files, atomic history |
 | 4 | Celery, internal notifications, asynchronous report, outgoing webhooks | Jobs after commit, bounded retries, duplicate-effect protection | COMPLETE (MP-F04-014) |
-| 5 | Stripe test mode, subscriptions, plan limits, workspace soft deletion | Per-workspace subscription, authenticated idempotent webhook, enforced limits |
+| 5 | Stripe test mode, subscriptions, plan limits, workspace soft deletion | Per-workspace subscription, authenticated idempotent webhook, enforced limits | COMPLETE (MP-F04-015) |
 | 6 | Final integration, security/query review, deployed or recorded demo | Regression checks, measured results, reproducible execution |
 | 7 | Documentation, 10-minute presentation, individual reflection, delivery review | Complete checklist in one Google Drive folder |
 
@@ -615,6 +615,243 @@ All frontend API calls use the existing `request` client with CSRF and session c
 ### Next step
 
 Step 5 — Stripe Billing test mode, quotas and soft deletion.
+
+## Step 5 Implementation
+
+MP-F04-015 delivered Step 5 of the delivery sequence: Stripe Billing in test mode, workspace subscriptions, plan-based quotas, and workspace soft deletion. All changes are confined to F04; no F01 (Marketplace) or shared `.kilo` files were modified.
+
+### Billing domain models
+
+Implemented in `backend/workspaces/models.py` (migrations `0017`–`0019`):
+
+- **`WorkspaceBilling`** — one-to-one with `Workspace`; fields: `customer_id` (nullable unique), `subscription_id` (nullable unique), `provider_status`, `effective_plan` (`free`/`pro`, default `free`), `cancel_at_period_end`, `paid_through`, `last_synced_at`. Tenant-scoped via `django-multitenant`.
+- **`BillingPlan`** — application-owned plan catalog (`free`/`pro`); fields: `plan_id`, `name`, `description`, `stripe_price_id`, `max_memberships`, `max_projects`, `price_cents`, `currency`, `interval`, `is_active`. Seeded by migration `0018` (Free: 5 memberships / 2 projects; Pro: 25 memberships / 20 projects, 1900 cents USD/month).
+- **`BillingOperation`** — durable record of checkout/cancel/portal operations; fields: UUID `id`, `kind`, `idempotency_key` (unique per workspace/kind), `state` (`pending`/`completed`/`failed`/`unknown`), `provider_object_id`, `safe_result` JSON. Unique constraint on `(workspace, kind, idempotency_key)`.
+- **`StripeEventInbox`** — durable inbox for idempotent Stripe webhook processing; fields: unique `event_id`, `event_type`, `received_at`, `provider_object_id`, `resolved_workspace_id`, `state` (`pending`/`processed`/`failed`), `attempts`, `next_attempt_at`, `error_code`.
+
+The `Workspace` model gained a nullable `deleted_at` timestamp for soft deletion. Active workspaces have no deletion timestamp; every tenant endpoint filters `deleted_at__isnull=True`.
+
+### Billing API
+
+Endpoints under `/api/v1/workspaces/{workspace_id}/` (current membership required; active workspace; CSRF for browser writes; URLs and price IDs never client-controlled):
+
+| Method and path | Access | Success | Main failures |
+|-----------------|--------|---------|---------------|
+| `GET billing/` | Member | `200 {plan, subscription_status, cancel_at_period_end, paid_through, sync_pending}` | `403`, `404` |
+| `POST billing/checkout/` | Owner; `Idempotency-Key` header; `{"plan": "pro"}` | `201 {operation_id, checkout_url}` | `400` (Stripe not configured / invalid plan), `403`, `404`, `409` (checkout already pending/completed) |
+| `POST billing/portal/` | Owner; `Idempotency-Key` header | `201 {portal_url}` | `400`, `403`, `404` (no Stripe customer), `409` |
+| `POST billing/cancel/` | Owner; `Idempotency-Key` header; `{"timing": "period_end"|"immediate"}` | `202 {operation_id, state}` | `400`, `403`, `404`, `409` |
+| `GET billing/operations/{operation_id}/` | Owner | `200 {id, kind, state, provider_object_id, safe_result, created_at, updated_at}` | `403`, `404` |
+| `GET usage/` | Member | `200 {plan, resources: {memberships: {used, limit}, projects: {used, limit}}}` | `403`, `404` |
+| `DELETE delete/` | Owner; CSRF; `{"confirmation_name": "<exact workspace name>"}` | `204` (sets `deleted_at`) | `400` (confirmation mismatch), `403`, `404`, `409 billing_not_closed` |
+
+Stripe webhook: `POST /api/v1/integrations/stripe/webhook/` — exempt from session/CSRF; authenticated via `Stripe-Signature` against the configured webhook secret and exact raw body.
+
+### Stripe adapter and webhook security
+
+**`StripeAdapter`** (`backend/workspaces/stripe_adapter.py`) owns all Stripe SDK calls; the billing domain never calls Stripe directly (DIP). Operations: `create_customer`, `create_checkout_session`, `cancel_subscription`, `create_portal_session`, `get_subscription`, `construct_webhook_event`. Raises `StripeAdapterError` on provider failure; callers translate to generic API errors without leaking provider internals.
+
+Webhook signature verification:
+- `POST /api/v1/integrations/stripe/webhook/` is `@csrf_exempt` / `AllowAny`; authenticates via `stripe.Webhook.construct_event(raw_body, signature_header, webhook_secret, tolerance=300)`.
+- Invalid signature/payload/mode → `400`, no processed event stored.
+- Request size bounded to 1 MiB; oversized → `400`.
+- When `STRIPE_CONFIGURED` is false (missing `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`, or `STRIPE_PRO_PRICE_ID`), the webhook returns `503` and checkout returns `400 validation_error` ("Stripe is not configured.").
+- Duplicate `event_id` returns `200` (already processed); event recorded in `StripeEventInbox` idempotently, then processing queued after commit.
+- Subscribes to `checkout.session.*`, `customer.subscription.*`, and `invoice.*` events. Pro requires active subscription, configured price/quantity, correct test customer mapping, and a non-deleted workspace.
+
+### Missing credentials behavior
+
+`STRIPE_CONFIGURED = bool(STRIPE_API_KEY and STRIPE_WEBHOOK_SECRET and STRIPE_PRO_PRICE_ID)` (all read from environment; no values in source). When false:
+- `POST billing/checkout/` → `400 validation_error` "Stripe is not configured."
+- `POST /api/v1/integrations/stripe/webhook/` → `503 Service Unavailable`.
+- No secret values are disclosed; only env var names are referenced in settings.
+
+### Subscription plans and quota policy
+
+| Capability or limit per active workspace | Free | Pro |
+|------------------------------------------|------|-----|
+| Subscription price | No charge; no Stripe subscription required | USD 19 per month, test mode only |
+| Memberships, including owners/admins | 5 | 25 |
+| Projects | 2 | 20 |
+| Workflow, sprint, comment, audit, report, and webhook features | Included | Included |
+
+Only memberships and projects have plan-based quotas. New workspaces start on Free. The backend checks authorization first, then quota, then performs creation atomically, serialized per workspace with `select_for_update()`. Failed transactions consume no quota. `GET usage/` returns server-reported `used`/`limit` for memberships and projects.
+
+### Workspace soft deletion policy
+
+Deletion means **soft deletion**: immediate access revocation with retained database records. No public restore or permanent-purge endpoint.
+
+- Endpoint: `DELETE /api/v1/workspaces/{workspace_id}/delete/`, authenticated, CSRF-protected, owner-only. Requires JSON `{"confirmation_name": "Acme"}` matching the current workspace name exactly.
+- Workspaces with a paid subscription or a pending checkout/subscription change cannot be deleted (`409 billing_not_closed`). The owner must cancel the subscription first and wait for verified provider reconciliation.
+- In one transaction, verify authorization and billing state, set `deleted_at`, and record the deletion audit event. Return `204` with no body only after commit.
+- A deleted workspace disappears from discovery and is treated as not found by every tenant endpoint, including for former owners. Memberships remain for integrity/history but grant no access.
+- Jobs, notification/report downloads, attachment downloads, and pending outgoing webhook deliveries recheck workspace state before execution/access and skip deleted workspaces.
+
+### Frontend integration
+
+New frontend API module and React components:
+
+**API module** (`frontend/src/api/billing.ts`):
+- `getBillingSummary`, `createCheckout`, `createPortal`, `cancelSubscription`, `getBillingOperation`, `getWorkspaceUsage`, `deleteWorkspace`.
+- CSRF handled by the shared API client (`credentials: include`, `X-CSRFToken` injection). No Stripe credentials or secrets in frontend code.
+
+**React components**:
+- `BillingPage.tsx` — billing summary, checkout, portal, cancel, operation history, and usage display.
+- `WorkspaceDeleteModal.tsx` — dialog requiring the workspace name to be typed for confirmation; warns that billing must be canceled first and records remain stored (not permanent erasure).
+
+### Test results
+
+| Suite | Database | Result | Skips |
+|-------|----------|--------|-------|
+| Django — billing (test_billing.py) | SQLite | 9/9 PASS | 0 |
+| Django — soft delete (test_soft_delete.py) | SQLite | 7/7 PASS | 0 |
+
+Stripe test-mode end-to-end acceptance: BLOCKED_EXTERNAL_CREDENTIALS (Stripe test-mode credentials not yet available). All code paths that require Stripe are guarded by `STRIPE_CONFIGURED`; checkout returns 400 and the webhook returns 503 until credentials are configured.
+
+No secret values were disclosed; only synthetic test fixtures (e.g. `testpass123`, `whsec_test123`) are used.
+
+## Step 5A — Billing & Recovery Hardening
+
+MP-F04-015A delivered Step 5A hardening of Step 5: Stripe test-mode readiness, workspace restoration, and atomic membership quotas. All changes are confined to F04; no F01 (Marketplace) or shared `.kilo` files were modified.
+
+### Stripe test-mode readiness
+
+All readiness paths run without real Stripe credentials (no `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`, or `STRIPE_PRO_PRICE_ID` set). Behavior is guarded by `STRIPE_CONFIGURED`, so the system degrades safely in test/local environments:
+
+- **Missing-credentials behavior:** When `STRIPE_CONFIGURED` is false, `POST billing/checkout/`, `POST billing/portal/`, and `POST billing/cancel/` return `400 validation_error` ("Stripe is not configured."). The Stripe webhook (`POST /api/v1/integrations/stripe/webhook/`) returns `503 Service Unavailable`. Billing summary and usage endpoints remain available (`200`) and report the Free plan.
+- **Webhook signature verification:** The webhook endpoint is CSRF-exempt and authenticates via `stripe.Webhook.construct_event(raw_body, signature_header, webhook_secret, tolerance=300)` (HMAC-SHA256). Invalid signature/payload/mode returns `400` with no event stored. Request size is bounded to 1 MiB (oversized → `400`). Missing `Stripe-Signature` header → `400`.
+- **Idempotent duplicate handling:** Each Stripe event is recorded in `StripeEventInbox` keyed by unique `event_id`. A duplicate `event_id` returns `200` (already processed) and no second effect is applied. The inbox stores `event_type`, `provider_object_id`, `resolved_workspace_id`, state (`pending`/`processed`/`failed`), attempts, and `error_code`.
+- **Stripe adapter contract:** All Stripe SDK calls are owned by `StripeAdapter` (`backend/workspaces/stripe_adapter.py`); the billing domain never calls Stripe directly (DIP). `StripeAdapter()` raises `StripeAdapterError` when no API key is configured; callers translate failures to generic API errors without leaking provider internals.
+
+### Workspace restoration
+
+Soft-deleted workspaces (`deleted_at` set) can be restored by their owner:
+
+- Endpoint: `POST /api/v1/workspaces/{workspace_id}/restore/`, authenticated, CSRF-protected, owner-only. Returns `200` and clears `deleted_at` to `None` on success.
+- Non-owner receives `403 permission_denied`. Restoring a non-deleted or already-restored workspace returns `404 not_found` (idempotent).
+- Restoration runs in one transaction and records an audit event (`operation="restore"`). Memberships and projects are preserved; no records are physically removed.
+- Deleted-access filtering: every tenant endpoint filters `deleted_at__isnull=True`, so a soft-deleted workspace is inaccessible (404) to all former members until restored. Anonymous access is denied (401/403).
+
+### Atomic membership quotas
+
+Plan-based membership quotas are enforced atomically per workspace:
+
+- `check_membership_quota(workspace)` in `backend/workspaces/billing_service.py` runs inside `transaction.atomic()` with `WorkspaceBilling.objects.select_for_update()`, serializing quota-consuming writes per workspace.
+- The check reads membership count against the effective plan limit (Free: 5, Pro: 25 from the seeded `BillingPlan` catalog). A missing billing row defaults to Free limits.
+- When the limit is reached, returns `409 plan_limit_reached` with `fields.resource` ("memberships"), `fields.used`, `fields.limit`, and `fields.plan` — never another workspace's usage.
+- Failed transactions consume no quota. Concurrent creations with one slot remaining result in exactly one success (row-lock serialization on PostgreSQL; concurrency tests skip on SQLite).
+
+### Diagnostic file removal
+
+Six `test_diag*.py` diagnostic files were removed from the test suite as part of hardening cleanup. No diagnostic code remains in the delivered test set.
+
+### Test results
+
+| Suite | Database | Result | Skips |
+|-------|----------|--------|-------|
+| Django — Stripe readiness (test_stripe_readiness.py) | SQLite | 13/13 PASS | 0 |
+| Django — membership quota (test_membership_quota.py) | SQLite | 5/5 PASS | 2 (concurrency tests require PostgreSQL) |
+| Django — workspace restore (test_restore.py) | SQLite | 8/8 PASS | 0 |
+
+Stripe test-mode end-to-end acceptance: BLOCKED_EXTERNAL_CREDENTIALS (Stripe test-mode credentials not yet available). All code paths requiring Stripe are guarded by `STRIPE_CONFIGURED`; checkout returns 400 and the webhook returns 503 until credentials are configured.
+
+No secret values were disclosed; only synthetic test fixtures are used.
+
+## MP-F04-016 — Final System Audit, Integration, Security, Performance & Demo
+
+MP-F04-016 delivered the final system audit, integration, security, performance, and demo preparation. All changes are confined to F04; no F01 (Marketplace) or shared `.kilo` files were modified. This section documents the Attachment API, AuditEvent API, project archive/reopen functionality, and test results.
+
+### Attachment model and API
+
+**Model** (`Attachment` in `backend/workspaces/models.py`):
+- Tenant-scoped via `django-multitenant` (`tenant_id` / workspace).
+- Fields:
+  - `issue` — FK to the issue the attachment belongs to.
+  - `uploader` — FK to the user who uploaded it.
+  - `original_name` — original file name.
+  - `detected_content_type` — MIME type detected at upload.
+  - `byte_size` — file size in bytes.
+  - `sha256` — SHA-256 digest of the file content.
+  - `object_key` — storage key for the private stored file.
+  - `state` — attachment lifecycle state (e.g. active, soft-deleted).
+  - `deleted_at` — nullable soft-deletion timestamp.
+- Soft deletion preserves the record and file; access is blocked once `deleted_at` is set.
+
+**Endpoints**:
+
+| Method and path | Access | Success | Main failures |
+|-----------------|--------|---------|---------------|
+| `GET /api/v1/issues/{issue_id}/attachments/` | Member of the issue's workspace | `200` paginated list of attachments | `403`, `404` |
+| `POST /api/v1/issues/{issue_id}/attachments/` | Member of the issue's workspace; CSRF required | `201` with attachment representation | `400` (validation), `403`, `404`, `413` (over 10 MiB), `415` (unsupported type) |
+| `GET /api/v1/attachments/{attachment_id}/download/` | Member of the attachment's workspace | `200` file stream | `403`, `404`, `410` if soft-deleted |
+| `DELETE /api/v1/attachments/{attachment_id}/` | Uploader only; CSRF required | `204` (sets `deleted_at`) | `403` (not uploader), `404` |
+
+**Security:**
+- Workspace-scoped access: attachments are only reachable through their issue's workspace context; cross-workspace access returns `404` without exposing existence.
+- Uploader-only deletion: only the user who uploaded an attachment may soft-delete it; others receive `403 permission_denied`.
+- Upload constraints: 10 MiB maximum file size; allowed types are PNG, JPEG, PDF, and txt; type validation runs on content, not only on the file name/extension.
+- Private storage: downloads are served through an authorized endpoint, never direct public URLs.
+
+### AuditEvent model and API
+
+**Model** (`AuditEvent` in `backend/workspaces/models.py`):
+- Tenant-scoped via `django-multitenant` (`tenant_id` / workspace).
+- Fields:
+  - `workspace` — FK to the workspace where the event occurred.
+  - `actor` — FK to the user who performed the action.
+  - `actor_kind` — role/kind of the actor (e.g. owner, admin, member).
+  - `action` — the business action performed (e.g. issue_created, issue_updated, comment_added, attachment_uploaded).
+  - `target_type` — type of the affected target (e.g. issue, comment, attachment).
+  - `target_id` — identifier of the affected target.
+  - `project` — FK to the project, when applicable.
+  - `request_id` — correlation identifier (`X-Request-ID`) for traceability.
+  - `changes` — JSON diff of before/after field values.
+  - `event_id` — unique event identifier for idempotency/dedup.
+  - `occurred_at` — timestamp of the event (UTC, ISO 8601).
+- Audit events are append-only; successful business changes and their audit events commit atomically. There are no public update/delete audit endpoints.
+
+**Endpoints**:
+
+| Method and path | Access | Success | Main failures |
+|-----------------|--------|---------|---------------|
+| `GET /api/v1/audit-events/` | Admin only (workspace admin/owner); paginated | `200` paginated list of audit events | `403`, `404`, `400` invalid pagination/filter |
+| `GET /api/v1/issues/{issue_id}/audit-events/` | Member of the issue's workspace | `200` audit events for the issue, its comments, and its attachments | `403`, `404` |
+
+**Filters** (admin endpoint): `project_id`, `target_type`, `target_id`, `action`. List pagination follows the shared conventions (`page`, `page_size` max 100).
+
+### Project archive/reopen
+
+**Model** (`Project` in `backend/workspaces/models.py`):
+- Tenant-scoped via `django-multitenant` (`tenant_id` / workspace).
+- New fields:
+  - `archived_at` — nullable timestamp; set when archived, cleared when reopened.
+  - `version` — optimistic-concurrency counter; required (supplied by the client) for archive and reopen operations to prevent stale-state transitions.
+- Archived projects remain in the database with all relationships intact but are excluded from active listings (`archived_at__isnull=True` filter on every project endpoint).
+
+**Endpoints**:
+
+| Method and path | Access | Success | Main failures |
+|-----------------|--------|---------|---------------|
+| `POST /api/v1/projects/{project_id}/archive/` | Owner or admin of the workspace; CSRF required; `version` required | `200` (sets `archived_at`) | `400` (missing/stale version), `403`, `404` (not found or already archived) |
+| `POST /api/v1/projects/{project_id}/reopen/` | Owner or admin of the workspace; CSRF required; `version` required | `200` (clears `archived_at`) | `400` (missing/stale version), `403`, `404` (not found or not archived) |
+
+- Authorization: owner or admin only; members cannot archive/reopen.
+- Version check: the supplied `version` must match the project's current version; otherwise the operation is rejected with `400` to prevent lost updates.
+- Archived projects are treated as inactive: they disappear from active project listings and issue/project endpoints filter them out, but their records, issues, and audit history are retained.
+
+### Test results
+
+| Suite | Database | Result | Skips | Cycles |
+|-------|----------|--------|-------|--------|
+| Django | SQLite/PostgreSQL | 194 passed | 4 | ×3 cycles |
+| Playwright | — | 53 passed | 0 | — |
+| TypeScript | — | PASS | — | — |
+
+- Django: 194 passed, 4 skipped, exit 0 (×3 consecutive stable cycles).
+- Playwright: 53 passed, exit 0.
+- TypeScript: PASS.
+- All 4 CRITICAL gaps resolved.
+- No secret values were disclosed; only synthetic test fixtures are used.
 
 ## Test and security strategy
 

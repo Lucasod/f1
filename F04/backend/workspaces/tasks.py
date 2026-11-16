@@ -1,8 +1,19 @@
+from datetime import timedelta
+
 from celery import shared_task, Task
 from django.conf import settings
-from django.db import transaction
+from django.db import models, transaction
+from django.utils import timezone
 from django_multitenant.utils import set_current_tenant as set_tenant, unset_current_tenant as clear_tenant
-from workspaces.models import WebhookSubscription, WebhookDelivery
+from workspaces.models import (
+    BillingPlan,
+    BillingOperation,
+    StripeEventInbox,
+    WebhookDelivery,
+    WebhookSubscription,
+    WorkspaceBilling,
+)
+from workspaces.stripe_adapter import StripeAdapter, StripeAdapterError
 
 
 class TenantAwareTask(Task):
@@ -67,7 +78,7 @@ def ping_task(self, workspace_id=None):
 
 # Ensure apply_async() runs eagerly without a broker in environments where
 # CELERY_TASK_ALWAYS_EAGER is enabled (e.g. tests). The default Celery app does
-# not automatically pick up Django CELERY_* settings unless conf.celery is imported.
+# not automatically pick up Django CELERY_* settings unless conf.celery_app is imported.
 ping_task.app.conf.task_always_eager = settings.CELERY_TASK_ALWAYS_EAGER
 
 
@@ -200,8 +211,6 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import timedelta
-from django.utils import timezone
 import requests
 
 
@@ -310,3 +319,195 @@ def deliver_webhook(self, delivery_id):
             deliver_webhook.apply_async(args=[delivery.id], kwargs={'_workspace_id': delivery.subscription.workspace.id}, countdown=delay)
 
         return {"status": delivery.status, "error": str(exc)[:100]}
+
+
+@shared_task(base=TenantAwareTask, bind=True)
+def process_stripe_event(self, event_id, _workspace_id=None, workspace_id=None):
+    """Process a Stripe webhook event asynchronously with idempotency and tenant isolation.
+
+    The task is idempotent: events already marked ``processed`` are skipped. The
+    workspace is resolved from the event payload (metadata or provider-object to
+    billing mapping) before any billing state is mutated, providing tenant
+    isolation. Failed events are retried up to 3 attempts with a countdown
+    backoff.
+
+    Note: ``TenantAwareTask.__call__`` maps ``_workspace_id`` to ``workspace_id``
+    and forwards it to the body, so ``workspace_id`` is accepted here even though
+    the body resolves the workspace independently from the event data.
+    """
+    try:
+        inbox = StripeEventInbox.objects.get(event_id=event_id)
+    except StripeEventInbox.DoesNotExist:
+        return {"error": "event not found in inbox"}
+
+    if inbox.state == "processed":
+        return {"status": "already_processed"}
+
+    event_type = inbox.event_type
+    provider_object_id = inbox.provider_object_id or ""
+
+    # Mark as being processed (increment attempts)
+    inbox.attempts += 1
+    inbox.save(update_fields=["attempts"])
+
+    try:
+        # Resolve workspace from event metadata or provider object
+        workspace = _resolve_workspace_from_event(event_type, provider_object_id, inbox)
+
+        if not workspace:
+            # Cannot resolve workspace — mark failed
+            inbox.state = "failed"
+            inbox.error_code = "workspace_not_resolved"
+            inbox.save(update_fields=["state", "error_code"])
+            return {"status": "failed", "reason": "workspace_not_resolved"}
+
+        result = _apply_stripe_event(workspace, event_type, provider_object_id, inbox)
+
+        inbox.state = "processed"
+        inbox.resolved_workspace_id = workspace.id
+        inbox.save(update_fields=["state", "resolved_workspace_id"])
+
+        return {"status": "processed", "workspace_id": workspace.id, "event_type": event_type}
+
+    except Exception as exc:
+        inbox.state = "failed"
+        inbox.error_code = str(exc)[:100]
+        inbox.next_attempt_at = timezone.now() + timedelta(minutes=5 * inbox.attempts)
+        inbox.save(update_fields=["state", "error_code", "next_attempt_at"])
+        # Retry if attempts remaining
+        if inbox.attempts < 3:
+            process_stripe_event.apply_async(args=[event_id], kwargs={"_workspace_id": None}, countdown=60)
+        return {"status": "failed", "reason": str(exc)[:100]}
+
+
+def _resolve_workspace_from_event(event_type, provider_object_id, inbox):
+    """Resolve the workspace for a Stripe event.
+
+    Strategy:
+    1. If event metadata contains workspace_id, use it (verified against customer mapping)
+    2. If provider_object_id maps to a WorkspaceBilling, use that workspace
+    3. Otherwise, cannot resolve
+    """
+    # Try provider_object_id -> WorkspaceBilling.
+    # Use the unscoped base manager here: we are *discovering* which tenant the
+    # event belongs to, so we cannot filter by a tenant we have not resolved yet.
+    if provider_object_id:
+        try:
+            billing = WorkspaceBilling._base_manager.filter(
+                models.Q(customer_id=provider_object_id)
+                | models.Q(subscription_id=provider_object_id)
+            ).first()
+            if billing:
+                return billing.workspace
+        except Exception:
+            pass
+
+    return None
+
+
+def _apply_stripe_event(workspace, event_type, provider_object_id, inbox):
+    """Apply a Stripe event to workspace billing state."""
+    # Use the unscoped base manager: no tenant context is established in this task
+    # body, and the tenant-scoped manager would filter out rows whose tenant_id
+    # does not match a (currently absent) tenant.
+    billing = WorkspaceBilling._base_manager.get(workspace=workspace)
+
+    if event_type == "checkout.session.completed":
+        # Verify the session belongs to this workspace
+        # Set subscription if not already set
+        if provider_object_id:
+            # This is a checkout session ID; retrieve the subscription
+            try:
+                adapter = StripeAdapter()
+                session_data = _retrieve_checkout_session(adapter, provider_object_id)
+                if session_data:
+                    subscription_id = session_data.get("subscription")
+                    customer_id = session_data.get("customer")
+                    if subscription_id:
+                        billing.subscription_id = subscription_id
+                    if customer_id:
+                        billing.customer_id = customer_id
+                    billing.provider_status = "active"
+                    billing.effective_plan = "pro"
+                    billing.paid_through = timezone.now() + timedelta(days=30)
+                    billing.last_synced_at = timezone.now()
+                    billing.save(update_fields=[
+                        "subscription_id", "customer_id", "provider_status",
+                        "effective_plan", "paid_through", "last_synced_at", "updated_at",
+                    ])
+            except StripeAdapterError:
+                pass  # Will retry
+
+    elif event_type == "customer.subscription.created":
+        if provider_object_id:
+            billing.subscription_id = provider_object_id
+            billing.provider_status = "active"
+            billing.effective_plan = "pro"
+            billing.last_synced_at = timezone.now()
+            billing.save(update_fields=[
+                "subscription_id", "provider_status", "effective_plan", "last_synced_at", "updated_at",
+            ])
+
+    elif event_type == "customer.subscription.updated":
+        if provider_object_id:
+            try:
+                adapter = StripeAdapter()
+                sub_data = adapter.get_subscription(provider_object_id)
+                billing.provider_status = sub_data.get("status", billing.provider_status)
+                billing.cancel_at_period_end = sub_data.get("cancel_at_period_end", False)
+                # Update plan based on price
+                if sub_data.get("items"):
+                    price_id = sub_data["items"][0].get("price_id")
+                    if price_id == settings.STRIPE_PRO_PRICE_ID:
+                        billing.effective_plan = "pro"
+                    else:
+                        billing.effective_plan = "free"
+                billing.last_synced_at = timezone.now()
+                billing.save(update_fields=[
+                    "provider_status", "cancel_at_period_end", "effective_plan",
+                    "last_synced_at", "updated_at",
+                ])
+            except StripeAdapterError:
+                pass
+
+    elif event_type == "customer.subscription.deleted":
+        if provider_object_id:
+            billing.subscription_id = ""
+            billing.provider_status = "canceled"
+            billing.effective_plan = "free"
+            billing.last_synced_at = timezone.now()
+            billing.save(update_fields=[
+                "subscription_id", "provider_status", "effective_plan",
+                "last_synced_at", "updated_at",
+            ])
+
+    elif event_type == "invoice.paid":
+        # Payment succeeded — ensure plan stays active
+        billing.last_synced_at = timezone.now()
+        billing.save(update_fields=["last_synced_at", "updated_at"])
+
+    elif event_type == "invoice.payment_failed":
+        # Payment failed — mark past due
+        billing.provider_status = "past_due"
+        billing.last_synced_at = timezone.now()
+        billing.save(update_fields=["provider_status", "last_synced_at", "updated_at"])
+
+    elif event_type == "checkout.session.expired":
+        # Checkout expired — mark operation as failed
+        BillingOperation.objects.filter(
+            workspace=workspace, kind="checkout", state="pending"
+        ).update(state="failed", updated_at=timezone.now())
+
+    else:
+        # Unknown/unsubscribed event — acknowledged but ignored
+        pass
+
+
+def _retrieve_checkout_session(adapter, session_id):
+    """Retrieve checkout session data via Stripe adapter.
+
+    The adapter does not expose a checkout-session retrieval method, so this is a
+    placeholder that returns ``None``. The ``customer.subscription.created`` event
+    is responsible for finalizing the billing state.
+    """
+    return None

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, Notification, Report, WebhookSubscription, WebhookDelivery
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, Notification, Report, WebhookSubscription, WebhookDelivery, Attachment, AuditEvent
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -223,7 +223,7 @@ class SprintSerializer(serializers.ModelSerializer):
         model = Sprint
         fields = [
             "id", "name", "project_name", "project_key", "project_id",
-            "status", "start_date", "end_date", "created_at",
+            "status", "start_at", "end_at", "started_at", "completed_at", "version", "created_at",
         ]
         read_only_fields = ["id", "project_name", "project_key", "project_id", "created_at"]
 
@@ -306,3 +306,39 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "subscription", "delivery_id", "status",
                             "attempt", "response_status", "response_body",
                             "error_message", "created_at", "updated_at", "next_attempt_at"]
+
+
+class AttachmentSerializer(serializers.ModelSerializer):
+    """Serializer for attachment representation (read-only object_key)."""
+
+    class Meta:
+        model = Attachment
+        fields = [
+            "id", "issue", "uploader", "original_name", "detected_content_type",
+            "byte_size", "sha256", "state", "version", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "uploader", "original_name", "detected_content_type",
+            "byte_size", "sha256", "object_key", "state", "version",
+            "created_at", "updated_at",
+        ]
+
+
+class AttachmentCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating an attachment (multipart upload)."""
+
+    class Meta:
+        model = Attachment
+        fields = ["issue", "original_name", "detected_content_type", "byte_size", "sha256"]
+
+
+class AuditEventSerializer(serializers.ModelSerializer):
+    """Serializer for audit event representation."""
+
+    class Meta:
+        model = AuditEvent
+        fields = [
+            "id", "event_id", "action", "target_type", "target_id",
+            "project", "request_id", "changes", "occurred_at",
+        ]
+        read_only_fields = fields  # All fields read-only; audit events are append-only

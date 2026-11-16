@@ -2,6 +2,7 @@ from django.db import models
 from django_multitenant.mixins import TenantModelMixin
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
+import uuid
 
 User = get_user_model()
 
@@ -17,6 +18,8 @@ class Workspace(TenantModelMixin, models.Model):
     name = models.CharField("name", max_length=100)
 
     created_at = models.DateTimeField("created at", auto_now_add=True)
+
+    deleted_at = models.DateTimeField("deleted at", null=True, blank=True)
 
     class Meta:
         ordering = ["id"]
@@ -79,6 +82,17 @@ class Project(TenantModelMixin, models.Model):
         "next issue number",
         default=1,
         help_text="Monotonic counter for server-allocated issue numbers",
+    )
+    version = models.IntegerField(
+        "version",
+        default=1,
+        help_text="Optimistic locking version for archive/reopen operations",
+    )
+    archived_at = models.DateTimeField(
+        "archived at",
+        null=True,
+        blank=True,
+        help_text="Set/cleared only by archive/reopen commands",
     )
     created_at = models.DateTimeField("created at", auto_now_add=True)
 
@@ -184,6 +198,12 @@ class Board(TenantModelMixin, models.Model):
     )
     created_at = models.DateTimeField("created at", auto_now_add=True)
 
+    version = models.IntegerField(
+        "version",
+        default=1,
+        help_text="Optimistic locking version for board metadata updates",
+    )
+
     class Meta:
         ordering = ["id"]
         verbose_name = "board"
@@ -234,6 +254,50 @@ class WorkflowStatus(TenantModelMixin, models.Model):
         return f"{self.board.project.key}-{self.board.name}: {self.name}"
 
 
+class WorkflowTransition(TenantModelMixin, models.Model):
+    """A directed workflow transition between two statuses on a board."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField(
+        "tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation"
+    )
+
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        verbose_name="board",
+        related_name="workflow_transitions",
+    )
+    from_status_id = models.ForeignKey(
+        WorkflowStatus,
+        on_delete=models.CASCADE,
+        verbose_name="from status",
+        related_name="outgoing_transitions",
+    )
+    to_status_id = models.ForeignKey(
+        WorkflowStatus,
+        on_delete=models.CASCADE,
+        verbose_name="to status",
+        related_name="incoming_transitions",
+    )
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "workflow transition"
+        verbose_name_plural = "workflow transitions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["board", "from_status_id", "to_status_id"],
+                name="unique_workflow_transition_per_board",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.board.project.key} {self.from_status_id.name} → {self.to_status_id.name}"
+
+
 class Sprint(TenantModelMixin, models.Model):
     """A sprint within a project workspace."""
 
@@ -262,9 +326,12 @@ class Sprint(TenantModelMixin, models.Model):
         related_name="sprints",
     )
     status = models.CharField("status", max_length=20, choices=STATUS_CHOICES, default="planned")
-    start_date = models.DateField("start date", null=True, blank=True)
-    end_date = models.DateField("end date", null=True, blank=True)
+    start_at = models.DateTimeField("start at", null=True, blank=True, help_text="Planned start date/time (UTC)")
+    end_at = models.DateTimeField("end at", null=True, blank=True, help_text="Planned end date/time (UTC)")
+    started_at = models.DateTimeField("started at", null=True, blank=True, help_text="Server set when sprint starts; null when planned")
+    completed_at = models.DateTimeField("completed at", null=True, blank=True, help_text="Server set when sprint completes; null when planned/active")
     created_at = models.DateTimeField("created at", auto_now_add=True)
+    version = models.IntegerField("version", default=1, help_text="Optimistic locking version")
 
     class Meta:
         ordering = ["id"]
@@ -627,3 +694,290 @@ class WebhookDelivery(TenantModelMixin, models.Model):
 
     def __str__(self):
         return f"Delivery {self.delivery_id} for {self.event_type}"
+
+
+class BillingPlan(TenantModelMixin, models.Model):
+    """Application-owned plan catalog (Free/Pro). Not Stripe-configured."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    PLAN_CHOICES = [
+        ("free", "Free"),
+        ("pro", "Pro"),
+    ]
+
+    plan_id = models.CharField("plan id", max_length=20, choices=PLAN_CHOICES, unique=True)
+    name = models.CharField("name", max_length=50)
+    description = models.TextField("description", blank=True, default="")
+    stripe_price_id = models.CharField("Stripe price id", max_length=200, blank=True, default="")
+    max_memberships = models.PositiveIntegerField("max memberships")
+    max_projects = models.PositiveIntegerField("max projects")
+    price_cents = models.PositiveIntegerField("price in cents", default=0)
+    currency = models.CharField("currency", max_length=3, default="usd")
+    interval = models.CharField("billing interval", max_length=20, default="month")
+    is_active = models.BooleanField("active", default=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+
+    class Meta:
+        ordering = ["plan_id"]
+        verbose_name = "billing plan"
+        verbose_name_plural = "billing plans"
+
+    def __str__(self):
+        return f"{self.name} ({self.plan_id})"
+
+
+class WorkspaceBilling(TenantModelMixin, models.Model):
+    """Billing state for a workspace. One-to-one with Workspace."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    workspace = models.OneToOneField(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="billing",
+    )
+    customer_id = models.CharField("Stripe customer id", max_length=200, blank=True, null=True, unique=True, default=None)
+    subscription_id = models.CharField("Stripe subscription id", max_length=200, blank=True, null=True, unique=True, default=None)
+    provider_status = models.CharField("provider status", max_length=50, blank=True, default="")
+    effective_plan = models.CharField("effective plan", max_length=20, choices=[("free", "Free"), ("pro", "Pro")], default="free")
+    cancel_at_period_end = models.BooleanField("cancel at period end", default=False)
+    paid_through = models.DateTimeField("paid through", null=True, blank=True)
+    last_synced_at = models.DateTimeField("last synced at", null=True, blank=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+
+    class Meta:
+        verbose_name = "workspace billing"
+        verbose_name_plural = "workspace billing"
+
+    def __str__(self):
+        return f"Billing for {self.workspace.name} ({self.effective_plan})"
+
+
+class BillingOperation(models.Model):
+    """Durable record of a billing operation (checkout, cancel, portal)."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="billing_operations",
+    )
+    kind = models.CharField("operation kind", max_length=20, choices=[("checkout", "Checkout"), ("cancel", "Cancel"), ("portal", "Portal")])
+    idempotency_key = models.CharField("idempotency key", max_length=200)
+    state = models.CharField(
+        "state",
+        max_length=20,
+        choices=[("pending", "Pending"), ("completed", "Completed"), ("failed", "Failed"), ("unknown", "Unknown")],
+        default="pending",
+    )
+    provider_object_id = models.CharField("provider object id", max_length=200, blank=True, default="")
+    safe_result = models.JSONField("safe result", default=dict, blank=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "kind", "idempotency_key"],
+                name="unique_billing_operation_per_workspace_kind_key",
+            ),
+        ]
+        verbose_name = "billing operation"
+        verbose_name_plural = "billing operations"
+
+    def __str__(self):
+        return f"{self.kind} {self.id} ({self.state})"
+
+
+class StripeEventInbox(TenantModelMixin, models.Model):
+    """Durable inbox for Stripe webhook events (idempotent processing)."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True)
+
+    event_id = models.CharField("provider event id", max_length=200, unique=True)
+    event_type = models.CharField("event type", max_length=100)
+    received_at = models.DateTimeField("received at", auto_now_add=True)
+    provider_object_id = models.CharField("provider object id", max_length=200, blank=True, default="")
+    resolved_workspace_id = models.PositiveBigIntegerField("resolved workspace id", null=True, blank=True)
+    state = models.CharField(
+        "state",
+        max_length=20,
+        choices=[("pending", "Pending"), ("processed", "Processed"), ("failed", "Failed")],
+        default="pending",
+    )
+    attempts = models.PositiveIntegerField("attempts", default=0)
+    next_attempt_at = models.DateTimeField("next attempt at", null=True, blank=True)
+    error_code = models.CharField("error code", max_length=100, blank=True, default="")
+
+    class Meta:
+        ordering = ["-received_at"]
+        verbose_name = "Stripe event inbox"
+        verbose_name_plural = "Stripe event inboxes"
+
+    def __str__(self):
+        return f"Stripe event {self.event_id} ({self.event_type})"
+
+
+class Attachment(TenantModelMixin, models.Model):
+    """An attachment on an issue, stored in private object storage."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField(
+        "tenant id",
+        null=True,
+        blank=True,
+        help_text="Tenant identifier for multi-tenant isolation",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="workspace_attachments",
+    )
+    issue = models.ForeignKey(
+        Issue,
+        on_delete=models.CASCADE,
+        verbose_name="issue",
+        related_name="attachments",
+    )
+    uploader = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="uploader",
+        related_name="uploads",
+    )
+    original_name = models.CharField(
+        "original name",
+        max_length=150,
+        help_text="Display-only filename, stripped of path/control characters, 1-150 characters",
+    )
+    detected_content_type = models.CharField(
+        "detected content type",
+        max_length=100,
+        help_text="MIME type detected from file content inspection",
+    )
+    byte_size = models.PositiveBigIntegerField(
+        "byte size",
+        help_text="File size in bytes (1-10,485,760 = 10 MiB)",
+    )
+    sha256 = models.CharField(
+        "sha256",
+        max_length=64,
+        help_text="SHA-256 hex digest of file content",
+    )
+    object_key = models.CharField(
+        "object key",
+        max_length=200,
+        unique=True,
+        help_text="Random UUID object key under a workspace prefix, never derived from supplied filename, never in public responses",
+    )
+    STATE_CHOICES = [
+        ("pending", "Pending"),
+        ("ready", "Ready"),
+        ("failed", "Failed"),
+        ("deleted", "Deleted"),
+    ]
+    state = models.CharField(
+        "state",
+        max_length=20,
+        choices=STATE_CHOICES,
+        default="pending",
+    )
+    deleted_at = models.DateTimeField("deleted at", null=True, blank=True)
+    created_at = models.DateTimeField("created at", auto_now_add=True)
+    updated_at = models.DateTimeField("updated at", auto_now=True)
+    version = models.IntegerField(
+        "version", default=1, help_text="Optimistic locking version"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "attachment"
+        verbose_name_plural = "attachments"
+        indexes = [
+            models.Index(fields=["workspace", "issue", "state", "id"]),
+        ]
+
+    def __str__(self):
+        return f"Attachment {self.original_name} on #{self.issue.number}"
+
+
+class AuditEvent(TenantModelMixin, models.Model):
+    """Append-only audit event record. Immutable through application APIs."""
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
+
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        verbose_name="workspace",
+        related_name="audit_events",
+    )
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="actor",
+        related_name="audit_events",
+    )
+    actor_kind = models.CharField(
+        "actor kind",
+        max_length=20,
+        choices=[("user", "User"), ("system", "System"), ("stripe", "Stripe")],
+        default="user",
+    )
+    action = models.CharField("action", max_length=100, help_text="Stable action code (e.g., workspace.create, issue.transition)")
+    target_type = models.CharField("target type", max_length=50, help_text="Type of the target resource (e.g., workspace, project, issue)")
+    target_id = models.PositiveBigIntegerField("target id", help_text="ID of the target resource")
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name="project",
+        related_name="audit_events",
+    )
+    request_id = models.CharField("request id", max_length=100, blank=True, default="", help_text="Correlation ID for the originating request")
+    changes = models.JSONField("changes", default=dict, blank=True, help_text="Allowlisted before/after scalar values and relationship IDs")
+    event_id = models.UUIDField("event id", unique=True, default=uuid.uuid4, editable=False, help_text="Unique event identifier")
+    occurred_at = models.DateTimeField("occurred at", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-occurred_at"]
+        verbose_name = "audit event"
+        verbose_name_plural = "audit events"
+        indexes = [
+            models.Index(fields=["workspace", "occurred_at", "id"]),
+            models.Index(fields=["workspace", "project", "occurred_at", "id"]),
+        ]
+
+    def __str__(self):
+        return f"AuditEvent {self.action} on {self.target_type}#{self.target_id}"

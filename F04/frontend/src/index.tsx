@@ -35,6 +35,7 @@ import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { NotificationList } from "./components/notifications/NotificationList";
 import { ReportList } from "./components/reports/ReportList";
 import { WebhookList } from "./components/webhooks/WebhookList";
+import { BillingPage } from "./components/billing/BillingPage";
 
 /**
  * TopBar — persistent header shown on every page.
@@ -181,6 +182,20 @@ function WebhooksRoute() {
 }
 
 /**
+ * BillingRoute — billing and subscription management for the selected workspace.
+ */
+function BillingRoute() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const id = workspaceId ? Number(workspaceId) : null;
+  return (
+    <div className="page billing-page">
+      <h1>Billing</h1>
+      {id != null ? <BillingPage /> : <div>Select a workspace.</div>}
+    </div>
+  );
+}
+
+/**
  * LoginRoute — sign in, redirecting to /workspaces when already authenticated.
  */
 function LoginRoute() {
@@ -245,6 +260,14 @@ function App() {
             element={
               <RequireAuth>
                 <WebhooksRoute />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/workspaces/:workspaceId/billing"
+            element={
+              <RequireAuth>
+                <BillingRoute />
               </RequireAuth>
             }
           />

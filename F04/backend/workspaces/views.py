@@ -9,20 +9,31 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import exception_handler as drf_exception_handler
 from django.contrib.auth import authenticate, login as auth_login, get_user_model
+from django.conf import settings
 from django.http import Http404
 from django.db import transaction
+from django.utils import timezone
 from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_exempt
 from django.db.models import F, Q
 
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery, WorkspaceBilling, BillingPlan, BillingOperation, StripeEventInbox, Attachment, AuditEvent
 from .serializers import (
     WorkspaceSerializer, MembershipSerializer, MembershipCreateSerializer,
     ProjectSerializer, BoardSerializer, BoardCreateSerializer,
     WorkflowStatusSerializer, IssueSerializer, SprintSerializer, CommentSerializer, NotificationSerializer,
     ReportSerializer, ReportCreateSerializer,
     WebhookSubscriptionSerializer, WebhookSubscriptionCreateSerializer, WebhookDeliverySerializer,
+    AttachmentSerializer, AuditEventSerializer,
 )
 from .tasks import enqueue_after_commit, generate_report
+from .stripe_adapter import StripeAdapter, StripeAdapterError
+from .billing_service import (
+    get_or_create_workspace_billing,
+    create_billing_operation,
+    record_stripe_event,
+    check_project_quota,
+)
 
 
 User = get_user_model()
@@ -210,6 +221,13 @@ def create_workspace(request):
 
         # Create the owner membership for the current user
         user = request.user
+
+        # Membership quota check (atomic, inside transaction)
+        from workspaces.billing_service import check_membership_quota
+        quota_ok, quota_error, quota_status = check_membership_quota(workspace)
+        if not quota_ok:
+            return Response(quota_error, status=quota_status)
+
         Membership.objects.create(
             user=user,
             workspace=workspace,
@@ -251,7 +269,9 @@ def list_workspaces(request):
     Returns only the requesting user's memberships and associated workspaces.
     """
     user = request.user
-    memberships = user.memberships.select_related("workspace")
+    memberships = user.memberships.select_related("workspace").filter(
+        workspace__deleted_at__isnull=True
+    )
     workspaces = [m.workspace for m in memberships]
     serializer = WorkspaceSerializer(
         workspaces,
@@ -294,7 +314,7 @@ def rename_workspace(request, workspace_id):
     # Verify the workspace exists and the caller is a member
     user = request.user
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         return Response(
             {"error": {"code": "not_found", "message": "Workspace not found."}},
@@ -359,7 +379,7 @@ def workspace_detail(request, workspace_id):
     """
     user = request.user
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         raise Http404("Workspace not found")
 
@@ -379,6 +399,143 @@ def workspace_detail(request, workspace_id):
             "error": None,
             "workspace": serializer.data,
         }
+    )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_workspace(request, workspace_id):
+    """Soft-delete a workspace.
+
+    Owner-only, CSRF-protected. Requires JSON {"confirmation_name": "Acme"}
+    matching the current workspace name exactly. Blocks deletion if billing
+    is paid/pending (409 billing_not_closed).
+    """
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check ownership
+    membership = Membership.objects.filter(
+        user=user, workspace=workspace, role="owner"
+    ).first()
+    if not membership:
+        return Response(
+            {
+                "error": {
+                    "code": "permission_denied",
+                    "message": "Only workspace owners may delete a workspace.",
+                }
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Validate confirmation
+    confirmation_name = request.data.get("confirmation_name", "").strip()
+    if confirmation_name != workspace.name:
+        return Response(
+            {
+                "error": {
+                    "code": "validation_error",
+                    "message": "Confirmation name does not match workspace name.",
+                    "fields": {
+                        "confirmation_name": [
+                            "Must match the workspace name exactly."
+                        ]
+                    },
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check billing state — paid/pending billing blocks deletion
+    billing = WorkspaceBilling.objects.filter(workspace=workspace).first()
+    if billing and billing.effective_plan == "pro" and billing.provider_status in (
+        "active",
+        "past_due",
+        "trialing",
+    ):
+        return Response(
+            {
+                "error": {
+                    "code": "billing_not_closed",
+                    "message": "Workspace deletion blocked by paid or pending billing. Cancel the subscription first.",
+                    "fields": {},
+                }
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    with transaction.atomic():
+        workspace.deleted_at = timezone.now()
+        workspace.save(update_fields=["deleted_at"])
+
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            operation="delete",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Workspace soft-deleted",
+        )
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def restore_workspace(request, workspace_id):
+    """Restore a soft-deleted workspace. Owner only, CSRF-protected."""
+    user = request.user
+    # Narrowly scoped lookup: only deleted workspaces (not ordinary active queryset)
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=False)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Owner-only authorization
+    membership = Membership.objects.filter(user=user, workspace=workspace, role="owner").first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners may restore a workspace."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    with transaction.atomic():
+        workspace.deleted_at = None
+        workspace.save(update_fields=["deleted_at"])
+
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            operation="restore",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Workspace restored",
+        )
+
+    return Response(
+        {
+            "error": None,
+            "workspace": {
+                "id": workspace.id,
+                "name": workspace.name,
+                "deleted_at": None,
+            }
+        },
+        status=status.HTTP_200_OK,
     )
 
 
@@ -409,7 +566,7 @@ def create_project(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         return Response(
             {
@@ -472,6 +629,11 @@ def create_project(request):
         )
 
     with transaction.atomic():
+        # Quota check: lock workspace billing row and verify project limit
+        quota_ok, quota_error, quota_status = check_project_quota(workspace)
+        if not quota_ok:
+            return Response(quota_error, status=quota_status)
+
         # Create the project
         project = Project.objects.create(
             key=key,
@@ -522,7 +684,9 @@ def list_projects(request):
     Returns pagination-compatible results with optional filters.
     """
     user = request.user
-    memberships = user.memberships.select_related("workspace")
+    memberships = user.memberships.select_related("workspace").filter(
+        workspace__deleted_at__isnull=True
+    )
     workspaces = [m.workspace for m in memberships]
     projects = Project.objects.filter(workspace__in=workspaces).select_related("workspace")
 
@@ -774,7 +938,9 @@ def list_issues(request):
     """
     user = request.user
     # Get issues from user's workspace projects
-    memberships = user.memberships.select_related("workspace")
+    memberships = user.memberships.select_related("workspace").filter(
+        workspace__deleted_at__isnull=True
+    )
     workspaces = [m.workspace for m in memberships]
 
     # Cross-workspace isolation: if project_id is provided, user must be a member
@@ -1466,7 +1632,7 @@ def list_notifications(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         return Response(
             {"error": {"code": "not_found", "message": "Workspace not found."}},
@@ -1505,7 +1671,7 @@ def notification_unread_count(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         return Response(
             {"error": {"code": "not_found", "message": "Workspace not found."}},
@@ -1584,38 +1750,32 @@ def notification_read_bulk(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def list_sprints(request):
+def list_sprints(request, project_id):
     """List sprints for a project.
 
-    Query param project_id filters sprints to a specific project.
-    Returns sprints for projects in the user's workspaces.
+    project_id comes from the URL path (GET projects/{project_id}/sprints/).
     """
     user = request.user
-    project_id = request.query_params.get("project_id", None)
+    # project_id comes from URL path
+    pass  # project_id is already available from URL kwargs
 
-    if project_id:
-        try:
-            project = Project.objects.get(id=project_id)
-            # Check membership: user must be member of the project's workspace
-            has_membership = Membership.objects.filter(
-                user=user, workspace=project.workspace
-            ).exists()
-            if not has_membership:
-                return Response(
-                    {"error": {"code": "permission_denied", "message": "Cross-workspace access denied. You are not a member of this project's workspace."}},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        except Project.DoesNotExist:
-            return Response(
-                {"error": {"code": "not_found", "message": "Project not found."}},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        sprints = Sprint.objects.filter(project=project).select_related("project", "workspace")
-    else:
-        # List sprints from user's workspace projects
-        memberships = user.memberships.select_related("workspace")
-        workspaces = [m.workspace for m in memberships]
-        sprints = Sprint.objects.filter(workspace__in=workspaces).select_related("project", "workspace")
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Project not found."}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Check membership: user must be member of the project's workspace
+    has_membership = Membership.objects.filter(
+        user=user, workspace=project.workspace
+    ).exists()
+    if not has_membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Cross-workspace access denied. You are not a member of this project's workspace."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    sprints = Sprint.objects.filter(project=project).select_related("project", "workspace")
 
     serializer = SprintSerializer(sprints, many=True, context={"request": request})
     return Response(
@@ -1628,25 +1788,16 @@ def list_sprints(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_sprint(request):
+def create_sprint(request, project_id):
     """Create a new sprint.
 
     Only owners/admins of the project's workspace can create sprints.
-    Body: {"name": "Sprint Name", "project_id": 1, "status": "planned"}
+    project_id comes from the URL path (POST projects/{project_id}/sprints/).
+    Body: {"name": "Sprint Name", "status": "planned"}
     """
     user = request.user
-    project_id = request.data.get("project_id", None)
-
-    if not project_id:
-        return Response(
-            {
-                "error": {
-                    "code": "validation_error",
-                    "message": "Missing required parameter: project_id.",
-                }
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    # project_id comes from URL path
+    pass  # project_id is already available from URL kwargs
 
     try:
         project = Project.objects.get(id=project_id)
@@ -1719,7 +1870,7 @@ def update_sprint(request, sprint_id):
     """Update a sprint.
 
     Only owners/admins of the sprint's project workspace can update.
-    Body: {"name": "New Name", "status": "active", "start_date": "2026-01-01", "end_date": "2026-12-31"}
+    Body: {"name": "New Name", "status": "active", "start_at": "2026-01-01", "end_at": "2026-12-31"}
     """
     user = request.user
 
@@ -1741,8 +1892,8 @@ def update_sprint(request, sprint_id):
 
     name = request.data.get("name", None)
     sprint_status = request.data.get("status", None)
-    start_date = request.data.get("start_date", None)
-    end_date = request.data.get("end_date", None)
+    start_at = request.data.get("start_at", None)
+    end_at = request.data.get("end_at", None)
 
     if name is not None:
         name = name.strip()
@@ -1764,11 +1915,11 @@ def update_sprint(request, sprint_id):
         if sprint_status in status_choices:
             sprint.status = sprint_status
 
-    if start_date is not None:
-        sprint.start_date = start_date
+    if start_at is not None:
+        sprint.start_at = start_at
 
-    if end_date is not None:
-        sprint.end_date = end_date
+    if end_at is not None:
+        sprint.end_at = end_at
 
     sprint.save()
 
@@ -1878,7 +2029,7 @@ def create_report(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        workspace = Workspace.objects.get(id=workspace_id)
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
     except Workspace.DoesNotExist:
         return Response(
             {"error": {"code": "not_found", "message": "Workspace not found."}},
@@ -1996,7 +2147,7 @@ def webhook_subscriptions(request):
         if not workspace_id:
             return Response({"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            workspace = Workspace.objects.get(id=workspace_id)
+            workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
         except Workspace.DoesNotExist:
             return Response({"error": {"code": "not_found", "message": "Workspace not found."}}, status=status.HTTP_404_NOT_FOUND)
         if not Membership.objects.filter(user=user, workspace=workspace).exists():
@@ -2009,7 +2160,7 @@ def webhook_subscriptions(request):
         if not workspace_id:
             return Response({"error": {"code": "validation_error", "message": "Missing workspace_id.", "fields": {}}}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            workspace = Workspace.objects.get(id=workspace_id)
+            workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
         except Workspace.DoesNotExist:
             return Response({"error": {"code": "not_found", "message": "Workspace not found."}}, status=status.HTTP_404_NOT_FOUND)
         if not Membership.objects.filter(user=user, workspace=workspace).exists():
@@ -2070,3 +2221,1093 @@ def webhook_deliveries(request, subscription_id):
     deliveries = WebhookDelivery.objects.filter(subscription=subscription).order_by("-created_at")
     serializer = WebhookDeliverySerializer(deliveries, many=True, context={"request": request})
     return Response({"error": None, "results": serializer.data})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def billing_summary(request, workspace_id):
+    """GET /api/v1/workspaces/{workspace_id}/billing/ — Member only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view billing."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    billing = get_or_create_workspace_billing(workspace)
+    return Response(
+        {
+            "error": None,
+            "billing": {
+                "plan": billing.effective_plan,
+                "subscription_status": billing.provider_status,
+                "cancel_at_period_end": billing.cancel_at_period_end,
+                "paid_through": billing.paid_through.isoformat() if billing.paid_through else None,
+                "sync_pending": billing.last_synced_at is None,
+            }
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def billing_checkout(request, workspace_id):
+    """POST /api/v1/workspaces/{workspace_id}/billing/checkout/ — Owner only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace, role="owner").exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners may manage billing."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    # Check idempotency key
+    idempotency_key = request.headers.get("Idempotency-Key", "")
+    if not idempotency_key:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing Idempotency-Key header.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    plan = request.data.get("plan", "")
+    if plan != "pro":
+        return Response(
+            {"error": {"code": "validation_error", "message": "Only 'pro' plan is supported.", "fields": {"plan": ["Invalid plan."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not settings.STRIPE_CONFIGURED:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Check for existing pending/completed checkout
+    existing = BillingOperation.objects.filter(
+        workspace=workspace, kind="checkout",
+        state__in=["pending", "completed"],
+    ).first()
+    if existing:
+        return Response(
+            {"error": {"code": "validation_error", "message": "A checkout operation is already pending or completed.", "fields": {}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    # Create operation
+    operation = create_billing_operation(workspace, "checkout", idempotency_key)
+    if not operation:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Idempotency key already used.", "fields": {}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    try:
+        adapter = StripeAdapter()
+        customer_id = adapter.create_customer(
+            idempotency_key=f"ws-{workspace.id}-cust",
+            metadata={"workspace_id": str(workspace.id), "workspace_name": workspace.name},
+        )
+        # Save customer_id
+        billing = get_or_create_workspace_billing(workspace)
+        billing.customer_id = customer_id
+        billing.save(update_fields=["customer_id", "updated_at"])
+        result = adapter.create_checkout_session(
+            customer_id=customer_id,
+            price_id=settings.STRIPE_PRO_PRICE_ID,
+            success_url=settings.STRIPE_SUCCESS_URL,
+            cancel_url=settings.STRIPE_CANCEL_URL,
+            metadata={"workspace_id": str(workspace.id), "operation_id": str(operation.id)},
+        )
+        operation.provider_object_id = result["session_id"]
+        operation.state = "completed"
+        operation.safe_result = {
+            "session_id": result["session_id"],
+            "session_url": result["session_url"],
+            "expires_at": result.get("expires_at"),
+        }
+        operation.save(update_fields=["provider_object_id", "state", "safe_result", "updated_at"])
+        return Response(
+            {
+                "error": None,
+                "operation": {
+                    "id": str(operation.id),
+                    "kind": operation.kind,
+                    "state": operation.state,
+                    "checkout_url": result["session_url"],
+                }
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    except StripeAdapterError as exc:
+        operation.state = "failed"
+        operation.safe_result = {"error": str(exc)[:500]}
+        operation.save(update_fields=["state", "safe_result", "updated_at"])
+        return Response(
+            {"error": {"code": "validation_error", "message": "Checkout could not be created.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def billing_portal(request, workspace_id):
+    """POST /api/v1/workspaces/{workspace_id}/billing/portal/ — Owner only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace, role="owner").exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners may access the billing portal."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    billing = get_or_create_workspace_billing(workspace)
+    if not settings.STRIPE_CONFIGURED:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not billing.customer_id:
+        return Response(
+            {"error": {"code": "not_found", "message": "No Stripe customer found for this workspace.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    idempotency_key = request.headers.get("Idempotency-Key", "")
+    if not idempotency_key:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing Idempotency-Key header.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    operation = create_billing_operation(workspace, "portal", idempotency_key)
+    if not operation:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Idempotency key already used.", "fields": {}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    try:
+        adapter = StripeAdapter()
+        result = adapter.create_portal_session(
+            customer_id=billing.customer_id,
+            return_url=settings.STRIPE_SUCCESS_URL,
+        )
+        operation.provider_object_id = result.get("portal_url", "")
+        operation.state = "completed"
+        operation.safe_result = result
+        operation.save(update_fields=["provider_object_id", "state", "safe_result", "updated_at"])
+        return Response(
+            {"error": None, "operation": {"id": str(operation.id), "kind": operation.kind, "state": operation.state, "portal_url": result["portal_url"]}},
+            status=status.HTTP_201_CREATED,
+        )
+    except StripeAdapterError as exc:
+        operation.state = "failed"
+        operation.safe_result = {"error": str(exc)[:500]}
+        operation.save(update_fields=["state", "safe_result", "updated_at"])
+        return Response(
+            {"error": {"code": "validation_error", "message": "Portal session could not be created.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def billing_cancel(request, workspace_id):
+    """POST /api/v1/workspaces/{workspace_id}/billing/cancel/ — Owner only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace, role="owner").exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners may cancel billing."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    billing = get_or_create_workspace_billing(workspace)
+    if billing.effective_plan != "pro" or not billing.subscription_id:
+        return Response(
+            {"error": {"code": "validation_error", "message": "No active Pro subscription to cancel.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    timing = request.data.get("timing", "period_end")
+    if timing not in ("period_end", "immediate"):
+        return Response(
+            {"error": {"code": "validation_error", "message": "timing must be 'period_end' or 'immediate'.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    idempotency_key = request.headers.get("Idempotency-Key", "")
+    if not idempotency_key:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Missing Idempotency-Key header.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    operation = create_billing_operation(workspace, "cancel", idempotency_key)
+    if not operation:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Idempotency key already used.", "fields": {}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    try:
+        adapter = StripeAdapter()
+        result = adapter.cancel_subscription(
+            subscription_id=billing.subscription_id,
+            at_period_end=(timing == "period_end"),
+        )
+        billing.cancel_at_period_end = result.get("cancel_at_period_end", False)
+        billing.provider_status = result.get("status", billing.provider_status)
+        billing.save(update_fields=["cancel_at_period_end", "provider_status", "updated_at"])
+        operation.provider_object_id = result.get("subscription_id", "")
+        operation.state = "completed"
+        operation.safe_result = result
+        operation.save(update_fields=["provider_object_id", "state", "safe_result", "updated_at"])
+        return Response(
+            {
+                "error": None,
+                "operation": {
+                    "id": str(operation.id),
+                    "kind": operation.kind,
+                    "state": operation.state,
+                    "subscription_status": billing.provider_status,
+                    "cancel_at_period_end": billing.cancel_at_period_end,
+                }
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+    except StripeAdapterError as exc:
+        operation.state = "failed"
+        operation.safe_result = {"error": str(exc)[:500]}
+        operation.save(update_fields=["state", "safe_result", "updated_at"])
+        return Response(
+            {"error": {"code": "validation_error", "message": "Cancellation could not be processed.", "fields": {}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def billing_operation_detail(request, workspace_id, operation_id):
+    """GET /api/v1/workspaces/{workspace_id}/billing/operations/{operation_id}/ — Owner only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace, role="owner").exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners may view billing operations."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    try:
+        operation = BillingOperation.objects.get(id=operation_id, workspace=workspace)
+    except BillingOperation.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Billing operation not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(
+        {
+            "error": None,
+            "operation": {
+                "id": str(operation.id),
+                "kind": operation.kind,
+                "state": operation.state,
+                "provider_object_id": operation.provider_object_id,
+                "safe_result": operation.safe_result,
+                "created_at": operation.created_at.isoformat(),
+                "updated_at": operation.updated_at.isoformat(),
+            }
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def workspace_usage(request, workspace_id):
+    """GET /api/v1/workspaces/{workspace_id}/usage/ — Member only."""
+    user = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, deleted_at__isnull=True)
+    except Workspace.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Workspace not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not Membership.objects.filter(user=user, workspace=workspace).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view usage."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    billing = get_or_create_workspace_billing(workspace)
+    plan = BillingPlan.objects.filter(plan_id=billing.effective_plan, is_active=True).first()
+    membership_count = Membership.objects.filter(workspace=workspace).count()
+    project_count = Project.objects.filter(workspace=workspace).count()
+    resources = {}
+    if plan:
+        resources = {
+            "memberships": {"used": membership_count, "limit": plan.max_memberships},
+            "projects": {"used": project_count, "limit": plan.max_projects},
+        }
+    else:
+        resources = {
+            "memberships": {"used": membership_count, "limit": None},
+            "projects": {"used": project_count, "limit": None},
+        }
+    return Response(
+        {
+            "error": None,
+            "usage": {
+                "plan": billing.effective_plan,
+                "resources": resources,
+            }
+        }
+    )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def stripe_webhook(request):
+    """POST /api/v1/integrations/stripe/webhook/ — Stripe-signed webhook."""
+    if not settings.STRIPE_CONFIGURED:
+        return Response(status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    # Bound request size to 1 MiB
+    if len(request.body) > 1024 * 1024:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+    sig_header = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+    if not sig_header:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+    try:
+        adapter = StripeAdapter()
+        event = adapter.construct_webhook_event(request.body, sig_header)
+    except StripeAdapterError:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+    event_id = event.get("id", "")
+    event_type = event.get("type", "")
+    # Idempotency: duplicate event
+    if not record_stripe_event(event_id, event_type):
+        return Response(status=status.HTTP_200_OK)  # already processed
+    # Queue processing after commit
+    from workspaces.tasks import process_stripe_event
+    transaction.on_commit(lambda: process_stripe_event.apply_async(
+        args=[event_id], kwargs={"_workspace_id": None}
+    ))
+    return Response(status=status.HTTP_200_OK)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def issue_attachments(request, issue_id):
+    """List attachments for an issue. Member only."""
+    user = request.user
+    try:
+        issue = Issue.objects.select_related("board__project__workspace").get(id=issue_id)
+    except Issue.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Issue not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = issue.board.project.workspace
+    if not Membership.objects.filter(user=user, workspace=workspace, workspace__deleted_at__isnull=True).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view attachments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == "POST":
+        return _upload_attachment(request, issue, workspace)
+
+    # GET: list attachments
+    attachments = Attachment.objects.filter(issue=issue, state="ready", deleted_at__isnull=True).order_by("id")
+    serializer = AttachmentSerializer(attachments, many=True, context={"request": request})
+    return Response({"error": None, "results": serializer.data})
+
+
+def _upload_attachment(request, issue, workspace):
+    """Upload an attachment to an issue."""
+    user = request.user
+
+    # Validate exactly one file
+    uploaded_file = request.FILES.get("file")
+    if not uploaded_file:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Exactly one file is required.", "fields": {"file": ["This field is required."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(request.FILES) > 1:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Exactly one file is required.", "fields": {"file": ["Too many files uploaded."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate size (10 MiB max)
+    max_size = 10 * 1024 * 1024
+    if uploaded_file.size > max_size:
+        return Response(
+            {"error": {"code": "payload_too_large", "message": "File exceeds 10 MiB limit.", "fields": {"file": ["File too large."]}}},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+    # Validate filename
+    original_name = uploaded_file.name
+    if not original_name or len(original_name) > 150:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Invalid filename.", "fields": {"original_name": ["Filename must be 1-150 characters."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Strip path/control characters from filename
+    import os, re
+    safe_name = os.path.basename(original_name)
+    safe_name = re.sub(r'[^\w\s\-.]', '', safe_name)
+    if not safe_name:
+        safe_name = "attachment"
+
+    # Compute SHA-256
+    import hashlib
+    sha256 = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        sha256.update(chunk)
+    sha256_hex = sha256.hexdigest()
+
+    # Detect content type (with fallback if python-magic not available)
+    try:
+        import magic
+        content_type = magic.from_buffer(uploaded_file.read(2048), mime=True)
+    except Exception:
+        content_type = uploaded_file.content_type or "application/octet-stream"
+    uploaded_file.seek(0)
+
+    # Validate allowed types
+    allowed_types = ["image/png", "image/jpeg", "application/pdf", "text/plain"]
+    if content_type not in allowed_types:
+        return Response(
+            {"error": {"code": "validation_error", "message": "File type not allowed.", "fields": {"detected_content_type": [f"Allowed types: {', '.join(allowed_types)}"]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Generate object key
+    object_key = f"workspace_{workspace.id}/issue_{issue.id}/{uuid.uuid4()}"
+
+    # Create pending attachment record
+    from django.db import transaction as db_transaction
+    with db_transaction.atomic():
+        attachment = Attachment.objects.create(
+            issue=issue,
+            workspace=workspace,
+            uploader=user,
+            original_name=safe_name,
+            detected_content_type=content_type,
+            byte_size=uploaded_file.size,
+            sha256=sha256_hex,
+            object_key=object_key,
+            state="pending",
+        )
+
+    # Store object outside DB transaction (simulate private object storage)
+    import os as os_module
+    storage_dir = os_module.path.join(os_module.path.dirname(os_module.path.abspath(__file__)), "..", "private_storage")
+    storage_path = os_module.path.join(storage_dir, object_key)
+    try:
+        os_module.makedirs(storage_dir, exist_ok=True)
+        os_module.makedirs(os_module.path.dirname(storage_path), exist_ok=True)
+        with open(storage_path, "wb+") as dest:
+            for chunk in uploaded_file.chunks():
+                dest.write(chunk)
+    except Exception as exc:
+        # Clean up any partial file written before the failure
+        try:
+            if os_module.path.exists(storage_path):
+                os_module.remove(storage_path)
+        except OSError:
+            pass
+        attachment.state = "failed"
+        attachment.save(update_fields=["state", "updated_at"])
+        return Response(
+            {"error": {"code": "validation_error", "message": "Storage failed.", "fields": {}}},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # Mark ready
+    attachment.state = "ready"
+    attachment.save(update_fields=["state", "updated_at"])
+
+    log_audit_operation(
+        actor=request.user,
+        workspace=workspace,
+        resource_type="attachment",
+        resource_id=attachment.id,
+        operation="create",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details=f"Attachment uploaded: {safe_name}",
+    )
+
+    serializer = AttachmentSerializer(attachment, context={"request": request})
+    return Response({"error": None, "attachment": serializer.data}, status=status.HTTP_201_CREATED)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def download_attachment(request, attachment_id):
+    """Download an attachment. Member only."""
+    user = request.user
+    try:
+        attachment = Attachment.objects.select_related("issue__board__project__workspace").get(id=attachment_id, state="ready", deleted_at__isnull=True)
+    except Attachment.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Attachment not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = attachment.issue.board.project.workspace
+    if not Membership.objects.filter(user=user, workspace=workspace, workspace__deleted_at__isnull=True).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may download attachments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    import os as os_module
+    storage_dir = os_module.path.join(os_module.path.dirname(os_module.path.abspath(__file__)), "..", "private_storage")
+    storage_path = os_module.path.join(storage_dir, attachment.object_key)
+
+    if not os_module.path.exists(storage_path):
+        return Response(
+            {"error": {"code": "not_found", "message": "Attachment file not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    from django.http import FileResponse
+    response = FileResponse(
+        open(storage_path, "rb"),
+        content_type=attachment.detected_content_type,
+    )
+    response["Content-Disposition"] = f'attachment; filename="{attachment.original_name}"'
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_attachment(request, attachment_id):
+    """Soft-delete an attachment. Uploader or admin only."""
+    user = request.user
+    try:
+        attachment = Attachment.objects.select_related("issue__board__project__workspace").get(id=attachment_id, deleted_at__isnull=True)
+    except Attachment.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Attachment not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = attachment.issue.board.project.workspace
+    membership = Membership.objects.filter(user=user, workspace=workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may delete attachments."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if attachment.uploader_id != user.id and membership.role not in ("owner", "admin"):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only the uploader or an admin may delete this attachment."}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    with transaction.atomic():
+        attachment.deleted_at = timezone.now()
+        attachment.state = "deleted"
+        attachment.save(update_fields=["deleted_at", "state", "updated_at"])
+
+    log_audit_operation(
+        actor=request.user,
+        workspace=workspace,
+        resource_type="attachment",
+        resource_id=attachment.id,
+        operation="delete",
+        success=True,
+        correlation_id=request.META.get("CORRELATION_ID"),
+        details="Attachment soft-deleted",
+    )
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def audit_events(request):
+    """GET /audit-events/ — Admin only, paginated audit events."""
+    user = request.user
+    # Admin only
+    if not user.is_staff and not user.is_superuser:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only administrators may view audit events.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    
+    # Get user's workspaces for tenant scoping
+    user_workspaces = Membership.objects.filter(user=user).values_list("workspace_id", flat=True)
+    
+    queryset = AuditEvent.objects.filter(workspace_id__in=user_workspaces).order_by("-occurred_at")
+    
+    # Filters
+    project_id = request.query_params.get("project_id")
+    if project_id:
+        queryset = queryset.filter(project_id=project_id)
+    
+    target_type = request.query_params.get("target_type")
+    if target_type:
+        queryset = queryset.filter(target_type=target_type)
+    
+    target_id = request.query_params.get("target_id")
+    if target_id:
+        queryset = queryset.filter(target_id=target_id)
+    
+    action = request.query_params.get("action")
+    if action:
+        queryset = queryset.filter(action=action)
+    
+    # Pagination
+    from django.core.paginator import Paginator
+    paginator = Paginator(queryset, 50)
+    page_number = request.query_params.get("page", 1)
+    page_obj = paginator.get_page(page_number)
+    
+    serializer = AuditEventSerializer(page_obj, many=True, context={"request": request})
+    return Response({
+        "error": None,
+        "results": serializer.data,
+        "count": paginator.count,
+        "page": page_obj.number,
+        "total_pages": paginator.num_pages,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def issue_audit_events(request, issue_id):
+    """GET /issues/{issue_id}/audit-events/ — Member only, audit events for an issue."""
+    user = request.user
+    try:
+        issue = Issue.objects.select_related("board__project__workspace").get(id=issue_id)
+    except Issue.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Issue not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = issue.board.project.workspace
+    if not Membership.objects.filter(user=user, workspace=workspace, workspace__deleted_at__isnull=True).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may view issue audit events.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    
+    # Get audit events for this issue and its comments/attachments
+    from workspaces.models import Comment, Attachment
+    
+    # Issue events
+    issue_events = AuditEvent.objects.filter(
+        workspace=workspace,
+        target_type="issue",
+        target_id=issue.id,
+    )
+    
+    # Comment events (comments on this issue)
+    comment_ids = Comment.objects.filter(issue=issue).values_list("id", flat=True)
+    comment_events = AuditEvent.objects.filter(
+        workspace=workspace,
+        target_type="comment",
+        target_id__in=comment_ids,
+    )
+    
+    # Attachment events (attachments on this issue)
+    attachment_ids = Attachment.objects.filter(issue=issue).values_list("id", flat=True)
+    attachment_events = AuditEvent.objects.filter(
+        workspace=workspace,
+        target_type="attachment",
+        target_id__in=attachment_ids,
+    )
+
+    # Combine and order
+    events = (issue_events | comment_events | attachment_events).order_by("-occurred_at")
+
+    # Pagination
+    from django.core.paginator import Paginator
+    paginator = Paginator(events, 50)
+    page_number = request.query_params.get("page", 1)
+    page_obj = paginator.get_page(page_number)
+
+    serializer = AuditEventSerializer(page_obj, many=True, context={"request": request})
+    return Response({
+        "error": None,
+        "results": serializer.data,
+        "count": paginator.count,
+        "page": page_obj.number,
+        "total_pages": paginator.num_pages,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def archive_project(request, project_id):
+    """Archive a project. Admin only. Repeat is a no-op."""
+    user = request.user
+    try:
+        project = Project.objects.select_related("workspace").get(id=project_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Project not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = project.workspace
+    # Check admin/owner membership
+    membership = Membership.objects.filter(user=user, workspace=workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may archive a project.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if membership.role not in ("owner", "admin"):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may archive a project.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    # Version check
+    version = request.data.get("version")
+    if version is None:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Version is required.", "fields": {"version": ["This field is required."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if project.version != version:
+        return Response(
+            {"error": {"code": "version_conflict", "message": "Project version conflict.", "fields": {"version": [f"Expected {project.version}, got {version}."]}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    # Already archived = no-op
+    if project.archived_at is not None:
+        project.version += 1
+        project.save(update_fields=["version"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="project",
+            resource_id=project.id,
+            operation="archive",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Project already archived (no-op)",
+        )
+        return Response(
+            {"error": None, "project": {"id": project.id, "archived_at": project.archived_at.isoformat() if project.archived_at else None}},
+            status=status.HTTP_200_OK,
+        )
+    with transaction.atomic():
+        project.archived_at = timezone.now()
+        project.version += 1
+        project.save(update_fields=["archived_at", "version"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="project",
+            resource_id=project.id,
+            operation="archive",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Project archived",
+        )
+    return Response(
+        {"error": None, "project": {"id": project.id, "archived_at": project.archived_at.isoformat()}},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reopen_project(request, project_id):
+    """Reopen an archived project. Admin only. Repeat is a no-op."""
+    user = request.user
+    try:
+        project = Project.objects.select_related("workspace").get(id=project_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Project not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = project.workspace
+    membership = Membership.objects.filter(user=user, workspace=workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may reopen a project.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if membership.role not in ("owner", "admin"):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may reopen a project.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    version = request.data.get("version")
+    if version is None:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Version is required.", "fields": {"version": ["This field is required."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if project.version != version:
+        return Response(
+            {"error": {"code": "version_conflict", "message": "Project version conflict.", "fields": {"version": [f"Expected {project.version}, got {version}."]}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    # Already not archived = no-op
+    if project.archived_at is None:
+        project.version += 1
+        project.save(update_fields=["version"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="project",
+            resource_id=project.id,
+            operation="reopen",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Project already open (no-op)",
+        )
+        return Response(
+            {"error": None, "project": {"id": project.id, "archived_at": None}},
+            status=status.HTTP_200_OK,
+        )
+    with transaction.atomic():
+        project.archived_at = None
+        project.version += 1
+        project.save(update_fields=["archived_at", "version"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="project",
+            resource_id=project.id,
+            operation="reopen",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details="Project reopened",
+        )
+    return Response(
+        {"error": None, "project": {"id": project.id, "archived_at": None}},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def start_sprint(request, sprint_id):
+    """Start a planned sprint. Admin only. Version required."""
+    user = request.user
+    try:
+        sprint = Sprint.objects.select_related("project__workspace").get(id=sprint_id)
+    except Sprint.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Sprint not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = sprint.project.workspace
+    membership = Membership.objects.filter(user=user, workspace=workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may start a sprint.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if membership.role not in ("owner", "admin"):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may start a sprint.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    version = request.data.get("version")
+    if version is None:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Version is required.", "fields": {"version": ["This field is required."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if sprint.version != version:
+        return Response(
+            {"error": {"code": "version_conflict", "message": "Sprint version conflict.", "fields": {"version": [f"Expected {sprint.version}, got {version}."]}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if sprint.status != "planned":
+        return Response(
+            {"error": {"code": "validation_error", "message": "Sprint must be in planned state to start.", "fields": {"status": ["Sprint must be in planned state."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Check no other active sprint in project
+    active_exists = Sprint.objects.filter(project=sprint.project, status="active").exists()
+    if active_exists:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Project already has an active sprint.", "fields": {"status": ["Project already has an active sprint."]}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    with transaction.atomic():
+        sprint.status = "active"
+        sprint.started_at = timezone.now()
+        sprint.version += 1
+        sprint.save(update_fields=["status", "started_at", "version", "updated_at"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="sprint",
+            resource_id=sprint.id,
+            operation="start",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details=f"Sprint {sprint.name} started",
+        )
+    return Response(
+        {"error": None, "sprint": {"id": sprint.id, "status": sprint.status, "started_at": sprint.started_at.isoformat() if sprint.started_at else None}},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def complete_sprint(request, sprint_id):
+    """Complete an active sprint. Admin only. Version required."""
+    user = request.user
+    try:
+        sprint = Sprint.objects.select_related("project__workspace").get(id=sprint_id)
+    except Sprint.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Sprint not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = sprint.project.workspace
+    membership = Membership.objects.filter(user=user, workspace=workspace).first()
+    if not membership:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may complete a sprint.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if membership.role not in ("owner", "admin"):
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may complete a sprint.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    version = request.data.get("version")
+    if version is None:
+        return Response(
+            {"error": {"code": "validation_error", "message": "Version is required.", "fields": {"version": ["This field is required."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if sprint.version != version:
+        return Response(
+            {"error": {"code": "version_conflict", "message": "Sprint version conflict.", "fields": {"version": [f"Expected {sprint.version}, got {version}."]}}},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if sprint.status != "active":
+        return Response(
+            {"error": {"code": "validation_error", "message": "Sprint must be in active state to complete.", "fields": {"status": ["Sprint must be in active state."]}}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    with transaction.atomic():
+        sprint.status = "completed"
+        sprint.completed_at = timezone.now()
+        sprint.version += 1
+        sprint.save(update_fields=["status", "completed_at", "version", "updated_at"])
+        # Detach unfinished issues from sprint
+        unfinished_issues = Issue.objects.filter(sprint=sprint).exclude(status_id__name="done")
+        for issue in unfinished_issues:
+            issue.sprint_id = None
+            issue.version += 1
+            issue.save(update_fields=["sprint_id", "version", "updated_at"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="sprint",
+            resource_id=sprint.id,
+            operation="complete",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details=f"Sprint {sprint.name} completed, {unfinished_issues.count()} issues detached",
+        )
+    return Response(
+        {"error": None, "sprint": {"id": sprint.id, "status": sprint.status, "completed_at": sprint.completed_at.isoformat() if sprint.completed_at else None}},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def board_detail(request, board_id):
+    """GET/PATCH board detail. Member for GET, admin for PATCH."""
+    user = request.user
+    try:
+        board = Board.objects.select_related("project__workspace").get(id=board_id)
+    except Board.DoesNotExist:
+        return Response(
+            {"error": {"code": "not_found", "message": "Board not found.", "fields": {}}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    workspace = board.project.workspace
+    if not Membership.objects.filter(user=user, workspace=workspace, workspace__deleted_at__isnull=True).exists():
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Only workspace members may access this board.", "fields": {}}},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if request.method == "PATCH":
+        membership = Membership.objects.filter(user=user, workspace=workspace).first()
+        if not membership or membership.role not in ("owner", "admin"):
+            return Response(
+                {"error": {"code": "permission_denied", "message": "Only workspace owners/admins may edit this board.", "fields": {}}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        version = request.data.get("version")
+        if version is None:
+            return Response(
+                {"error": {"code": "validation_error", "message": "Version is required.", "fields": {"version": ["This field is required."]}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if board.version != version:
+            return Response(
+                {"error": {"code": "version_conflict", "message": "Board version conflict.", "fields": {"version": [f"Expected {board.version}, got {version}."]}}},
+                status=status.HTTP_409_CONFLICT,
+            )
+        name = request.data.get("name")
+        if name is not None:
+            name = name.strip()
+            if not name or len(name) > 100:
+                return Response(
+                    {"error": {"code": "validation_error", "message": "Board name must be 1-100 characters.", "fields": {"name": ["Board name must be 1-100 characters."]}}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            board.name = name
+        board.version += 1
+        board.save(update_fields=["name", "version", "updated_at"])
+        log_audit_operation(
+            actor=request.user,
+            workspace=workspace,
+            resource_type="board",
+            resource_id=board.id,
+            operation="edit",
+            success=True,
+            correlation_id=request.META.get("CORRELATION_ID"),
+            details=f"Board {board.name} updated",
+        )
+    serializer_data = {
+        "id": board.id,
+        "name": board.name,
+        "project_id": board.project.id,
+        "project_key": board.project.key,
+        "project_name": board.project.name,
+        "workspace_id": workspace.id,
+        "workspace_name": workspace.name,
+        "version": board.version,
+        "created_at": board.created_at.isoformat() if board.created_at else None,
+        "updated_at": board.updated_at.isoformat() if board.updated_at else None,
+    }
+    return Response({"error": None, "board": serializer_data}, status=status.HTTP_200_OK)

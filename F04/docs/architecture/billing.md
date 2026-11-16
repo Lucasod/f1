@@ -1,16 +1,25 @@
 # Stripe Billing — Technical Flow
 
-Status: planned integration, test mode only. Product prices/limits and downgrade behavior live in [subscription policy](../subscription_plans.md). No provider credentials, objects, account configuration, or charges have been created.
+Status: implemented, test mode only. Product prices/limits and downgrade behavior live in [subscription policy](../subscription_plans.md). No provider credentials, objects, account configuration, or charges have been created in source; Stripe test-mode end-to-end acceptance is pending external credentials (BLOCKED_EXTERNAL_CREDENTIALS).
 
-## Local records and boundaries
+## Local records and boundaries (implemented)
 
-WorkspaceBilling is one-to-one with workspace: customer_id nullable unique, subscription_id nullable unique, provider_status nullable, effective_plan (`free`/`pro`), cancel_at_period_end bool, paid_through nullable UTC, last_synced_at nullable. Default Free. Keep server-only provider IDs separate from public subscription summary.
+Models implemented in `backend/workspaces/models.py` (migrations `0017`–`0019`):
 
-BillingOperation: UUID id, workspace_id, kind (`checkout`, `cancel`, `portal`), idempotency_key unique per workspace/kind, state (`pending`, `completed`, `failed`, `unknown`), provider_object_id nullable, safe_result JSON, created_at/updated_at. StripeEventInbox: provider event_id unique, type, received_at, provider object ID, resolved workspace_id nullable, state/attempts/next_attempt_at/error_code. Keep the authenticated raw payload only as needed for processing and never in logs; store allowlisted normalized fields afterward. Use database encryption/managed at-rest protection for sensitive operational records.
+- **`WorkspaceBilling`** — one-to-one with `Workspace`: `customer_id` (nullable unique), `subscription_id` (nullable unique), `provider_status` nullable, `effective_plan` (`free`/`pro`, default `free`), `cancel_at_period_end` bool, `paid_through` nullable UTC, `last_synced_at` nullable. Tenant-scoped via `django-multitenant` (`tenant_id`). Default Free.
+- **`BillingPlan`** — application-owned plan catalog (`free`/`pro`): `plan_id` (unique), `name`, `description`, `stripe_price_id`, `max_memberships`, `max_projects`, `price_cents`, `currency`, `interval`, `is_active`. Seeded by migration `0018` (Free: 5 memberships / 2 projects, 0 cents; Pro: 25 memberships / 20 projects, 1900 cents USD/month).
+- **`BillingOperation`** — UUID `id`, `kind` (`checkout`/`cancel`/`portal`), `idempotency_key` (unique per workspace/kind via constraint), `state` (`pending`/`completed`/`failed`/`unknown`), `provider_object_id` nullable, `safe_result` JSON, `created_at`/`updated_at`. Foreign key to `Workspace`.
+- **`StripeEventInbox`** — `event_id` unique, `event_type`, `received_at`, `provider_object_id`, `resolved_workspace_id` nullable, `state` (`pending`/`processed`/`failed`), `attempts`, `next_attempt_at` nullable, `error_code`. Tenant-scoped.
 
-HTTP services handle workspace authorization; a billing service coordinates operations; a Stripe adapter owns SDK calls. Entitlement calculation is a pure rule over verified provider state and configured catalog. This applies SRP/DIP without a generic payment framework.
+The `Workspace` model gained a nullable `deleted_at` timestamp for soft deletion; every tenant endpoint filters `deleted_at__isnull=True`.
 
-Pin the Stripe SDK and a stable supported API version when implementing. Configure snapshot events matching that version; do not copy a preview version from documentation. Mock provider responses for automated tests and use Stripe test-mode end-to-end evidence separately.
+Billing service layer (`backend/workspaces/billing_service.py`): `get_or_create_workspace_billing`, `get_effective_plan`, `create_billing_operation`, `record_stripe_event`, `check_project_quota` (serialized per workspace with `select_for_update()`, returns `409 plan_limit_reached` at the Free project limit of 2).
+
+Stripe adapter (`backend/workspaces/stripe_adapter.py`) owns all Stripe SDK calls: `create_customer`, `create_checkout_session`, `cancel_subscription`, `create_portal_session`, `get_subscription`, `construct_webhook_event`. Raises `StripeAdapterError` on provider failure; callers translate to generic API errors without leaking provider internals.
+
+HTTP services handle workspace authorization; a billing service coordinates operations; the Stripe adapter owns SDK calls. Entitlement calculation is a pure rule over verified provider state and configured catalog. This applies SRP/DIP without a generic payment framework.
+
+Pinned Stripe SDK and API version `2025-06-30.basil` (via `STRIPE_API_VERSION` env var). Mock provider responses for automated tests; Stripe test-mode end-to-end evidence separately, pending credentials.
 
 ## API
 
@@ -64,6 +73,17 @@ Portal sessions are scoped to the workspace Customer, with fixed return URL. Con
 - No resume endpoint in MVP. An owner can start a new checkout only after the prior subscription is canceled and all pending operations are resolved.
 
 Stripe supports both immediate and period-end cancellation; see [official cancellation documentation](https://docs.stripe.com/billing/subscriptions/cancel). The demo's refund and UI decisions above are our selected scope.
+
+## Missing credentials behavior
+
+`STRIPE_CONFIGURED = bool(STRIPE_API_KEY and STRIPE_WEBHOOK_SECRET and STRIPE_PRO_PRICE_ID)`; all three are read from environment variables and no secret values appear in source.
+
+When `STRIPE_CONFIGURED` is false (local/test default, credentials not yet available):
+- `POST billing/checkout/` → `400 validation_error` ("Stripe is not configured."); no checkout session is created.
+- `POST /api/v1/integrations/stripe/webhook/` → `503 Service Unavailable`; no event is processed.
+- Stripe test-mode end-to-end acceptance is BLOCKED_EXTERNAL_CREDENTIALS pending provisioned test credentials.
+
+When configured, the webhook verifies `Stripe-Signature` against `STRIPE_WEBHOOK_SECRET` and the exact raw body via `stripe.Webhook.construct_event(..., tolerance=300)`, bounds request size to 1 MiB, returns `400` on invalid signature/payload, returns `503` if persistence fails, deduplicates by `event_id` (`200` for already-processed), and queues processing after commit.
 
 ## Acceptance tests
 
