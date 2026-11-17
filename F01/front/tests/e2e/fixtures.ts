@@ -196,7 +196,8 @@ export async function registerUser(page: Page, userData: RegistrationData) {
 
   // Step 2: Proceed with normal registration (user does not exist)
   await page.goto('/register');
-  await page.waitForSelector('#name', { timeout: 5000 });
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('#name', { timeout: 15000 });
 
   // Fill form fields
   await page.fill('#name', userData.name);
@@ -281,6 +282,12 @@ export async function loginUser(page: Page, email: string, password: string = 'T
  * Check if user is authenticated (has access token in localStorage)
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {
+  // Navigate to a safe page origin first if on about:blank, since localStorage
+  // access is denied on about:blank with a SecurityError.
+  if (page.url() === 'about:blank') {
+    await page.goto('/survey');
+    await page.waitForLoadState('domcontentloaded');
+  }
   const hasToken = await page.evaluate(() => {
     const authStorage = localStorage.getItem('auth-storage');
     if (!authStorage) return false;
@@ -322,23 +329,44 @@ export async function clearAuth(page: Page) {
     await page.goto('/survey');
     await page.waitForLoadState('networkidle');
   }
-  // Remove auth-storage and accessToken from localStorage so the page starts
-  // unauthenticated. Then reload to ensure the removal takes effect.
+  // Remove all auth-related keys from localStorage so the page starts
+  // unauthenticated. This matches the keys used by authStore.ts:
+  // - auth-storage (zustand persist key)
+  // - accessToken (individual key for apiClient compatibility)
+  // - refreshToken (individual key for apiClient compatibility)
+  // - user (individual key for apiClient compatibility)
+  // Then reload to ensure the removal takes effect.
   for (let attempt = 0; attempt < 2; attempt++) {
     await page.evaluate(() => {
       localStorage.removeItem('auth-storage');
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
     });
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
     // Verify auth state is cleared by checking localStorage is empty of these keys
     const authCleared = await page.evaluate(() => {
-      return !localStorage.getItem('auth-storage') && !localStorage.getItem('accessToken');
+      return !localStorage.getItem('auth-storage') &&
+             !localStorage.getItem('accessToken') &&
+             !localStorage.getItem('refreshToken') &&
+             !localStorage.getItem('user');
     });
     if (authCleared) return;
     // If not cleared, retry once more; if still not cleared after 2 attempts,
-    // the function returns and the test must handle the remaining state.
+    // throw a descriptive error so the test fails explicitly.
   }
+  // If we reach here, auth state could not be cleared after 2 attempts
+  const remainingKeys = await page.evaluate(() => ({
+    authStorage: !!localStorage.getItem('auth-storage'),
+    accessToken: !!localStorage.getItem('accessToken'),
+    refreshToken: !!localStorage.getItem('refreshToken'),
+    user: !!localStorage.getItem('user'),
+  }));
+  throw new Error(
+    'Failed to clear authentication state from localStorage after 2 attempts. Remaining keys: ' +
+    JSON.stringify(remainingKeys)
+  );
 }
 
 /**
@@ -401,13 +429,13 @@ export async function getAuthToken(page: Page): Promise<string | null> {
  * @param page - Playwright page (provides page.request)
  * @param email - Account email
  * @param password - Account password
- * @returns The access token and person, or null when login fails.
+ * @returns The access token, refresh token, and person, or null when login fails.
  */
 export async function loginViaApi(
   page: Page,
   email: string,
   password: string
-): Promise<{ accessToken: string | null; person: any | null }> {
+): Promise<{ accessToken: string | null; refreshToken: string | null; person: any | null }> {
   const response = await page.request.post(`${API_BASE_URL}/api/v1/auth/login`, {
     headers: { 'Content-Type': 'application/json' },
     data: { email, password },
@@ -415,11 +443,12 @@ export async function loginViaApi(
   if (!response.ok()) {
     const errorText = await response.text().catch(() => '');
     console.warn(`API login failed (${response.status()}) for ${email}: ${errorText}`);
-    return { accessToken: null, person: null };
+    return { accessToken: null, refreshToken: null, person: null };
   }
   const data = await response.json();
   return {
     accessToken: data?.tokens?.accessToken ?? null,
+    refreshToken: data?.tokens?.refreshToken ?? null,
     person: data?.person ?? null,
   };
 }
