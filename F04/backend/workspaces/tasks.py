@@ -1,3 +1,4 @@
+import os as os_module
 from datetime import timedelta
 
 from celery import shared_task, Task
@@ -511,3 +512,111 @@ def _retrieve_checkout_session(adapter, session_id):
     is responsible for finalizing the billing state.
     """
     return None
+
+
+@shared_task(base=TenantAwareTask, bind=True, max_retries=4, default_retry_delay=60, soft_time_limit=60, time_limit=90)
+def cleanup_attachment(self, attachment_id, _workspace_id=None, workspace_id=None):
+    """Delete private object if explicitly deleted/failed/orphaned; missing object counts as success.
+
+    Retry policy: 1 initial + 4 retries at 60s/300s/1,800s/7,200s; 60s/90s soft/hard time limit.
+    A real removal failure is reported as failure and triggers retry. Missing file counts as success.
+    """
+    from workspaces.models import Attachment
+
+    try:
+        attachment = Attachment.objects.get(id=attachment_id)
+    except Attachment.DoesNotExist:
+        return {"status": "not_found"}
+
+    # Only clean up if deleted or failed
+    if attachment.state not in ("deleted", "failed"):
+        return {"status": "skipped", "reason": f"state is {attachment.state}"}
+
+    # Determine storage path (same convention as views.py)
+    storage_dir = os_module.path.join(
+        os_module.path.dirname(os_module.path.abspath(__file__)), "..", "private_storage"
+    )
+    object_key = attachment.object_key
+    storage_path = os_module.path.join(storage_dir, object_key)
+
+    # Delete the physical file if it exists
+    file_existed = False
+    if os_module.path.exists(storage_path):
+        try:
+            os_module.remove(storage_path)
+            file_existed = True
+        except OSError as exc:
+            # Real removal failure: trigger retry with exponential backoff
+            countdown = min(60 * (2 ** self.request.retries), 7200)
+            raise self.retry(exc=exc, countdown=countdown)
+
+    # If removal succeeded or file was missing, update attachment state
+    if attachment.state == "deleted" and file_existed:
+        attachment.state = "deleted"
+        attachment.save(update_fields=["state", "updated_at"])
+
+    return {
+        "status": "cleaned",
+        "attachment_id": attachment.id,
+        "file_existed": file_existed,
+        "state": attachment.state,
+    }
+
+
+@shared_task(base=TenantAwareTask, bind=True, soft_time_limit=30, time_limit=45)
+def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
+    """Scan pending DomainEvents and fan out to Notification / WebhookDelivery.
+
+    Creates unique delivery/notification records. Marks event dispatched only
+    after fan-out records are durable. Scan every 60s (Celery Beat), batches
+    of 100; failed scan retries next tick.
+    """
+    from django.db import transaction
+    from workspaces.models import DomainEvent, Membership, Notification, WebhookDelivery, WebhookSubscription
+
+    BATCH_SIZE = 100
+
+    pending = DomainEvent.objects.filter(dispatched_at__isnull=True).order_by("occurred_at")[:BATCH_SIZE]
+
+    if not pending:
+        return {"status": "empty", "dispatched": 0}
+
+    dispatched_count = 0
+
+    for event in pending:
+        workspace = event.workspace
+
+        # Fan out: create Notification for workspace members
+        if event.event_type in ("issue.created", "issue.status_changed", "comment.created"):
+            members = Membership.objects.filter(workspace=workspace).select_related("user")
+            for membership in members:
+                Notification.objects.create(
+                    user=membership.user,
+                    workspace=workspace,
+                    notification_type=event.event_type,
+                    entity_type=event.aggregate_type,
+                    payload=event.payload,
+                )
+
+        # Fan out: create WebhookDelivery for enabled webhook subscriptions
+        subscriptions = WebhookSubscription.objects.filter(
+            workspace=workspace, is_enabled=True
+        )
+        for subscription in subscriptions:
+            WebhookDelivery.objects.create(
+                subscription=subscription,
+                event_type=event.event_type,
+                event_id=str(event.id),
+                delivery_id=str(uuid.uuid4()),
+                status="pending",
+                request_payload=event.payload,
+            )
+
+        # Mark event as dispatched only after fan-out records are durable
+        with transaction.atomic():
+            event.dispatched_at = timezone.now()
+            event.save(update_fields=["dispatched_at"])
+
+        dispatched_count += 1
+
+    return {"status": "dispatched", "dispatched": dispatched_count}

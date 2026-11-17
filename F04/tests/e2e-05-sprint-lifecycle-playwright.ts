@@ -149,8 +149,8 @@ test.describe.serial('Sprint Lifecycle E2E', () => {
     expect(body.sprint).toHaveProperty('id');
     expect(body.sprint).toHaveProperty('project_name');
     expect(body.sprint).toHaveProperty('project_key');
-    expect(body.sprint).toHaveProperty('start_date', null);
-    expect(body.sprint).toHaveProperty('end_date', null);
+    expect(body.sprint).toHaveProperty('start_at', null);
+    expect(body.sprint).toHaveProperty('end_at', null);
   });
 
   // ── Test 2: List Sprints - GET /api/v1/sprints/ or with project_id filter ──────
@@ -323,15 +323,15 @@ test.describe.serial('Sprint Lifecycle E2E', () => {
 
     // Update the sprint with start and end dates
     const updateResp = await updateSprint(request, csrfToken, updatedSprintId, {
-      start_date: '2026-01-15',
-      end_date: '2026-03-15',
+      start_at: '2026-01-15',
+      end_at: '2026-03-15',
     });
     expect(updateResp.status()).toBe(200);
 
     const updateBody = await updateResp.json();
     expect(updateBody).toHaveProperty('error', null);
-    expect(updateBody.sprint).toHaveProperty('start_date', '2026-01-15');
-    expect(updateBody.sprint).toHaveProperty('end_date', '2026-03-15');
+    expect(updateBody.sprint).toHaveProperty('start_at', '2026-01-15');
+    expect(updateBody.sprint).toHaveProperty('end_at', '2026-03-15');
   });
 
   // ── Test 4: Issue Sprint Assignment - POST /api/v1/issues/{id}/assign-sprint/ with sprint_id ──────

@@ -1,5 +1,6 @@
 /// <reference types="playwright/test" />
 import { test, expect } from '@playwright/test';
+import { execSync } from 'child_process';
 
 const BASE_URL = 'http://127.0.0.1:8000/api/v1';
 
@@ -227,8 +228,16 @@ test.describe('Comments E2E', () => {
   });
 
   test('4. Comment Authorization - verify non-members cannot create/delete', async ({ request }, testInfo) => {
+    // Create Bob user via Django ORM (same pattern as e2e-02)
+    execSync(
+      'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nUser = get_user_model()\nUser.objects.get_or_create(username="bob", defaults={"email": "bob@example.com", "password": "testpass123"})\nPYEOF'
+    );
+
+    const BOB_CREDENTIALS = { username: 'bob', password: process.env.SECRET_TEST_PASS || 'testpass123' };
+
     let csrfToken = testInfo.csrfToken;
-    // Login as alice before creating workspace/project
+
+    // Login as alice
     await request.post(BASE_URL + '/auth/login/', {
       data: VALID_CREDENTIALS,
       headers: {
@@ -241,39 +250,58 @@ test.describe('Comments E2E', () => {
     const freshCsrfBody = await freshCsrfResponse.json();
     csrfToken = freshCsrfBody.csrf_token;
 
-    // Create a workspace and project (as alice)
+    // Alice creates workspace
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Auth Test Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
     });
+    expect(workspaceResp.status()).toBe(201);
     const workspaceBody = await workspaceResp.json();
     const workspaceId = workspaceBody.workspace.id;
-    await request.post(BASE_URL + '/projects/create/', {
+
+    // Alice creates project
+    const projectResp = await request.post(BASE_URL + '/projects/create/', {
       data: { name: 'Auth Test Project', key: 'ATX', workspace_id: workspaceId },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
     });
+    expect(projectResp.status()).toBe(201);
+    const projectBody = await projectResp.json();
+    const projectId = projectBody.project.id;
 
-    // Try to create a comment as non-member (issue 999 likely doesn't exist → 404, or exists but user not member → 403/401)
-    const respCreate = await request.post(BASE_URL + '/issues/999/comments/', {
-      data: { text: 'comment by non-member' },
-      headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
-    });
-    // Non-member/non-auth creation should be rejected (401, 403, or 404)
-    expect([401, 403, 404]).toContain(respCreate.status());
+    // Alice creates issue
+    const issueResp = await createIssue(request, projectId, 'Auth Test Issue', csrfToken);
+    expect(issueResp.status()).toBe(201);
+    const issueBody = await issueResp.json();
+    const issueId = issueBody.issue.id;
 
-    // Try to list comments without authentication
-    const respList = await request.get(BASE_URL + '/issues/999/comments/', {
-      headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
-    });
-    // Non-member listing should be rejected (401, 403, or 404)
-    expect([401, 403, 404]).toContain(respList.status());
+    // Alice creates comment
+    const commentResp = await createComment(request, issueId, 'Comment by alice', csrfToken);
+    expect(commentResp.status()).toBe(201);
+    const commentBody = await commentResp.json();
+    const commentId = commentBody.comment.id;
 
-    // Try to delete a comment without authentication
-    const respDelete = await request.delete(BASE_URL + '/comments/999/', {
-      headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
+    // Login as bob (authenticated non-member)
+    const bobLoginResp = await request.post(BASE_URL + '/auth/login/', {
+      data: BOB_CREDENTIALS,
+      headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' },
     });
-    // Non-member deletion should be rejected (401, 403, or 404)
-    expect([401, 403, 404]).toContain(respDelete.status());
+    expect(bobLoginResp.status()).toBe(200);
+    const bobCsrfResp = await request.get(BASE_URL + '/auth/csrf/');
+    const bobCsrfBody = await bobCsrfResp.json();
+    const bobCsrfToken = bobCsrfBody.csrf_token;
+
+    // Bob tries to create a comment on Alice's issue → 403 (authenticated non-member)
+    const respCreate = await request.post(BASE_URL + '/issues/' + issueId + '/comments/', {
+      data: { text: 'comment by bob' },
+      headers: { 'X-CSRFToken': bobCsrfToken as string, 'Content-Type': 'application/json' }
+    });
+    expect(respCreate.status()).toBe(403);
+
+    // Bob tries to delete Alice's comment → 403 (authenticated non-member)
+    const respDelete = await request.delete(BASE_URL + '/comments/' + commentId + '/', {
+      headers: { 'X-CSRFToken': bobCsrfToken as string, 'Content-Type': 'application/json' }
+    });
+    expect(respDelete.status()).toBe(403);
   });
 
   test('5. Comment Content Validation - verify blank text rejection', async ({ request }, testInfo) => {
@@ -329,5 +357,26 @@ test.describe('Comments E2E', () => {
     } else if (body.text) {
       expect(body.text[0]).toContain('blank');
     }
+  });
+
+  test('6. Comment Authorization - unauthenticated access rejected', async ({ request }) => {
+    // No login - unauthenticated user tries to create comment
+    const respCreate = await request.post(BASE_URL + '/issues/999/comments/', {
+      data: { text: 'comment by unauthenticated' },
+      headers: { 'Content-Type': 'application/json' }
+    });
+    expect(respCreate.status()).toBe(403);
+
+    // Unauthenticated user tries to delete comment
+    const respDelete = await request.delete(BASE_URL + '/comments/999/', {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    expect(respDelete.status()).toBe(403);
+
+    // Unauthenticated user tries to list comments
+    const respList = await request.get(BASE_URL + '/issues/999/comments/', {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    expect(respList.status()).toBe(403);
   });
 });

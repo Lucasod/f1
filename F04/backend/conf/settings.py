@@ -3,6 +3,7 @@ Django settings for conf project.
 """
 
 from pathlib import Path
+import json
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,9 +20,20 @@ SECRET_KEY = os.getenv(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS configurable via env var; defaults are development-safe
+# including 'testserver' for Django's test client. Never defaults to wildcard.
+# The env var accepts either a JSON array (e.g. ["a.com","b.com"]) or a
+# comma-separated string (e.g. "a.com,b.com").
+_allowed_hosts_env = os.getenv("DJANGO_ALLOWED_HOSTS")
+if _allowed_hosts_env:
+    try:
+        ALLOWED_HOSTS = json.loads(_allowed_hosts_env)
+    except (json.JSONDecodeError, TypeError):
+        ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = "localhost,127.0.0.1,testserver".split(",")
 
 
 # Template configuration
@@ -133,9 +145,9 @@ STATIC_URL = "static/"
 
 # Session settings
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False") == "True"
 CSRF_COOKIE_HTTPONLY = False
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "False") == "True"
 
 # Static files
 import pathlib

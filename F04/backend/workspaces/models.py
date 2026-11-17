@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django_multitenant.mixins import TenantModelMixin
 from django.contrib.auth import get_user_model
@@ -981,3 +982,53 @@ class AuditEvent(TenantModelMixin, models.Model):
 
     def __str__(self):
         return f"AuditEvent {self.action} on {self.target_type}#{self.target_id}"
+
+
+class DomainEvent(TenantModelMixin, models.Model):
+    """Durable domain event for outbox pattern.
+
+    Business services write DomainEvent in the same transaction as the change.
+    dispatch_outbox reads pending events and fans out to Notification /
+    WebhookDelivery records, then marks the event as dispatched.
+    """
+
+    class TenantMeta:
+        tenant_field_name = "tenant_id"
+
+    tenant_id = models.PositiveBigIntegerField("tenant id", null=True, blank=True, help_text="Tenant identifier for multi-tenant isolation")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "Workspace", on_delete=models.CASCADE, related_name="domain_events"
+    )
+    event_type = models.CharField(max_length=100)
+    schema_version = models.PositiveSmallIntegerField(default=1)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="domain_events",
+    )
+    aggregate_type = models.CharField(max_length=100)
+    aggregate_id = models.CharField(max_length=100)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    request_id = models.CharField(max_length=100, null=True, blank=True)
+    payload = models.JSONField(
+        default=dict,
+        help_text="Allowlisted scalar IDs/changes only. No file bytes, credentials, comment bodies, or issue descriptions.",
+    )
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["dispatched_at", "occurred_at"],
+                name="domain_event_pending_dispatch",
+                condition=models.Q(dispatched_at__isnull=True),
+            ),
+        ]
+        ordering = ["occurred_at"]
+
+    def __str__(self):
+        return f"{self.event_type} ({self.aggregate_type}/{self.aggregate_id})"
