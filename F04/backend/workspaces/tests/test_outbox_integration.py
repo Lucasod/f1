@@ -173,7 +173,7 @@ class WebhookFlowTestCase(TestCase):
             url="https://example.com/webhook",
             events=["issue.created"],
             is_enabled=True,
-            signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
 
         self.event = DomainEvent.objects.create(

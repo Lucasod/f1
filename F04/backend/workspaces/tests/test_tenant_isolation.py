@@ -16,10 +16,10 @@ class TenantIsolationTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.alice = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.bob = User.objects.create_user(
-            "bob", "bob@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "bob", "bob@example.com", os.environ["SECRET_TEST_PASS"]
         )
         # Alice's workspace
         self.ws_a = Workspace.objects.create(name="Workspace A")
@@ -29,10 +29,10 @@ class TenantIsolationTestCase(TestCase):
         Membership.objects.create(user=self.bob, workspace=self.ws_b, role="owner")
 
     def login_alice(self):
-        self.client.login(username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
 
     def login_bob(self):
-        self.client.login(username="bob", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
 
     # ── Cross-workspace reads denied ──
     def test_cross_workspace_read_project_denied(self):
@@ -272,7 +272,7 @@ class TenantIsolationTestCase(TestCase):
         # Non-workspace URL (login)
         resp = self.client.post("/api/v1/auth/login/", {
             "username": "alice",
-            "password": os.getenv("SECRET_TEST_PASS", "testpass123")
+            "password": os.environ["SECRET_TEST_PASS"]
         }, format="json")
         self.assertEqual(resp.status_code, 200)
 

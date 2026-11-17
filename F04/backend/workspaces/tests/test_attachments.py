@@ -19,10 +19,10 @@ class AttachmentTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Attachment Test Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
@@ -181,7 +181,7 @@ class AttachmentTestCase(TestCase):
             state="ready",
         )
         
-        self.client.login(username="bob", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
         response = self.client.delete(
             f"/api/v1/attachments/{att.id}/",
             format="json",
@@ -208,7 +208,7 @@ class AttachmentTestCase(TestCase):
             state="ready",
         )
         
-        self.client.login(username="carol", password=os.getenv("SECRET_TEST_PASS", "test-login-pass-12345"))
+        self.client.login(username="carol", password=os.environ["SECRET_TEST_PASS"])
         response = self.client.get(
             f"/api/v1/attachments/{att.id}/download/",
             format="json",

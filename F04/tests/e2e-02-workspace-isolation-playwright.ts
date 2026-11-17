@@ -72,6 +72,17 @@ async function listWorkspaces(request, csrfToken) {
   return resp;
 }
 
+// Hard-delete any workspaces owned by the given user.
+// Free plan allows only ONE workspace. Soft-delete via the API does NOT free
+// the slot because create_workspace counts every owned workspace regardless
+// of deleted_at, so we hard-delete via the Django ORM to reset the ownership
+// count before a test creates a new workspace.
+async function deleteUserWorkspaces(username: string) {
+  execSync(
+    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+  );
+}
+
 async function getWorkspaceDetail(request, workspaceId, csrfToken) {
   const resp = await request.get(BASE_URL + '/workspaces/' + workspaceId + '/', {
     headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
@@ -123,6 +134,9 @@ test.describe('Workspace Isolation E2E', () => {
     // Login as alice (helper fetches fresh CSRF token after login rotation)
     const freshCsrfToken = await loginAsAlice(request);
 
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
+
     // Create Workspace A with a unique, deterministic name
     const nameA = `Isolation-Test-WS-A-${Date.now()}`;
     const createA = await createWorkspace(request, nameA, freshCsrfToken);
@@ -163,6 +177,9 @@ test.describe('Workspace Isolation E2E', () => {
     const postLoginCsrfBody = await postLoginCsrfResp.json();
     const freshCsrfToken = postLoginCsrfBody.csrf_token;
 
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
+
     // Step 5: Create workspace B with the fresh CSRF token
     const nameB = `Isolation-Test-WS-B-${Date.now()}`;
     const createB = await createWorkspace(request, nameB, freshCsrfToken);
@@ -187,11 +204,15 @@ test.describe('Workspace Isolation E2E', () => {
 
     // Create Workspace A as Alice
     const freshCsrfTokenA = await loginAsAlice(request);
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const createA = await createWorkspace(request, nameA, freshCsrfTokenA);
     expect(createA.status()).toBe(201);
 
     // Create Workspace B as Bob (different user)
     const freshCsrfTokenB = await loginAsBob(request);
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
     const createB = await createWorkspace(request, nameB, freshCsrfTokenB);
     expect(createB.status()).toBe(201);
 
@@ -224,11 +245,15 @@ test.describe('Workspace Isolation E2E', () => {
 
     // Create Workspace A as Alice
     const aliceTokenA = await loginAsAlice(request);
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const createA = await createWorkspace(request, nameA, aliceTokenA);
     expect(createA.status()).toBe(201);
 
     // Create Workspace B as Bob
     const bobToken = await loginAsBob(request);
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
     const createB = await createWorkspace(request, nameB, bobToken);
     expect(createB.status()).toBe(201);
     const bodyB = await createB.json();
@@ -289,6 +314,8 @@ PYEOF
 
     // Create Workspace B as Bob (Alice is NOT a member)
     const bobToken = await loginAsBob(request);
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
     const createB = await createWorkspace(request, nameB, bobToken);
     expect(createB.status()).toBe(201);
     const bodyB = await createB.json();
@@ -307,6 +334,8 @@ PYEOF
 
     // Create Workspace B as Bob (Alice is NOT a member)
     const bobToken = await loginAsBob(request);
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
     const createB = await createWorkspace(request, nameB, bobToken);
     expect(createB.status()).toBe(201);
     const bodyB = await createB.json();
@@ -331,6 +360,8 @@ PYEOF
 
     // Create Workspace B as Bob (Alice is NOT a member)
     const bobToken = await loginAsBob(request);
+    // Free plan allows only ONE workspace; hard-delete any Bob owns from a prior run
+    await deleteUserWorkspaces('bob');
     const createB = await createWorkspace(request, nameB, bobToken);
     expect(createB.status()).toBe(201);
     const bodyB = await createB.json();

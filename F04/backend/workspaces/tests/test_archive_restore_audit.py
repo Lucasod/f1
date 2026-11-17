@@ -16,10 +16,10 @@ class ArchiveReopenTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.owner = User.objects.create_user(
-            "owner", "owner@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "owner", "owner@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.member = User.objects.create_user(
-            "member", "member@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "member", "member@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Archive Test Workspace")
         Membership.objects.create(user=self.owner, workspace=self.ws, role="owner")
@@ -29,10 +29,10 @@ class ArchiveReopenTestCase(TestCase):
         )
 
     def login_owner(self):
-        self.client.login(username="owner", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="owner", password=os.environ["SECRET_TEST_PASS"])
 
     def login_member(self):
-        self.client.login(username="member", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="member", password=os.environ["SECRET_TEST_PASS"])
 
     def test_archive_project_owner(self):
         """Owner can archive project."""
@@ -126,13 +126,13 @@ class AuditEventTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin = User.objects.create_user(
-            "admin", "admin@example.com", os.getenv("SECRET_TEST_PASS", "testpass123"), is_staff=True
+            "admin", "admin@example.com", os.environ["SECRET_TEST_PASS"], is_staff=True
         )
         self.alice = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="admin", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="admin", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Audit Test Workspace")
         Membership.objects.create(user=self.admin, workspace=self.ws, role="owner")
@@ -141,7 +141,7 @@ class AuditEventTestCase(TestCase):
 
     def test_audit_events_admin_only(self):
         """Non-admin cannot list audit events."""
-        self.client.login(username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         resp = self.client.get("/api/v1/audit-events/")
         self.assertEqual(resp.status_code, 403)
 
@@ -153,7 +153,7 @@ class AuditEventTestCase(TestCase):
 
     def test_issue_audit_events_member(self):
         """Member can list audit events for an issue."""
-        self.client.login(username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123"))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         resp = self.client.get(f"/api/v1/issues/{self.project.id}/audit-events/")
         # Issue may not exist yet - 404 is expected, or 200 with empty results
         self.assertIn(resp.status_code, [200, 404])

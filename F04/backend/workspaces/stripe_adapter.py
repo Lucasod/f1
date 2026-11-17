@@ -22,14 +22,22 @@ class StripeAdapter:
         stripe.api_version = settings.STRIPE_API_VERSION
 
     def create_customer(self, idempotency_key, metadata=None):
-        """Create or retrieve a Stripe Customer for a workspace."""
-        try:
-            customers = stripe.Customer.list(
-                email=metadata.get("workspace_email", "") if metadata else "",
-                limit=1,
+        """Create or retrieve a Stripe Customer for a workspace.
+
+        Uses idempotency_key as the dedup mechanism - Stripe guarantees that
+        calling create with the same idempotency_key returns the same customer.
+        Does NOT use email-based lookup, which could match customers from
+        different tenants.
+        """
+        # Validate test mode - never call Stripe Live Mode
+        api_key = settings.STRIPE_API_KEY
+        if not api_key.startswith("sk_test_"):
+            raise StripeAdapterError(
+                "Stripe API key is not in test mode. "
+                "Live mode credentials are not allowed."
             )
-            if customers.data:
-                return customers.data[0].id
+
+        try:
             customer = stripe.Customer.create(
                 idempotency_key=idempotency_key,
                 metadata=metadata or {},

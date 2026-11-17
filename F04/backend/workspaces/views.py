@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import F, Q
+from django_multitenant.utils import set_current_tenant
 
 from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery, WorkspaceBilling, BillingPlan, BillingOperation, StripeEventInbox, Attachment, AuditEvent, DomainEvent
 from .serializers import (
@@ -26,7 +27,7 @@ from .serializers import (
     WebhookSubscriptionSerializer, WebhookSubscriptionCreateSerializer, WebhookDeliverySerializer,
     AttachmentSerializer, AuditEventSerializer,
 )
-from .tasks import enqueue_after_commit, generate_report, cleanup_attachment
+from .tasks import enqueue_after_commit, generate_report, cleanup_attachment, deliver_webhook
 from .stripe_adapter import StripeAdapter, StripeAdapterError
 from .billing_service import (
     get_or_create_workspace_billing,
@@ -192,6 +193,56 @@ def me(request):
     )
 
 
+def check_membership_quota_for_user(user):
+    """Check if the user can be added as owner to a new workspace.
+
+    For a brand-new workspace, the user would be the only member (owner),
+    so membership count would be 1. Check against the user's plan limit.
+    Returns (True, None, None) if allowed, (False, error_dict, status) if not.
+    """
+    from workspaces.models import WorkspaceBilling
+    from workspaces.billing_service import check_membership_quota
+
+    # Find an existing owned workspace to determine the user's plan
+    owned_ws = Workspace.objects.filter(
+        memberships__user=user,
+        memberships__role="owner",
+    ).first()
+
+    if owned_ws is None:
+        # User owns no workspace yet — treat as Free (5 memberships max,
+        # new workspace would have 1 member = owner)
+        return True, None, None
+
+    # Check if adding one more member (the owner of the new workspace)
+    # would exceed the plan's membership limit
+    billing = WorkspaceBilling.objects.filter(workspace=owned_ws).first()
+    if billing is None:
+        return True, None, None
+
+    plan = BillingPlan.objects.filter(
+        plan_id=billing.effective_plan, is_active=True
+    ).first()
+    max_memberships = plan.max_memberships if plan else 5
+
+    # A new workspace would have exactly 1 member (the owner)
+    if 1 >= max_memberships:
+        return False, {
+            "error": {
+                "code": "plan_limit_reached",
+                "message": "Your plan does not allow creating additional workspaces.",
+                "fields": {
+                    "resource": "memberships",
+                    "used": 1,
+                    "limit": max_memberships,
+                    "plan": billing.effective_plan,
+                }
+            }
+        }, status.HTTP_409_CONFLICT
+
+    return True, None, None
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_workspace(request):
@@ -216,22 +267,81 @@ def create_workspace(request):
         )
 
     with transaction.atomic():
-        # Create the workspace
-        workspace = Workspace.objects.create(name=name)
-
-        # Create the owner membership for the current user
         user = request.user
 
-        # Membership quota check (atomic, inside transaction)
+        # Lock owned workspaces to serialize concurrent creation attempts (CR-001)
+        owned_workspaces = Workspace.objects.select_for_update().filter(
+            memberships__user=user,
+            memberships__role="owner",
+        )
+
+        # Count owned workspaces
+        owned_workspace_count = owned_workspaces.distinct().count()
+
+        # Determine user's effective plan deterministically (CR-002)
+        # Prefer Pro over Free when a user owns multiple workspaces with
+        # different plans (e.g. after a downgrade).
+        user_billing = (
+            WorkspaceBilling.objects.filter(
+                workspace__in=owned_workspaces
+            )
+            .order_by("-effective_plan")  # "pro" > "free" alphabetically
+            .first()
+        )
+        user_plan = user_billing.effective_plan if user_billing else "free"
+
+        # Enforce Free=1, Pro=multi (CR-001)
+        if user_plan == "free" and owned_workspace_count >= 1:
+            return Response({
+                "error": {
+                    "code": "plan_limit_reached",
+                    "message": "Free plan users can create only one workspace.",
+                    "fields": {
+                        "resource": "workspaces",
+                        "used": owned_workspace_count,
+                        "limit": 1,
+                        "plan": "free",
+                    }
+                }
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Membership quota check BEFORE workspace creation (CR-008)
         from workspaces.billing_service import check_membership_quota
-        quota_ok, quota_error, quota_status = check_membership_quota(workspace)
+        quota_ok, quota_error, quota_status = check_membership_quota_for_user(user)
         if not quota_ok:
             return Response(quota_error, status=quota_status)
 
+        # Create the workspace
+        workspace = Workspace.objects.create(name=name)
+
+        # Ensure a billing row exists for the new workspace (defaults to Free)
+        billing = WorkspaceBilling.objects.create(workspace=workspace, effective_plan="free")
+
+        # Create the owner membership for the current user
         Membership.objects.create(
             user=user,
             workspace=workspace,
             role="owner",
+        )
+
+        # Emit a DomainEvent for Stripe Customer provisioning (outbox pattern)
+        # The event is created in the same transaction as the workspace, so
+        # rollback means no event is persisted. dispatch_outbox will process
+        # it asynchronously and create the Stripe Customer.
+        set_current_tenant(workspace)
+        DomainEvent.objects.create(
+            workspace=workspace,
+            event_type="customer.provision",
+            schema_version=1,
+            actor=request.user,
+            aggregate_type="Workspace",
+            aggregate_id=str(workspace.id),
+            request_id=request.META.get("CORRELATION_ID"),
+            payload={
+                "workspace_id": str(workspace.id),
+                "workspace_name": workspace.name,
+                "billing_id": str(billing.id),
+            },
         )
 
         # Return the workspace with the caller's role
@@ -2829,8 +2939,8 @@ def download_attachment(request, attachment_id):
     workspace = attachment.issue.board.project.workspace
     if not Membership.objects.filter(user=user, workspace=workspace, workspace__deleted_at__isnull=True).exists():
         return Response(
-            {"error": {"code": "permission_denied", "message": "Only workspace members may download attachments."}},
-            status=status.HTTP_403_FORBIDDEN,
+            {"error": {"code": "not_found", "message": "Attachment not found."}},
+            status=status.HTTP_404_NOT_FOUND,
         )
 
     import os as os_module

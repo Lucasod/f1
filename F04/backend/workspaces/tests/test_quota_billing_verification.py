@@ -24,10 +24,10 @@ class QuotaVerificationTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Quota Test Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
@@ -225,10 +225,10 @@ class StripeReadinessVerificationTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Stripe Readiness Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")

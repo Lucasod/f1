@@ -16,8 +16,8 @@ class MembershipTestCase(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.user = User.objects.create_user("alice", "alice@example.com", os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
 
     def test_membership_unique_per_user_per_workspace(self):
         """Same user added twice to one workspace → one membership remains."""

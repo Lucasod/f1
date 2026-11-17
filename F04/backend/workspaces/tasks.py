@@ -230,7 +230,7 @@ def enqueue_webhook_delivery(subscription, event_type, event_id, payload):
 
 
 @shared_task(base=TenantAwareTask, bind=True)
-def deliver_webhook(self, delivery_id):
+def deliver_webhook(self, delivery_id, _workspace_id=None, workspace_id=None):
     """Deliver a webhook with HMAC signing, SSRF protection, and bounded retries."""
     try:
         delivery = WebhookDelivery.objects.get(id=delivery_id)
@@ -640,6 +640,31 @@ def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
                 )
                 deliveries_to_enqueue.append((delivery.id, subscription.workspace.id))
 
+            # Provision Stripe Customer for workspace (outbox pattern)
+            if event.event_type == "customer.provision":
+                from workspaces.stripe_adapter import StripeAdapter, StripeAdapterError
+                from workspaces.models import WorkspaceBilling
+
+                try:
+                    adapter = StripeAdapter()
+                    customer = adapter.create_customer(
+                        idempotency_key=f"workspace-{event.aggregate_id}-customer",
+                        metadata=event.payload,
+                    )
+                    # Update WorkspaceBilling.customer_id
+                    billing = WorkspaceBilling.objects.get(
+                        workspace_id=event.aggregate_id
+                    )
+                    billing.customer_id = customer.id
+                    billing.save(update_fields=["customer_id", "updated_at"])
+                except StripeAdapterError:
+                    # Don't mark as dispatched - will be retried on next cycle
+                    # Don't raise - just skip this event, it stays pending
+                    continue
+                except WorkspaceBilling.DoesNotExist:
+                    # Billing record doesn't exist yet, skip
+                    continue
+
             # Mark event as dispatched only after fan-out records are durable
             event.dispatched_at = timezone.now()
             event.save(update_fields=["dispatched_at"])
@@ -654,3 +679,62 @@ def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
         )
 
     return {"status": "dispatched", "dispatched": dispatched_count}
+
+
+@shared_task(base=TenantAwareTask, bind=True, soft_time_limit=30, time_limit=45)
+def recover_webhook_deliveries(self, _workspace_id=None, workspace_id=None):
+    """Recover stranded WebhookDelivery records whose retry time has passed.
+
+    Scans WebhookDelivery with status='pending' and next_attempt_at <= now,
+    re-enqueues deliver_webhook for each. Idempotent and safe against concurrency
+    via select_for_update() inside transaction.atomic() and by advancing
+    next_attempt_at to claim each record before enqueuing delivery.
+    """
+    from django.db import transaction
+    from django.utils import timezone
+    from workspaces.models import WebhookDelivery
+
+    now = timezone.now()
+
+    with transaction.atomic():
+        queryset = WebhookDelivery.objects.filter(
+            status="pending", next_attempt_at__lte=now
+        )
+        if workspace_id:
+            queryset = queryset.filter(subscription__workspace_id=workspace_id)
+
+        stranded = (
+            queryset.select_for_update()
+            .order_by("next_attempt_at")[:100]
+        )
+
+        if not stranded:
+            return {"status": "empty", "recovered": 0}
+
+        recovered_count = 0
+        deliveries_to_enqueue = []
+
+        for delivery in stranded:
+            # Re-fetch with lock inside transaction
+            delivery = WebhookDelivery.objects.select_for_update().get(id=delivery.id)
+
+            # Skip if already recovered by another worker
+            if delivery.status != "pending" or delivery.next_attempt_at is None or delivery.next_attempt_at > now:
+                continue
+
+            # Claim the delivery by advancing next_attempt_at so a concurrent
+            # worker cannot re-process it before deliver_webhook runs.
+            delivery.next_attempt_at = now + timedelta(minutes=5)
+            delivery.save(update_fields=["next_attempt_at", "updated_at"])
+
+            deliveries_to_enqueue.append((delivery.id, delivery.subscription.workspace.id))
+            recovered_count += 1
+
+    # Enqueue deliver_webhook after the transaction commits
+    for delivery_id, ws_id in deliveries_to_enqueue:
+        enqueue_after_commit(
+            deliver_webhook,
+            kwargs={'delivery_id': delivery_id, '_workspace_id': ws_id},
+        )
+
+    return {"status": "recovered", "recovered": recovered_count}

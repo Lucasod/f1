@@ -32,7 +32,7 @@ class DomainEventModelTestCase(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123')
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.workspace = Workspace.objects.create(
             name="Acme", tenant_id=1
@@ -82,7 +82,7 @@ class DispatchOutboxTestCase(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123')
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.workspace = Workspace.objects.create(
             name="Acme", tenant_id=1
@@ -92,7 +92,7 @@ class DispatchOutboxTestCase(TestCase):
         )
         # A second member to verify fan-out to multiple users
         self.user2 = User.objects.create_user(
-            "bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123')
+            "bob", "bob@example.com", os.environ["SECRET_TEST_PASS"]
         )
         Membership.objects.create(
             user=self.user2, workspace=self.workspace, role="member"
@@ -104,7 +104,7 @@ class DispatchOutboxTestCase(TestCase):
             url="https://example.com/hooks",
             events=["issue.created"],
             is_enabled=True,
-            signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
 
     def _make_event(self, event_type, aggregate_type="Issue", aggregate_id="1", payload=None):
@@ -234,7 +234,7 @@ class DispatchOutboxTestCase(TestCase):
             url="https://disabled.example.com/hooks",
             events=["issue.created"],
             is_enabled=False,
-            signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         self._make_event("issue.created", "Issue", "3")
 

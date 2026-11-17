@@ -14,4 +14,10 @@ app.conf.beat_schedule = {
         'args': (),
         'kwargs': {},
     },
+    'recover-webhook-deliveries-every-60-seconds': {
+        'task': 'workspaces.tasks.recover_webhook_deliveries',
+        'schedule': 60.0,
+        'args': (),
+        'kwargs': {},
+    },
 }

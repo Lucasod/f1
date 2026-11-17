@@ -24,10 +24,10 @@ class MembershipQuotaTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Quota Test Workspace")
         # Create owner membership (counts as 1)

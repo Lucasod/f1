@@ -16,11 +16,11 @@ class CommentTestCase(TestCase):
     def setUp(self):
         """Create a fresh test client, workspace, project and issue."""
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.user = User.objects.create_user("alice", "alice@example.com", os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
+        self.bob = User.objects.create_user("bob", "bob@example.com", os.environ["SECRET_TEST_PASS"])
         self.bob_client = APIClient()
-        self.bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.bob_client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
 
         ws_resp = self.client.post(
             "/api/v1/workspaces/create/", {"name": "Acme"}, format="json"

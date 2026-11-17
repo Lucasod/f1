@@ -21,10 +21,10 @@ class SoftDeleteTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Soft Delete Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
@@ -42,11 +42,11 @@ class SoftDeleteTestCase(TestCase):
     def test_delete_workspace_owner_only(self):
         """Non-owner attempting deletion gets 403."""
         bob = User.objects.create_user(
-            "bob", "bob@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "bob", "bob@example.com", os.environ["SECRET_TEST_PASS"]
         )
         bob_client = APIClient()
         bob_client.login(
-            username="bob", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="bob", password=os.environ["SECRET_TEST_PASS"]
         )
         response = bob_client.delete(
             f"/api/v1/workspaces/{self.ws.id}/delete/",

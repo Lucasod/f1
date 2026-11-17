@@ -16,7 +16,7 @@ class WebhookSubscriptionTest(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user("alice", "alice@example.com", "testpass123")
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         self.ws = Workspace.objects.create(name="Webhook Test Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
 
@@ -74,7 +74,7 @@ class WebhookSubscriptionTest(TestCase):
     def test_list_webhook_subscriptions(self):
         WebhookSubscription.objects.create(
             workspace=self.ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         resp = self.client.get(f"/api/v1/webhooks/?workspace_id={self.ws.id}")
         self.assertEqual(resp.status_code, 200)
@@ -83,7 +83,7 @@ class WebhookSubscriptionTest(TestCase):
     def test_update_webhook_subscription(self):
         sub = WebhookSubscription.objects.create(
             workspace=self.ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         resp = self.client.patch(
             f"/api/v1/webhooks/{sub.id}/",
@@ -96,7 +96,7 @@ class WebhookSubscriptionTest(TestCase):
     def test_delete_webhook_subscription(self):
         sub = WebhookSubscription.objects.create(
             workspace=self.ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         resp = self.client.delete(f"/api/v1/webhooks/{sub.id}/")
         self.assertEqual(resp.status_code, 204)
@@ -105,7 +105,7 @@ class WebhookSubscriptionTest(TestCase):
     def test_list_webhook_deliveries(self):
         sub = WebhookSubscription.objects.create(
             workspace=self.ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         WebhookDelivery.objects.create(
             subscription=sub,
@@ -123,7 +123,7 @@ class WebhookSubscriptionTest(TestCase):
         other_ws = Workspace.objects.create(name="Other Workspace")
         sub = WebhookSubscription.objects.create(
             workspace=other_ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         resp = self.client.get(f"/api/v1/webhooks/{sub.id}/")
         self.assertEqual(resp.status_code, 403)
@@ -135,7 +135,7 @@ class WebhookDeliveryTaskTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("alice", "alice@example.com", "testpass123")
         self.client = APIClient()
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         self.ws = Workspace.objects.create(name="Webhook Delivery Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
 
@@ -143,7 +143,7 @@ class WebhookDeliveryTaskTest(TestCase):
         from workspaces.tasks import deliver_webhook
         sub = WebhookSubscription.objects.create(
             workspace=self.ws, url="https://example.com/webhook",
-            events=["issue.created"], signing_secret=os.getenv('WEBHOOK_SIGNING_SECRET', 'whsec_test123'),
+            events=["issue.created"], signing_secret=os.environ["WEBHOOK_SIGNING_SECRET"],
         )
         delivery = WebhookDelivery.objects.create(
             subscription=sub,

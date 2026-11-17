@@ -1,5 +1,6 @@
 /// <reference types="playwright/test" />
 import { test, expect } from '@playwright/test';
+import { execSync } from 'child_process';
 
 const BASE_URL = 'http://127.0.0.1:8000/api/v1';
 
@@ -91,6 +92,17 @@ async function createIssueToProject(request, csrfToken, projectId: number, title
   return resp;
 }
 
+// Hard-delete any workspaces owned by the given user.
+// Free plan allows only ONE workspace. Soft-delete via the API does NOT free
+// the slot because create_workspace counts every owned workspace regardless
+// of deleted_at, so we hard-delete via the Django ORM to reset the ownership
+// count before a test creates a new workspace.
+async function deleteUserWorkspaces(username: string) {
+  execSync(
+    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+  );
+}
+
 // -- Test suite: Sprint Lifecycle E2E --
 test.describe.serial('Sprint Lifecycle E2E', () => {
   let workspaceId: number | null = null;
@@ -124,6 +136,8 @@ test.describe.serial('Sprint Lifecycle E2E', () => {
     test.info().csrfToken = csrfToken;
 
     // Ensure workspace and project exist by creating them
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const createW = await createWorkspace(request, csrfToken, 'Sprint Test Workspace');
     expect(createW.status()).toBe(201);
     const bodyW = await createW.json();

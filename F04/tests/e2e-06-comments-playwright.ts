@@ -41,6 +41,17 @@ async function deleteComment(request, commentId, csrfToken) {
   return resp;
 }
 
+// Hard-delete any workspaces owned by the given user.
+// Free plan allows only ONE workspace. Soft-delete via the API does NOT free
+// the slot because create_workspace counts every owned workspace regardless
+// of deleted_at, so we hard-delete via the Django ORM to reset the ownership
+// count before a test creates a new workspace.
+async function deleteUserWorkspaces(username: string) {
+  execSync(
+    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+  );
+}
+
 // -- test.beforeAll: fetch initial CSRF token --
 test.beforeAll(async ({ request }, testInfo) => {
   const csrfResponse = await request.get(BASE_URL + '/auth/csrf/');
@@ -66,6 +77,8 @@ test.describe('Comments E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
 
     // Create a workspace and project first (comment creation requires membership)
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Comment Test Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
@@ -127,6 +140,8 @@ test.describe('Comments E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
 
     // Create a workspace and project first
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Comment List Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
@@ -189,6 +204,8 @@ test.describe('Comments E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
 
     // Create a workspace and project first
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Comment Delete Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
@@ -251,6 +268,8 @@ test.describe('Comments E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
 
     // Alice creates workspace
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Auth Test Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }
@@ -320,6 +339,8 @@ test.describe('Comments E2E', () => {
     csrfToken = freshCsrfBody.csrf_token;
 
     // Create a workspace and project first
+    // Free plan allows only ONE workspace; hard-delete any Alice owns from a prior run
+    await deleteUserWorkspaces('alice');
     const workspaceResp = await request.post(BASE_URL + '/workspaces/create/', {
       data: { name: 'Validation Workspace' },
       headers: { 'X-CSRFToken': csrfToken as string, 'Content-Type': 'application/json' }

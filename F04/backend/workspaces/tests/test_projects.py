@@ -18,8 +18,8 @@ class ProjectTestCase(TestCase):
     def setUp(self):
         """Create a fresh test client and user for each test."""
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.user = User.objects.create_user("alice", "alice@example.com", os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
 
     def _create_workspace(self):
         """Helper: create a workspace and return its ID."""
@@ -85,9 +85,9 @@ class ProjectTestCase(TestCase):
     def test_create_project_not_member_of_workspace(self):
         """POST in a workspace the user does not own/admin returns 403."""
         # Create a workspace owned by bob
-        bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob = User.objects.create_user("bob", "bob@example.com", os.environ["SECRET_TEST_PASS"])
         bob_client = APIClient()
-        bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob_client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
         bob_ws_resp = bob_client.post(
             "/api/v1/workspaces/create/", {"name": "Bob's Workspace"}, format="json"
         )
@@ -168,7 +168,7 @@ class ProjectTestCase(TestCase):
     def test_project_key_unique_across_workspaces(self):
         """Same key can be used in different workspaces."""
         # Create first workspace/project as alice
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         ws1_resp = self.client.post("/api/v1/workspaces/create/", {"name": "Acme"}, format="json")
         ws1_id = ws1_resp.data["workspace"]["id"]
         self.client.post(
@@ -178,9 +178,9 @@ class ProjectTestCase(TestCase):
         )
 
         # Create second workspace/project as bob
-        bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob = User.objects.create_user("bob", "bob@example.com", os.environ["SECRET_TEST_PASS"])
         bob_client = APIClient()
-        bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        bob_client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
         ws2_resp = bob_client.post("/api/v1/workspaces/create/", {"name": "Other"}, format="json")
         ws2_id = ws2_resp.data["workspace"]["id"]
         bob_client.post(
@@ -204,11 +204,11 @@ class IssueTestCase(TransactionTestCase):
     def setUp(self):
         """Create a fresh test client and users for each test."""
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
-        self.bob = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.user = User.objects.create_user("alice", "alice@example.com", os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
+        self.bob = User.objects.create_user("bob", "bob@example.com", os.environ["SECRET_TEST_PASS"])
         self.bob_client = APIClient()
-        self.bob_client.login(username="bob", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.bob_client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
 
     def _create_workspace(self, name="Acme"):
         """Helper: create a workspace and return its ID."""
@@ -312,7 +312,7 @@ class IssueTestCase(TransactionTestCase):
     def _create_workspace_for_user(self, user, name):
         """Create workspace for a specific user."""
         client = APIClient()
-        client.login(username=user.username, password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        client.login(username=user.username, password=os.environ["SECRET_TEST_PASS"])
         resp = client.post(
             "/api/v1/workspaces/create/", {"name": name}, format="json"
         )
@@ -377,7 +377,7 @@ class IssueTestCase(TransactionTestCase):
         project_id = proj_resp.data["project"]["id"]
         # bob and charlie are both members of the workspace
         Membership.objects.create(user=self.bob, workspace=workspace, role="member")
-        charlie = User.objects.create_user("charlie", "charlie@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        charlie = User.objects.create_user("charlie", "charlie@example.com", os.environ["SECRET_TEST_PASS"])
         Membership.objects.create(user=charlie, workspace=workspace, role="member")
         # Create an issue assigned to bob only
         self._create_issue(project_id, "Issue assigned to bob", assignee_username=self.bob.username)

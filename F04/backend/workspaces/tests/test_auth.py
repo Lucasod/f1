@@ -15,7 +15,7 @@ class AuthTestCase(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.user = User.objects.create_user("alice", "alice@example.com", os.environ["SECRET_TEST_PASS"])
         self.user.display_name = "Alice"
         self.user.save()
 
@@ -33,7 +33,7 @@ class AuthTestCase(TestCase):
         """POST /api/v1/auth/login/ with valid credentials returns user."""
         response = self.client.post(
             "/api/v1/auth/login/",
-            {"username": "alice", "password": os.getenv('SECRET_TEST_PASS', 'testpass123')},
+            {"username": "alice", "password": os.environ["SECRET_TEST_PASS"]},
             format="json",
         )
         self.assertEqual(response.status_code, 200)
@@ -52,13 +52,13 @@ class AuthTestCase(TestCase):
 
     def test_login_inactive_account(self):
         """POST /api/v1/auth/login/ with inactive account returns 400."""
-        inactive_user = User.objects.create_user("bob", "bob@example.com", os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        inactive_user = User.objects.create_user("bob", "bob@example.com", os.environ["SECRET_TEST_PASS"])
         inactive_user.is_active = False
         inactive_user.save()
 
         response = self.client.post(
             "/api/v1/auth/login/",
-            {"username": "bob", "password": os.getenv('SECRET_TEST_PASS', 'testpass123')},
+            {"username": "bob", "password": os.environ["SECRET_TEST_PASS"]},
             format="json",
         )
         self.assertEqual(response.status_code, 400)
@@ -66,7 +66,7 @@ class AuthTestCase(TestCase):
 
     def test_me_authenticated(self):
         """GET /api/v1/auth/me/ with valid session returns user."""
-        self.client.login(username="alice", password=os.getenv('SECRET_TEST_PASS', 'testpass123'))
+        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
         response = self.client.get("/api/v1/auth/me/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["user"]["username"], "alice")

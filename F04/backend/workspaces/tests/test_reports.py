@@ -25,21 +25,21 @@ class ReportTestCase(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             "alice", "alice@example.com",
-            os.getenv('SECRET_TEST_PASS', 'testpass123'),
+            os.environ["SECRET_TEST_PASS"],
         )
         self.client.login(
             username="alice",
-            password=os.getenv('SECRET_TEST_PASS', 'testpass123'),
+            password=os.environ["SECRET_TEST_PASS"],
         )
 
         self.bob = User.objects.create_user(
             "bob", "bob@example.com",
-            os.getenv('SECRET_TEST_PASS', 'testpass123'),
+            os.environ["SECRET_TEST_PASS"],
         )
         self.bob_client = APIClient()
         self.bob_client.login(
             username="bob",
-            password=os.getenv('SECRET_TEST_PASS', 'testpass123'),
+            password=os.environ["SECRET_TEST_PASS"],
         )
 
         # Workspace where alice is a member (owner); bob is NOT a member.

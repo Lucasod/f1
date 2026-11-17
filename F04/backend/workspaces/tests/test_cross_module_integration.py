@@ -16,10 +16,10 @@ class CrossModuleIntegrationTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.alice = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Integration Test Workspace")
         Membership.objects.create(user=self.alice, workspace=self.ws, role="owner")

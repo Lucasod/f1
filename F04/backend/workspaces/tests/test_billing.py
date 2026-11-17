@@ -22,10 +22,10 @@ class BillingTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            "alice", "alice@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "alice", "alice@example.com", os.environ["SECRET_TEST_PASS"]
         )
         self.client.login(
-            username="alice", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="alice", password=os.environ["SECRET_TEST_PASS"]
         )
         self.ws = Workspace.objects.create(name="Billing Test Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
@@ -76,11 +76,11 @@ class BillingTestCase(TestCase):
     def test_checkout_requires_owner(self):
         """Non-owner attempting checkout gets 403."""
         bob = User.objects.create_user(
-            "bob", "bob@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "bob", "bob@example.com", os.environ["SECRET_TEST_PASS"]
         )
         bob_client = APIClient()
         bob_client.login(
-            username="bob", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="bob", password=os.environ["SECRET_TEST_PASS"]
         )
         response = bob_client.post(
             f"/api/v1/workspaces/{self.ws.id}/billing/checkout/",
@@ -120,11 +120,11 @@ class BillingTestCase(TestCase):
             state="pending",
         )
         bob = User.objects.create_user(
-            "bob2", "bob2@example.com", os.getenv("SECRET_TEST_PASS", "testpass123")
+            "bob2", "bob2@example.com", os.environ["SECRET_TEST_PASS"]
         )
         bob_client = APIClient()
         bob_client.login(
-            username="bob2", password=os.getenv("SECRET_TEST_PASS", "testpass123")
+            username="bob2", password=os.environ["SECRET_TEST_PASS"]
         )
         response = bob_client.get(
             f"/api/v1/workspaces/{self.ws.id}/billing/operations/{operation.id}/",
