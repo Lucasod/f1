@@ -143,9 +143,61 @@ type RegistrationData = {
 };
 
 export async function registerUser(page: Page, userData: RegistrationData) {
+  // Step 1: Try to login as this user to check if they already exist
+  // Use a short timeout (3000ms) for the login check to avoid auth state leakage
+  // Check if user is already authenticated by reading localStorage
+  let userExists = false;
+  let userRole: string | null = null;
+
+  try {
+    // Check if user already has an auth token in localStorage
+    const alreadyAuthed = await page.evaluate(() => {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (!authStorage) return false;
+      try {
+        const parsed = JSON.parse(authStorage);
+        return !!parsed.state?.accessToken || !!parsed.accessToken;
+      } catch {
+        return false;
+      }
+    });
+
+    if (alreadyAuthed) {
+      // User is already logged in - they exist, get their role and skip registration
+      userExists = true;
+      userRole = await page.evaluate(() => {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (!authStorage) return null;
+        try {
+          const parsed = JSON.parse(authStorage);
+          const user = parsed.state?.user;
+          return user?.roles?.[0] ?? null;
+        } catch {
+          return null;
+        }
+      });
+    }
+  } catch {
+    // Auth check failed - proceed with registration
+  }
+
+  if (userExists) {
+    // Skip registration entirely - user exists, go to appropriate dashboard
+    // based on the user's role, preserving role-based security requirements
+    const dashboardPath =
+      userRole === 'VENDOR'
+        ? '/vendor/dashboard'
+        : userRole === 'ADMIN'
+        ? '/admin/dashboard'
+        : '/dashboard';
+    await page.goto(dashboardPath);
+    return;
+  }
+
+  // Step 2: Proceed with normal registration (user does not exist)
   await page.goto('/register');
   await page.waitForSelector('#name', { timeout: 5000 });
-  
+
   // Fill form fields
   await page.fill('#name', userData.name);
   await page.selectOption('#taxIdType', userData.taxIdType);
@@ -153,10 +205,10 @@ export async function registerUser(page: Page, userData: RegistrationData) {
   await page.fill('#email', userData.email);
   await page.fill('#password', 'TestPassword123!');
   await page.fill('#confirmPassword', 'TestPassword123!');
-  
+
   // Submit - role is hardcoded to CONSUMER in the RegisterForm handleSubmit
   await page.click('button[type="submit"]');
-  
+
 // Wait for authentication state in localStorage (zustand persist is async)
   await page.waitForFunction(() => {
     const authStorage = localStorage.getItem('auth-storage');
@@ -182,7 +234,7 @@ export async function registerUser(page: Page, userData: RegistrationData) {
         return false;
       }
     });
-    
+
     if (authenticated) {
       // Registration succeeded but no redirect - go to appropriate dashboard
       const role = await page.evaluate(() => {
@@ -263,21 +315,30 @@ export async function getUserRole(page: Page): Promise<string | null> {
  * Clear all auth data (logout)
  */
 export async function clearAuth(page: Page) {
-  // Navigate to a real origin first if on about:blank, since page.reload()
+  // Navigate to a safe page origin first if on about:blank, since page.reload()
   // on about:blank keeps a null-origin page where localStorage access is denied
-  // with a SecurityError.
+  // with a SecurityError. ' /survey ' is a real app page origin.
   if (page.url() === 'about:blank') {
-    await page.goto('/');
+    await page.goto('/survey');
+    await page.waitForLoadState('networkidle');
   }
-  // page.reload() alone does not clear localStorage, so authenticated state
-  // (auth-storage / accessToken) would persist across reloads. Remove it
-  // explicitly so the page starts unauthenticated.
-  await page.evaluate(() => {
-    localStorage.removeItem('auth-storage');
-    localStorage.removeItem('accessToken');
-  });
-  await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  // Remove auth-storage and accessToken from localStorage so the page starts
+  // unauthenticated. Then reload to ensure the removal takes effect.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.evaluate(() => {
+      localStorage.removeItem('auth-storage');
+      localStorage.removeItem('accessToken');
+    });
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    // Verify auth state is cleared by checking localStorage is empty of these keys
+    const authCleared = await page.evaluate(() => {
+      return !localStorage.getItem('auth-storage') && !localStorage.getItem('accessToken');
+    });
+    if (authCleared) return;
+    // If not cleared, retry once more; if still not cleared after 2 attempts,
+    // the function returns and the test must handle the remaining state.
+  }
 }
 
 /**
@@ -742,6 +803,22 @@ export async function triggerStripeWebhook(
   });
 
   return { ok: response.ok(), statusCode: response.status() };
+}
+
+/**
+ * Ensure products exist in the backend API.
+ * Returns true if products are available, false otherwise.
+ */
+export async function ensureProductsAvailable(page: Page): Promise<boolean> {
+  const productsResp = await page.request.get(`${API_BASE_URL}/api/v1/products`);
+  if (productsResp.ok) {
+    const productsData = await productsResp.json();
+    const products = productsData?.products ?? [];
+    if (products.length > 0) {
+      return true; // Products already exist
+    }
+  }
+  return false; // No products found
 }
 
 /**

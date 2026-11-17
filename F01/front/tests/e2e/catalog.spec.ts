@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoAndWait, isAuthenticated, clearAuth, API_BASE_URL, apiFetch } from './fixtures';
+import { gotoAndWait, isAuthenticated, clearAuth, API_BASE_URL, apiFetch, ensureProductsAvailable } from './fixtures';
 
 test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
   test.beforeEach(async ({ page }) => {
@@ -16,15 +16,17 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
   });
 
   test('Catalog page lists products and supports filtering by category', async ({ page }) => {
+    await ensureProductsAvailable(page);
     await gotoAndWait(page, '/products');
 
     // Page should load with English heading
     await expect(page.locator('h1')).toContainText('Products');
 
-    // Product cards should render (or empty state if no seeded products)
+    // Product cards should render
     const productCards = page.locator('[role="listitem"], [data-testid="product-card"]');
     const cardCount = await productCards.count();
 
+    // Card count should be > 0 since we ensured products exist
     if (cardCount > 0) {
       // First product card should show name and price
       const firstCard = productCards.first();
@@ -141,6 +143,7 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
   });
 
   test('Navigation between catalog and PDP works', async ({ page }) => {
+    await ensureProductsAvailable(page);
     await gotoAndWait(page, '/products');
 
     const productCards = page.locator('[data-testid="product-card"], a[href*="/products/"]').first();

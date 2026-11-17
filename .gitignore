@@ -38,3 +38,4 @@ F04/backend/private_storage/
 # Playwright generated artifacts
 **/playwright-report/
 **/test-results/
+F01/front/json/
