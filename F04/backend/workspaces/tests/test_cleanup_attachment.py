@@ -132,6 +132,53 @@ class CleanupAttachmentTaskTestCase(TestCase):
         )
         self.assertEqual(result.result["status"], "not_found")
 
+    def test_cleanup_workspace_mismatch_no_removal(self):
+        """Attachment belongs to workspace A, task called with workspace B → no removal."""
+        # Create a different workspace
+        ws_b = Workspace.objects.create(name="Workspace B", tenant_id=2)
+        Membership.objects.create(user=self.user, workspace=ws_b, role="owner")
+
+        att, storage_path = self._make_attachment("deleted", "mismatch-file", create_file=True)
+        self.assertTrue(os_module.path.exists(storage_path))
+
+        # Call cleanup with wrong workspace
+        result = cleanup_attachment.apply(
+            args=[att.id], kwargs={"_workspace_id": ws_b.id}
+        )
+        # Task should skip or not remove because workspace doesn't match attachment
+        # The task uses TenantAwareTask which sets tenant context from _workspace_id,
+        # but the attachment belongs to a different workspace. With tenant context set
+        # to ws_b, the Attachment.objects.get(id=att.id) won't find it (tenant isolation).
+        self.assertEqual(result.result["status"], "not_found")
+        # File should still exist
+        self.assertTrue(os_module.path.exists(storage_path))
+
+    def test_cleanup_invalid_workspace_no_removal(self):
+        """Attachment exists, task called with non-existent workspace → not_found."""
+        att, storage_path = self._make_attachment("deleted", "invalid-ws-file", create_file=True)
+        self.assertTrue(os_module.path.exists(storage_path))
+
+        result = cleanup_attachment.apply(
+            args=[att.id], kwargs={"_workspace_id": 999999}
+        )
+        self.assertEqual(result.result["status"], "not_found")
+        self.assertTrue(os_module.path.exists(storage_path))
+
+    def test_cleanup_tenant_isolation_different_workspace(self):
+        """Tenant context from different workspace prevents access to attachment."""
+        ws_other = Workspace.objects.create(name="Other Workspace", tenant_id=99)
+        Membership.objects.create(user=self.user, workspace=ws_other, role="owner")
+
+        att, storage_path = self._make_attachment("deleted", "tenant-iso-file", create_file=True)
+        self.assertTrue(os_module.path.exists(storage_path))
+
+        # Call with other workspace's ID - tenant isolation should prevent access
+        result = cleanup_attachment.apply(
+            args=[att.id], kwargs={"_workspace_id": ws_other.id}
+        )
+        self.assertEqual(result.result["status"], "not_found")
+        self.assertTrue(os_module.path.exists(storage_path))
+
     def test_cleanup_removed_file_then_second_call_is_idempotent(self):
         """Repeated cleanup on same attachment: second call finds no file, still success."""
         att, storage_path = self._make_attachment("deleted", "idempotent-file", create_file=True)

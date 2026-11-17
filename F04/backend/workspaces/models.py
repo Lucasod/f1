@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django_multitenant.mixins import TenantModelMixin
+from django_multitenant.models import TenantManager
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
 import uuid
@@ -844,6 +845,8 @@ class Attachment(TenantModelMixin, models.Model):
 
     class TenantMeta:
         tenant_field_name = "tenant_id"
+
+    objects = TenantManager()
 
     tenant_id = models.PositiveBigIntegerField(
         "tenant id",

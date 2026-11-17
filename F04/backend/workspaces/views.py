@@ -17,7 +17,7 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import F, Q
 
-from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery, WorkspaceBilling, BillingPlan, BillingOperation, StripeEventInbox, Attachment, AuditEvent
+from .models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Sprint, Comment, AuditLog, Notification, Report, WebhookSubscription, WebhookDelivery, WorkspaceBilling, BillingPlan, BillingOperation, StripeEventInbox, Attachment, AuditEvent, DomainEvent
 from .serializers import (
     WorkspaceSerializer, MembershipSerializer, MembershipCreateSerializer,
     ProjectSerializer, BoardSerializer, BoardCreateSerializer,
@@ -26,7 +26,7 @@ from .serializers import (
     WebhookSubscriptionSerializer, WebhookSubscriptionCreateSerializer, WebhookDeliverySerializer,
     AttachmentSerializer, AuditEventSerializer,
 )
-from .tasks import enqueue_after_commit, generate_report
+from .tasks import enqueue_after_commit, generate_report, cleanup_attachment
 from .stripe_adapter import StripeAdapter, StripeAdapterError
 from .billing_service import (
     get_or_create_workspace_billing,
@@ -909,6 +909,24 @@ def create_issue(request, project_id):
             version=0,
         )
 
+        DomainEvent.objects.create(
+            workspace=issue.board.project.workspace,
+            event_type="issue.created",
+            schema_version=1,
+            actor=request.user,
+            aggregate_type="Issue",
+            aggregate_id=str(issue.id),
+            occurred_at=timezone.now(),
+            request_id=request.META.get("CORRELATION_ID"),
+            payload={
+                "issue_id": issue.id,
+                "project_id": project.id,
+                "workspace_id": project.workspace.id,
+                "title": issue.title,
+                "status_id": issue.status_id_id,
+            },
+        )
+
         issue_serializer = IssueSerializer(issue, context={"request": request})
         log_audit_operation(
             actor=request.user,
@@ -1297,6 +1315,24 @@ def transition_issue(request, issue_id):
         issue.version = (issue.version or 0) + 1
         issue.save()
 
+        DomainEvent.objects.create(
+            workspace=issue.board.project.workspace,
+            event_type="issue.status_changed",
+            schema_version=1,
+            actor=request.user,
+            aggregate_type="Issue",
+            aggregate_id=str(issue.id),
+            occurred_at=timezone.now(),
+            request_id=request.META.get("CORRELATION_ID"),
+            payload={
+                "issue_id": issue.id,
+                "project_id": issue.board.project.id,
+                "workspace_id": issue.board.project.workspace.id,
+                "from_status": str(current_status.id),
+                "to_status": target_status.id,
+            },
+        )
+
         log_audit_operation(
             actor=request.user,
             workspace=issue.board.project.workspace,
@@ -1509,7 +1545,25 @@ def _create_comment(request, issue_id):
 
     serializer = CommentSerializer(data=request.data, context={"request": request})
     if serializer.is_valid(raise_exception=True):
-        comment = serializer.save(issue=issue, author=user)
+        with transaction.atomic():
+            comment = serializer.save(issue=issue, author=user)
+            DomainEvent.objects.create(
+                workspace=issue.board.project.workspace,
+                event_type="comment.created",
+                schema_version=1,
+                actor=request.user,
+                aggregate_type="Comment",
+                aggregate_id=str(comment.id),
+                occurred_at=timezone.now(),
+                request_id=request.META.get("CORRELATION_ID"),
+                payload={
+                    "comment_id": comment.id,
+                    "issue_id": issue.id,
+                    "project_id": issue.board.project.id,
+                    "workspace_id": issue.board.project.workspace.id,
+                    "author_id": user.id,
+                },
+            )
     log_audit_operation(
         actor=request.user,
         workspace=issue.board.project.workspace,
@@ -2829,6 +2883,27 @@ def delete_attachment(request, attachment_id):
         attachment.deleted_at = timezone.now()
         attachment.state = "deleted"
         attachment.save(update_fields=["deleted_at", "state", "updated_at"])
+        DomainEvent.objects.create(
+            workspace=workspace,
+            event_type="attachment.deleted",
+            schema_version=1,
+            actor=request.user,
+            aggregate_type="Attachment",
+            aggregate_id=str(attachment.id),
+            occurred_at=timezone.now(),
+            request_id=request.META.get("CORRELATION_ID"),
+            payload={
+                "attachment_id": attachment.id,
+                "issue_id": attachment.issue.id,
+                "workspace_id": workspace.id,
+                "object_key": attachment.object_key,
+            },
+        )
+
+    enqueue_after_commit(
+        cleanup_attachment,
+        kwargs={'attachment_id': attachment.id, '_workspace_id': workspace.id},
+    )
 
     log_audit_operation(
         actor=request.user,

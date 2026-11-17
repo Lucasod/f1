@@ -40,7 +40,7 @@ class TenantAwareTask(Task):
                 workspace = Workspace.objects.get(id=workspace_id)
                 set_tenant(workspace)
             except Workspace.DoesNotExist:
-                pass
+                clear_tenant()
         # Pass workspace_id to the task function (it was popped above)
         kwargs['workspace_id'] = workspace_id
         try:
@@ -528,6 +528,10 @@ def cleanup_attachment(self, attachment_id, _workspace_id=None, workspace_id=Non
     except Attachment.DoesNotExist:
         return {"status": "not_found"}
 
+    # Validate workspace isolation: attachment must belong to the requested workspace
+    if attachment.workspace_id != workspace_id:
+        return {"status": "not_found"}
+
     # Only clean up if deleted or failed
     if attachment.state not in ("deleted", "failed"):
         return {"status": "skipped", "reason": f"state is {attachment.state}"}
@@ -546,8 +550,14 @@ def cleanup_attachment(self, attachment_id, _workspace_id=None, workspace_id=Non
             os_module.remove(storage_path)
             file_existed = True
         except OSError as exc:
-            # Real removal failure: trigger retry with exponential backoff
-            countdown = min(60 * (2 ** self.request.retries), 7200)
+            # Real removal failure: trigger retry with contract backoff
+            # Contract: 1 initial + 4 retries at 60s/300s/1800s/7200s
+            retry_delays = [60, 300, 1800, 7200]
+            retry_index = self.request.retries
+            if retry_index < len(retry_delays):
+                countdown = retry_delays[retry_index]
+            else:
+                countdown = 7200
             raise self.retry(exc=exc, countdown=countdown)
 
     # If removal succeeded or file was missing, update attachment state
@@ -567,56 +577,80 @@ def cleanup_attachment(self, attachment_id, _workspace_id=None, workspace_id=Non
 def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
     """Scan pending DomainEvents and fan out to Notification / WebhookDelivery.
 
-    Creates unique delivery/notification records. Marks event dispatched only
-    after fan-out records are durable. Scan every 60s (Celery Beat), batches
-    of 100; failed scan retries next tick.
+    Uses select_for_update() inside transaction.atomic() to prevent concurrent
+    workers from dispatching the same event. Fan-out and mark-dispatched happen
+    in a single transaction.atomic() block for atomicity. Webhook deliveries
+    are enqueued after commit via enqueue_after_commit.
     """
     from django.db import transaction
     from workspaces.models import DomainEvent, Membership, Notification, WebhookDelivery, WebhookSubscription
 
     BATCH_SIZE = 100
 
-    pending = DomainEvent.objects.filter(dispatched_at__isnull=True).order_by("occurred_at")[:BATCH_SIZE]
-
-    if not pending:
-        return {"status": "empty", "dispatched": 0}
-
-    dispatched_count = 0
-
-    for event in pending:
-        workspace = event.workspace
-
-        # Fan out: create Notification for workspace members
-        if event.event_type in ("issue.created", "issue.status_changed", "comment.created"):
-            members = Membership.objects.filter(workspace=workspace).select_related("user")
-            for membership in members:
-                Notification.objects.create(
-                    user=membership.user,
-                    workspace=workspace,
-                    notification_type=event.event_type,
-                    entity_type=event.aggregate_type,
-                    payload=event.payload,
-                )
-
-        # Fan out: create WebhookDelivery for enabled webhook subscriptions
-        subscriptions = WebhookSubscription.objects.filter(
-            workspace=workspace, is_enabled=True
+    with transaction.atomic():
+        # Lock pending events inside the transaction to prevent concurrent
+        # dispatch by multiple workers
+        pending = (
+            DomainEvent.objects.filter(dispatched_at__isnull=True)
+            .select_for_update()
+            .order_by("occurred_at")[:BATCH_SIZE]
         )
-        for subscription in subscriptions:
-            WebhookDelivery.objects.create(
-                subscription=subscription,
-                event_type=event.event_type,
-                event_id=str(event.id),
-                delivery_id=str(uuid.uuid4()),
-                status="pending",
-                request_payload=event.payload,
-            )
 
-        # Mark event as dispatched only after fan-out records are durable
-        with transaction.atomic():
+        if not pending:
+            return {"status": "empty", "dispatched": 0}
+
+        dispatched_count = 0
+        deliveries_to_enqueue = []
+
+        for event in pending:
+            # Re-fetch with lock inside transaction
+            event = DomainEvent.objects.select_for_update().get(id=event.id)
+
+            # Skip if already dispatched (another worker may have processed it)
+            if event.dispatched_at is not None:
+                continue
+
+            workspace = event.workspace
+
+            # Fan out: create Notification for workspace members
+            if event.event_type in ("issue.created", "issue.status_changed", "comment.created"):
+                members = Membership.objects.filter(workspace=workspace).select_related("user")
+                for membership in members:
+                    Notification.objects.create(
+                        user=membership.user,
+                        workspace=workspace,
+                        notification_type=event.event_type,
+                        entity_type=event.aggregate_type,
+                        entity_id=None,
+                        payload=event.payload,
+                    )
+
+            # Fan out: create WebhookDelivery for enabled webhook subscriptions
+            subscriptions = WebhookSubscription.objects.filter(
+                workspace=workspace, is_enabled=True
+            )
+            for subscription in subscriptions:
+                delivery = WebhookDelivery.objects.create(
+                    subscription=subscription,
+                    event_type=event.event_type,
+                    event_id=str(event.id),
+                    delivery_id=str(uuid.uuid4()),
+                    status="pending",
+                    request_payload=event.payload,
+                )
+                deliveries_to_enqueue.append((delivery.id, subscription.workspace.id))
+
+            # Mark event as dispatched only after fan-out records are durable
             event.dispatched_at = timezone.now()
             event.save(update_fields=["dispatched_at"])
 
-        dispatched_count += 1
+            dispatched_count += 1
+
+    # Enqueue deliver_webhook after the transaction commits
+    for delivery_id, ws_id in deliveries_to_enqueue:
+        enqueue_after_commit(
+            deliver_webhook,
+            kwargs={'delivery_id': delivery_id, '_workspace_id': ws_id},
+        )
 
     return {"status": "dispatched", "dispatched": dispatched_count}
