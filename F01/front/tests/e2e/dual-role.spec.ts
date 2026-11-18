@@ -23,9 +23,9 @@ import {
   createOrderViaCheckout,
 } from './fixtures';
 
-const testCred = 't3!';
+const testCred = process.env.TEST_USER_PASSWORD;
 // Admin password from backend .env (TEST_USER_PASSWORD)
-const ADMIN_PASSWORD = process.env.TEST_USER_PASSWORD || 't3!';
+const ADMIN_PASSWORD = process.env.TEST_USER_PASSWORD;
 
 test.describe('FS-01 Dual-Role Acceptance Scenarios (DR-01 through DR-14)', () => {
   test.beforeEach(async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe('FS-01 Dual-Role Acceptance Scenarios (DR-01 through DR-14)', () =
     // Re-login to get fresh token with VENDOR role
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
 
     await page.waitForFunction(() => {
@@ -134,7 +134,7 @@ test.describe('FS-01 Dual-Role Acceptance Scenarios (DR-01 through DR-14)', () =
     // Re-login to get updated roles
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
 
     await page.waitForFunction(() => {
@@ -185,7 +185,7 @@ await page.goto('/vendor/onboard');
     // Re-login to get both roles
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -270,7 +270,7 @@ await page.goto('/vendor/onboard');
     // Re-login as Vendor B
     await page.goto('/login');
     await page.fill('#email', vendorBData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -332,7 +332,7 @@ await page.goto('/vendor/onboard');
     // Re-login to get both roles
     await page.goto('/login');
     await page.fill('#email', buyerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -379,7 +379,7 @@ await page.goto('/vendor/onboard');
     // Re-login
     await page.goto('/login');
     await page.fill('#email', vendorData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -415,7 +415,7 @@ await page.goto('/vendor/onboard');
     // We test the authorization directly via API using seeded data.
     
     // Get a seeded vendor's token (techstore@example.com from seed)
-    const seededVendorLogin = await loginViaApi(page, 'techstore@example.com', 'TestPass123!');
+    const seededVendorLogin = await loginViaApi(page, 'techstore@example.com', process.env.TEST_USER_PASSWORD);
     expect(seededVendorLogin.accessToken).not.toBeNull();
     const seededVendorToken = seededVendorLogin.accessToken!;
 
@@ -454,7 +454,7 @@ await page.goto('/vendor/onboard');
 
       await page.goto('/login');
       await page.fill('#email', vendorBData.email);
-      await page.fill('#password', 'TestPassword123!');
+      await page.fill('#password', process.env.TEST_USER_PASSWORD);
       await page.click('button[type="submit"]');
       await page.waitForFunction(() => {
         const authStorage = localStorage.getItem('auth-storage');
@@ -591,7 +591,7 @@ await page.goto('/vendor/onboard');
     // Re-login
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -663,7 +663,7 @@ await page.goto('/vendor/onboard');
     // Re-login to get fresh token with both roles
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -725,7 +725,7 @@ await page.goto('/vendor/onboard');
     // Re-login
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');
@@ -781,7 +781,7 @@ await page.goto('/vendor/onboard');
     // Re-login
     await page.goto('/login');
     await page.fill('#email', consumerData.email);
-    await page.fill('#password', 'TestPassword123!');
+    await page.fill('#password', process.env.TEST_USER_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForFunction(() => {
       const authStorage = localStorage.getItem('auth-storage');

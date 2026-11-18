@@ -7,13 +7,19 @@ import {
   generateUniqueEmail,
   getVendorRegistrationData,
   getConsumerRegistrationData,
+  onboardVendor,
+  loginViaApi,
 } from './fixtures';
 
 test.describe('LC-22: Wallet API', () => {
   test('wallet balance returns 0 for vendor (MP-28)', async ({ page }) => {
     const email = generateUniqueEmail('vendor');
     await registerUser(page, getVendorRegistrationData(email));
-    const token = await getAuthToken(page);
+    const storeName = `Test Store ${Date.now()}`;
+    const slug = `test-store-${Date.now()}`;
+    await onboardVendor(page, storeName, slug);
+    const loginResult = await loginViaApi(page, email, process.env.TEST_USER_PASSWORD);
+    const token = loginResult.accessToken!;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/balance', undefined, token);
     expect(resp.status()).toBe(200);
@@ -25,7 +31,11 @@ test.describe('LC-22: Wallet API', () => {
   test('wallet transactions list for vendor', async ({ page }) => {
     const email = generateUniqueEmail('vendor');
     await registerUser(page, getVendorRegistrationData(email));
-    const token = await getAuthToken(page);
+    const storeName = `Test Store ${Date.now()}`;
+    const slug = `test-store-${Date.now()}`;
+    await onboardVendor(page, storeName, slug);
+    const loginResult = await loginViaApi(page, email, process.env.TEST_USER_PASSWORD);
+    const token = loginResult.accessToken!;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/transactions', undefined, token);
     expect(resp.status()).toBe(200);
@@ -36,7 +46,11 @@ test.describe('LC-22: Wallet API', () => {
   test('wallet reconcile for vendor', async ({ page }) => {
     const email = generateUniqueEmail('vendor');
     await registerUser(page, getVendorRegistrationData(email));
-    const token = await getAuthToken(page);
+    const storeName = `Test Store ${Date.now()}`;
+    const slug = `test-store-${Date.now()}`;
+    await onboardVendor(page, storeName, slug);
+    const loginResult = await loginViaApi(page, email, process.env.TEST_USER_PASSWORD);
+    const token = loginResult.accessToken!;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/wallet/reconcile', undefined, token);
     expect(resp.status()).toBe(200);

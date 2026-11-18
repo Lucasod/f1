@@ -25,7 +25,8 @@ test.describe('LC-02 — Busca Elasticsearch (E2E)', () => {
     await expect(page.locator('h1')).toContainText('Products');
 
     // Results should contain the search term
-    const productCards = page.locator('[data-testid="product-card"], [role="listitem"]');
+    // Product cards have role="article" inside a role="list" container
+    const productCards = page.locator('[role="list"] [role="article"]');
     const cardCount = await productCards.count();
     if (cardCount > 0) {
       // At least one card should mention the search term
@@ -33,7 +34,8 @@ test.describe('LC-02 — Busca Elasticsearch (E2E)', () => {
       await expect(firstCard).toContainText(searchTerm);
     } else {
       // Empty state is acceptable if search returns nothing
-      await expect(page.locator('text=No products found')).toBeVisible();
+      // EmptyState uses h3 for title
+      await expect(page.locator('h3:has-text("No products found")')).toBeVisible();
     }
   });
 
@@ -47,8 +49,14 @@ test.describe('LC-02 — Busca Elasticsearch (E2E)', () => {
     await gotoAndWait(page, '/products?search=C%2B%2B');
 
     await expect(page.locator('h1')).toContainText('Products');
-    // Should not crash on regex special characters
-    await expect(page.locator('text=No products found, text=Products')).toBeVisible();
+    // Should not crash on regex special characters - either empty state or products shown
+    // Check that page loaded without error (h1 is visible) and either empty state or products
+    const noProducts = page.locator('h3:has-text("No products found")');
+    const hasProducts = page.locator('[role="list"] [role="article"]');
+    // At least one of these should be true (page renders without crash)
+    const noProductsVisible = await noProducts.isVisible().catch(() => false);
+    const hasProductsVisible = (await hasProducts.count()) > 0;
+    expect(noProductsVisible || hasProductsVisible).toBeTruthy();
   });
 
   test('Filter by status works on catalog', async ({ page }) => {
@@ -65,14 +73,20 @@ test.describe('LC-02 — Busca Elasticsearch (E2E)', () => {
   });
 
   test('Catalog recovers gracefully from backend search errors', async ({ page }) => {
-    // Intercept search to return an error
-    await page.route(`${API_BASE_URL}/api/v1/products*search*`, async (route) => {
-      await route.fulfill({ status: 500, body: JSON.stringify({ error: 'SEARCH_FAILED' }) });
+    // Intercept products API call with search parameter to return an error
+    // Frontend uses relative URLs through Vite proxy
+    await page.route('/api/v1/products**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('search=')) {
+        await route.fulfill({ status: 500, body: JSON.stringify({ error: 'SEARCH_FAILED' }) });
+      } else {
+        await route.continue();
+      }
     });
 
     await gotoAndWait(page, '/products?search=error');
 
-    // Should show error state, not crash
-    await expect(page.locator('text=Failed to Load Products, text=No products found')).toBeVisible();
+    // Should show error state, not crash - ErrorAlert uses h4 for title
+    await expect(page.locator('h4:has-text("Failed to Load Products")')).toBeVisible();
   });
 });

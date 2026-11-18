@@ -7,13 +7,20 @@ import {
   generateUniqueEmail,
   getVendorRegistrationData,
   getConsumerRegistrationData,
+  onboardVendor,
+  loginViaApi,
 } from './fixtures';
 
 test.describe('LC-24: Vendor Dashboard API', () => {
   test('vendor dashboard financial endpoint', async ({ page }) => {
     const email = generateUniqueEmail('vendor');
-    await registerUser(page, getVendorRegistrationData(email));
-    const token = await getAuthToken(page);
+    const password = process.env.TEST_USER_PASSWORD;
+    await registerUser(page, { ...getVendorRegistrationData(email), password });
+    await onboardVendor(page, 'Test Store', `test-store-${Date.now()}`);
+    // Re-login to get token with VENDOR role
+    const loginResult = await loginViaApi(page, email, password);
+    expect(loginResult).not.toBeNull();
+    const token = loginResult!.accessToken;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/financial/', undefined, token);
     expect(resp.status()).toBe(200);

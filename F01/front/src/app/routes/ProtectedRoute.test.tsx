@@ -1,3 +1,32 @@
+vi.mock('@/app/providers/authStore', () => {
+  let state = {
+    user: null,
+    accessToken: null,
+    refreshToken: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+    initializeAuth: async () => undefined,
+    login: async () => undefined,
+    register: async () => undefined,
+    logout: () => undefined,
+    refreshAccessToken: async () => undefined,
+    hasRole: (role: string) => Boolean(state.user?.roles?.includes(role)),
+    clearError: () => undefined,
+    setError: () => undefined,
+    clearAuthData: () => undefined,
+    refreshUserProfile: async () => undefined,
+    mergeGuestCartOnLogin: async () => undefined,
+  };
+  const useAuthStore = (() => state) as unknown as ReturnType<typeof import('@/app/providers/authStore').useAuthStore>;
+  useAuthStore.setState = (partial: Record<string, unknown>) => {
+    state = { ...state, ...partial };
+  };
+  useAuthStore.getState = () => state;
+  useAuthStore.subscribe = () => () => undefined;
+  return { useAuthStore };
+});
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';

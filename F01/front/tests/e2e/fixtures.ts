@@ -204,8 +204,8 @@ export async function registerUser(page: Page, userData: RegistrationData) {
   await page.selectOption('#taxIdType', userData.taxIdType);
   await page.fill('#taxIdValue', userData.taxIdValue);
   await page.fill('#email', userData.email);
-  await page.fill('#password', 'TestPassword123!');
-  await page.fill('#confirmPassword', 'TestPassword123!');
+  await page.fill('#password', process.env.TEST_USER_PASSWORD);
+  await page.fill('#confirmPassword', process.env.TEST_USER_PASSWORD);
 
   // Submit - role is hardcoded to CONSUMER in the RegisterForm handleSubmit
   await page.click('button[type="submit"]');
@@ -258,7 +258,7 @@ export async function registerUser(page: Page, userData: RegistrationData) {
 /**
  * Fill login form and submit
  */
-export async function loginUser(page: Page, email: string, password: string = 'TestPassword123!') {
+export async function loginUser(page: Page, email: string, password: string = process.env.TEST_USER_PASSWORD) {
   await page.goto('/login');
   
   await page.fill('#email', email);
@@ -324,9 +324,9 @@ export async function getUserRole(page: Page): Promise<string | null> {
 export async function clearAuth(page: Page) {
   // Navigate to a safe page origin first if on about:blank, since page.reload()
   // on about:blank keeps a null-origin page where localStorage access is denied
-  // with a SecurityError. ' /survey ' is a real app page origin.
+  // with a SecurityError. Home page is a real app origin that doesn't call cart API.
   if (page.url() === 'about:blank') {
-    await page.goto('/survey');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
   }
   // Remove all auth-related keys from localStorage so the page starts
@@ -335,6 +335,8 @@ export async function clearAuth(page: Page) {
   // - accessToken (individual key for apiClient compatibility)
   // - refreshToken (individual key for apiClient compatibility)
   // - user (individual key for apiClient compatibility)
+  // Note: guestCartId is NOT cleared here as it's a cart key, not an auth key.
+  // Tests that need a clean cart state should clear it explicitly.
   // Then reload to ensure the removal takes effect.
   for (let attempt = 0; attempt < 2; attempt++) {
     await page.evaluate(() => {
@@ -345,6 +347,15 @@ export async function clearAuth(page: Page) {
     });
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
+    // Remove auth keys again after reload: zustand persist re-hydrates on page
+    // load and may write the auth-storage key back (even with empty/null state),
+    // which would make the key appear as "remaining" on the next check.
+    await page.evaluate(() => {
+      localStorage.removeItem('auth-storage');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    });
     // Verify auth state is cleared by checking localStorage is empty of these keys
     const authCleared = await page.evaluate(() => {
       return !localStorage.getItem('auth-storage') &&
@@ -367,6 +378,21 @@ export async function clearAuth(page: Page) {
     'Failed to clear authentication state from localStorage after 2 attempts. Remaining keys: ' +
     JSON.stringify(remainingKeys)
   );
+}
+
+/**
+ * Clear guest cart ID from localStorage
+ */
+export async function clearGuestCart(page: Page) {
+  // Navigate to a safe page origin first if on about:blank, since localStorage
+  // access is denied on about:blank with a SecurityError.
+  if (page.url() === 'about:blank') {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+  }
+  await page.evaluate(() => {
+    localStorage.removeItem('guestCartId');
+  });
 }
 
 /**

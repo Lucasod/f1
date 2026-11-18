@@ -17,7 +17,7 @@ import { InMemoryFinancialEventRepository, EventType } from './financial.event';
 import { FinancialLedger, LedgerMovementType } from './financial.ledger';
 import { StripeService, createStripeService } from '../stripe/stripe.service';
 
-const validPassword = process.env.TEST_USER_PASSWORD || 'TestPassword123!';
+const validPassword = process.env.TEST_USER_PASSWORD;
 
 describe('Phase G — Financial Verification: Vendor A buys from Vendor B', () => {
   let personRepository: InMemoryPersonRepository;

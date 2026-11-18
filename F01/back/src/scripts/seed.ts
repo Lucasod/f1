@@ -372,7 +372,7 @@ async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
           }]
         : [],
     });
-    const person = existingPerson ?? Person.reconstruct({
+    let person: Person = existingPerson ?? Person.reconstruct({
       ...newPerson,
       id: account.id,
     });
@@ -407,8 +407,18 @@ async function seedDemoAccounts(personRepo: PersonRepository): Promise<void> {
         isPrimary: true,
       });
     }
+    const hashedPassword = await hashPassword(password ?? account.password);
     if (!person.credential) {
-      person.setCredential(await hashPassword(password ?? account.password));
+      person.setCredential(hashedPassword);
+    } else if (existingPerson) {
+      // Update credential for existing demo account (e.g. when TEST_USER_PASSWORD changes).
+      // Person.setCredential() throws CREDENTIAL_ALREADY_SET for existing accounts, so
+      // we reconstruct with the new credential instead.
+      person = Person.reconstruct({
+        ...(existingPerson as any),
+        credential: hashedPassword,
+        updatedAt: new Date(),
+      });
     }
 
     if (existingPerson) {

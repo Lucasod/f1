@@ -72,7 +72,7 @@ test.describe('LC-32: Admin Dashboard Metrics (Golden Path Step 32)', () => {
 
   test('consumer gets 403 on admin metrics', async ({ page }) => {
     // Register a consumer via the public API (role is forced to CONSUMER).
-    const consumerData = { ...getConsumerRegistrationData(), password: 'TestPassword123!' };
+    const consumerData = { ...getConsumerRegistrationData(), password: process.env.TEST_USER_PASSWORD };
     const registerResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/register`, {
       data: consumerData,
     });
@@ -81,7 +81,7 @@ test.describe('LC-32: Admin Dashboard Metrics (Golden Path Step 32)', () => {
     // Log in as the consumer.
     const loginResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/login`, {
       headers: { 'Content-Type': 'application/json' },
-      data: { email: consumerData.email, password: 'TestPassword123!' },
+      data: { email: consumerData.email, password: process.env.TEST_USER_PASSWORD },
     });
     expect(loginResp.status()).toBe(200);
     const loginData = await loginResp.json();
@@ -96,7 +96,7 @@ test.describe('LC-32: Admin Dashboard Metrics (Golden Path Step 32)', () => {
   test('vendor gets 403 on admin metrics', async ({ page }) => {
     // Register a consumer, then onboard as a vendor so the account holds the
     // VENDOR role (public registration cannot grant ADMIN or VENDOR directly).
-    const consumerData = { ...getConsumerRegistrationData(), password: 'TestPassword123!' };
+    const consumerData = { ...getConsumerRegistrationData(), password: process.env.TEST_USER_PASSWORD };
     const registerResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/register`, {
       data: consumerData,
     });
@@ -104,7 +104,7 @@ test.describe('LC-32: Admin Dashboard Metrics (Golden Path Step 32)', () => {
 
     const loginResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/login`, {
       headers: { 'Content-Type': 'application/json' },
-      data: { email: consumerData.email, password: 'TestPassword123!' },
+      data: { email: consumerData.email, password: process.env.TEST_USER_PASSWORD },
     });
     expect(loginResp.status()).toBe(200);
     const loginData = await loginResp.json();
@@ -158,11 +158,11 @@ test.describe('LC-32: Admin Dashboard Metrics (Golden Path Step 32)', () => {
     const admin = await loginAsAdminViaApi(page);
     expect(admin.accessToken).not.toBeNull();
 
-    // GET /api/v1/orders/vendor/orders is requireVendor -> admin gets 403.
+    // GET /api/v1/vendor/orders is requireVendor -> admin gets 403.
     const resp = await apiFetch(
       page,
       'GET',
-      '/api/v1/orders/vendor/orders',
+      '/api/v1/vendor/orders',
       undefined,
       admin.accessToken
     );

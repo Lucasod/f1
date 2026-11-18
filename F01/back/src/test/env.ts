@@ -23,8 +23,13 @@ export const TEST_USER_PASSWORD: string = (() => {
       validatePasswordStrength(password);
       return password;
     } catch {
-      const strongDefault = 'TestP@ssw0rd123!';
-      process.env.TEST_USER_PASSWORD = strongDefault;
+      const strongDefault = process.env.TEST_STRONG_PASSWORD;
+      if (!strongDefault) {
+        throw new Error(
+          'Configuration error: TEST_STRONG_PASSWORD is not set. ' +
+          'Define it in your .env file for test mode when TEST_USER_PASSWORD does not meet password strength requirements.'
+        );
+      }
       return strongDefault;
     }
   }

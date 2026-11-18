@@ -84,6 +84,18 @@ describe('Spinner', () => {
       const wrapper = getSpinnerSvg(container).parentElement;
       expect(wrapper).toHaveAttribute('aria-live', 'polite');
     });
+
+    it('adds aria-label with the label when withStatusRole is true', () => {
+      const { container } = render(<Spinner label="Loading data..." withStatusRole />);
+      const wrapper = getSpinnerSvg(container).parentElement;
+      expect(wrapper).toHaveAttribute('aria-label', 'Loading data...');
+    });
+
+    it('does not add aria-label when withStatusRole is false', () => {
+      const { container } = render(<Spinner label="Loading data..." />);
+      const wrapper = getSpinnerSvg(container).parentElement;
+      expect(wrapper).not.toHaveAttribute('aria-label');
+    });
   });
 
   describe('Custom className', () => {

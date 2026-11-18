@@ -1,4 +1,5 @@
 import { useState, useCallback, useDeferredValue, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useProducts, ProductFilterParams } from './useProducts';
 import { useCategories } from './useCategories';
 import { ProductCard } from './ProductCard';
@@ -9,14 +10,33 @@ import { vendorApi, VendorApiException } from '@/shared/api/vendor';
 import { Button, EmptyState, EmptyStateIcons, Spinner, ErrorAlert } from '@/components/ui';
 
 function ProductCatalogContent() {
-  const [filters, setFilters] = useState<ProductFilterParams>({
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize filters from URL search params
+  const initialFilters: ProductFilterParams = {
     page: 1,
     limit: 20,
-    sortBy: 'stock_status',
-  });
+    sortBy: (searchParams.get('sortBy') as ProductFilterParams['sortBy']) || 'stock_status',
+    search: searchParams.get('search') || undefined,
+    categoryId: searchParams.get('categoryId') || undefined,
+  };
+
+  const [filters, setFilters] = useState<ProductFilterParams>(initialFilters);
 
   // Debounced search using useDeferredValue
   const deferredSearch = useDeferredValue(filters.search ?? '');
+
+  // Keep URL in sync with filters
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.search) params.set('search', filters.search);
+    if (filters.categoryId) params.set('categoryId', filters.categoryId);
+    if (filters.sortBy && filters.sortBy !== 'stock_status') params.set('sortBy', filters.sortBy);
+    if (filters.page && filters.page > 1) params.set('page', filters.page.toString());
+    if (filters.limit && filters.limit !== 20) params.set('limit', filters.limit.toString());
+    
+    setSearchParams(params, { replace: true });
+  }, [filters, setSearchParams]);
 
   const { data, isLoading, isError, error, refetch } = useProducts(filters);
   const { data: categoriesData } = useCategories();
@@ -99,8 +119,8 @@ function ProductCatalogContent() {
   if (isLoading) {
     return (
       <main className="max-w-7xl mx-auto px-4 py-12" role="main">
-        <div className="flex justify-center items-center min-h-[400px]" role="status" aria-live="polite">
-          <Spinner size="lg" label="Loading products..." />
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Spinner size="lg" label="Loading products..." withStatusRole={true} />
         </div>
       </main>
     );

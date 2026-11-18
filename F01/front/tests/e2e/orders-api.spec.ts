@@ -9,6 +9,10 @@ import {
   getConsumerRegistrationData,
   getVendorRegistrationData,
   clearAuth,
+  onboardVendor,
+  loginAsAdminViaApi,
+  ADMIN_EMAIL,
+  loginViaApi,
 } from './fixtures';
 
 test.describe('LC-19: Buyer Orders API', () => {
@@ -39,33 +43,32 @@ test.describe('LC-19: Buyer Orders API', () => {
   test('vendor can list orders containing their vendor groups', async ({ page }) => {
     const email = generateUniqueEmail('vendor');
     await registerUser(page, getVendorRegistrationData(email));
-    const token = await getAuthToken(page);
+    let token = await getAuthToken(page);
+
+    // Complete vendor onboarding
+    const onboardResp = await page.request.post(`${API_BASE_URL}/api/v1/vendor/onboard`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { storeName: 'Test Store', slug: `vendor-${Date.now()}` },
+    });
+    expect(onboardResp.status()).toBe(201);
+
+    // Re-login to get fresh token with updated VENDOR role
+    const loginResp = await loginViaApi(page, email, process.env.TEST_USER_PASSWORD);
+    expect(loginResp.accessToken).not.toBeNull();
+    token = loginResp.accessToken!;
 
     const resp = await apiFetch(page, 'GET', '/api/v1/vendor/orders', undefined, token);
-    // Vendor without orders should get empty list
     expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data.vendorGroups).toEqual([]);
   });
 
   test('admin can list all orders', async ({ page }) => {
-    // Admin registration via API directly
-    const userPw = 'TestPassword123!';
-    const registerResp = await page.request.post(`${API_BASE_URL}/api/v1/auth/register`, {
-      data: {
-        name: 'Admin E2E',
-        taxIdType: 'CNPJ',
-        taxIdValue: '11222333000262',
-        email: generateUniqueEmail('admin'),
-        password: process.env.TEST_USER_PASSWORD ?? 'TestPassword1!',
-        role: 'ADMIN',
-      },
-    });
-    expect(registerResp.status()).toBe(201);
-    const registerData = await registerResp.json();
-    const token = registerData.tokens.accessToken;
+    // Use pre-seeded admin account
+    const admin = await loginAsAdminViaApi(page);
+    expect(admin.accessToken).not.toBeNull();
 
-    const resp = await apiFetch(page, 'GET', '/api/v1/orders', undefined, token);
+    const resp = await apiFetch(page, 'GET', '/api/v1/orders', undefined, admin.accessToken);
     expect(resp.status()).toBe(200);
   });
 

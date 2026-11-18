@@ -28,6 +28,7 @@ export function Spinner({
       className={`inline-flex items-center justify-center ${className}`}
       role={withStatusRole ? 'status' : undefined}
       aria-live={withStatusRole ? 'polite' : undefined}
+      aria-label={withStatusRole ? label : undefined}
       {...props}
     >
       <svg

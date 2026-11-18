@@ -7,6 +7,7 @@ import {
   isAuthenticated,
   getUserRole,
   clearAuth,
+  clearGuestCart,
   gotoAndWait,
   expectRedirectedToLogin,
 } from './fixtures';
@@ -27,6 +28,11 @@ import {
  */
 
 test.describe('T-704 Guest Cart Merge E2E', () => {
+  test.beforeEach(async ({ page }) => {
+    await clearGuestCart(page);
+    await clearAuth(page);
+  });
+
   // Helper to get a product ID from the catalog
   async function getFirstProductId(page: Page): Promise<string | null> {
     await gotoAndWait(page, '/products');
@@ -312,6 +318,7 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
   // Test 5: Empty guest cart login doesn't cause issues
   test('Login with empty guest cart works correctly', async ({ page }) => {
     await clearAuth(page);
+    await clearGuestCart(page);
     
     // Don't add anything to cart, just login
     const consumerData = getConsumerRegistrationData();
@@ -323,6 +330,7 @@ test.describe('T-704 Guest Cart Merge E2E', () => {
     }
     
     await clearAuth(page);
+    await clearGuestCart(page);
     
     // Verify no guest cart ID
     const guestCartIdBefore = await getGuestCartId(page);

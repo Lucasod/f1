@@ -44,10 +44,8 @@ import {
 const VENDOR_A_EMAIL = 'techstore@example.com';
 const VENDOR_B_EMAIL = 'fashionhub@example.com';
 
-// Documented seed fallbacks (scripts/seed.ts:
-//   SEED_VENDOR_TECH_STORE_PASSWORD / SEED_VENDOR_FASHION_HUB_PASSWORD ??
-//   TEST_USER_PASSWORD). These are not real credentials and are never printed.
-const VENDOR_PASSWORD_CANDIDATES = ['vendor-secret', 'test_password_placeholder'];
+// Vendor passwords come from TEST_USER_PASSWORD env var (seed.ts uses it as fallback).
+// If TEST_USER_PASSWORD is not set, vendor login will be skipped.
 
 const OVG_FULFILLABLE_STATUSES: readonly string[] = ['PENDING', 'CONFIRMED'];
 
@@ -65,22 +63,26 @@ interface TransitionResult {
 
 /**
  * Log in as a vendor via the backend auth API.
- * Tries the documented seed password candidates and returns the first token
- * that works, or null when none are configured in this environment.
+ * Uses TEST_USER_PASSWORD env var and returns the token, or null when it is
+ * not set or login fails.
  */
 async function loginVendor(page: Page, email: string): Promise<string | null> {
-  for (const password of VENDOR_PASSWORD_CANDIDATES) {
-    try {
-      const result = await loginViaApi(page, email, password);
-      if (result.accessToken) {
-        return result.accessToken;
-      }
-    } catch {
-      // Backend unreachable or request error; try the next candidate.
-      continue;
-    }
+  const password = process.env.TEST_USER_PASSWORD;
+  if (!password) {
+    console.log(`[loginVendor] TEST_USER_PASSWORD not set; cannot log in as ${email}`);
+    return null;
   }
-  return null;
+  try {
+    const result = await loginViaApi(page, email, password);
+    if (result.accessToken) {
+      return result.accessToken;
+    }
+    console.log(`[loginVendor] Login failed for ${email}: no access token returned`);
+    return null;
+  } catch {
+    console.log(`[loginVendor] Login error for ${email}`);
+    return null;
+  }
 }
 
 /**

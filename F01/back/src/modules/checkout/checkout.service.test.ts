@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CheckoutService } from './checkout.service';
+import { MockCheckoutProvider } from './stripe-checkout.provider';
 import { Cart, InMemoryCartRepository } from '../cart/cart.domain';
 import { Product, ProductStatus, InMemoryProductRepository, ProductError } from '../product/product.domain';
 import { Vendor, VendorStatus, InMemoryVendorRepository } from '../vendor/vendor.domain';
@@ -658,6 +659,47 @@ describe('Checkout Service', () => {
 
       const product = await productRepo.findById(productId);
       expect(product!.quantity).toBe(2);
+    });
+
+    it('should use the mock payment provider and succeed without calling Stripe', async () => {
+      // Product/vendor/person are already persisted by the outer beforeEach
+      await cartService.addItem(consumerId, productId, 2);
+
+      // StripeService that throws - simulates real Stripe unavailable / missing permissions
+      const failingStripeService = {
+        getOrCreateCustomer: vi.fn().mockRejectedValue(new Error('Stripe unavailable')),
+        createCheckoutSessionWithCustomer: vi.fn().mockRejectedValue(new Error('Stripe unavailable')),
+      } as unknown as StripeService;
+
+      const mockProvider = new MockCheckoutProvider();
+
+      checkoutService = new CheckoutService(
+        orderRepo,
+        paymentRepo,
+        cartRepo,
+        productRepo,
+        vendorRepo,
+        personRepo,
+        cartService,
+        config,
+        mockProvider,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        failingStripeService
+      );
+
+      const result = await checkoutService.checkout(consumerId, addressId);
+
+      expect(result.order).toBeDefined();
+      expect(result.order.personId).toBe(consumerId);
+      expect(result.order.status).toBe(OrderStatus.PENDING_PAYMENT);
+      expect(result.checkoutUrl).toContain('checkout.stripe.test/mock/');
+
+      // Real Stripe must NOT be called when a mock provider is configured
+      expect(failingStripeService.getOrCreateCustomer).not.toHaveBeenCalled();
+      expect(failingStripeService.createCheckoutSessionWithCustomer).not.toHaveBeenCalled();
     });
   });
 

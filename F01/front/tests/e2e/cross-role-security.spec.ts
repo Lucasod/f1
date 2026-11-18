@@ -14,7 +14,7 @@ import {
   generateValidCNPJ,
 } from './fixtures';
 
-const testCred = 't3!';
+const testCred = process.env.TEST_USER_PASSWORD;
 
 test.describe('FS-01 Cross-Role Security Testing', () => {
   test.beforeEach(async ({ page }) => {

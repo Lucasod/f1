@@ -220,6 +220,14 @@ export function CheckoutPage() {
     loadAddresses();
   }, [loadAddresses]);
 
+  // Pre-select the single address option when there is exactly one choice,
+  // so the user does not have to manually click to select it.
+  useEffect(() => {
+    if (addresses.length === 1 && selectedAddressId === null) {
+      setSelectedAddressId(addresses[0].id);
+    }
+  }, [addresses, selectedAddressId]);
+
   // Invalidate at commit, before pending promise callbacks can publish a stale quote.
   // Recovery with the same cart key must not revive a quote from before the error.
   useLayoutEffect(() => {

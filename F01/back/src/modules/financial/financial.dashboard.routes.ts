@@ -1,25 +1,29 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { AuthService } from '../auth/auth.service';
 import { authMiddleware, requireVendor, AuthenticatedRequest } from '../auth/auth.middleware';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { VendorFinancialDashboardService } from './financial.dashboard.service';
 import { FinancialDashboard } from './financial.dashboard.service';
 
 export interface FinancialDashboardRoutesConfig {
+  authService: AuthService;
   vendorFinancialDashboardService: VendorFinancialDashboardService;
   vendorRepo: VendorRepository;
 }
 
 export function createFinancialDashboardRoutes({
+  authService,
   vendorFinancialDashboardService,
   vendorRepo,
 }: FinancialDashboardRoutesConfig): Router {
   const router = Router();
+  const authMw = authMiddleware(authService);
 
   // GET /api/v1/financial/vendor-dashboard?periodStart?periodEnd
   router.get(
     '/',
-    authMiddleware,
-    requireVendor,
+    authMw,
+    requireVendor(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         // Resolve vendorId from the authenticated person via the vendor repository,

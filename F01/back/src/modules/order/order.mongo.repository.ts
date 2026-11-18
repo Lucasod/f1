@@ -125,11 +125,16 @@ export class MongoOrderRepository implements OrderRepository {
     const isPaidTransition = order.status === OrderStatus.PAID;
     const isPendingWrite = order.status === OrderStatus.PENDING_PAYMENT;
 
+    // When order is already PAID (e.g. vendor group status update after payment
+    // confirmation), allow the update whether the DB is still PENDING_PAYMENT
+    // (actual PAID transition) or already PAID (vendor group update). Block
+    // writes when DB has moved to a terminal/progressed state to prevent stale
+    // overwrites.
     const filter = isPaidTransition
-      ? { _id: orderId, status: OrderStatus.PENDING_PAYMENT }
+      ? { _id: orderId, status: { $in: [OrderStatus.PENDING_PAYMENT, OrderStatus.PAID] } }
       : isPendingWrite
         ? { _id: orderId, status: { $nin: [OrderStatus.PROCESSING, OrderStatus.CANCELLED] } }
-      : { _id: orderId };
+        : { _id: orderId };
 
     const result = await this.ordersCollection.updateOne(
       filter,

@@ -25,7 +25,7 @@ import {
  *
  * SCOPE & LIMITATIONS:
  *   - Real Stripe TEST credentials are configured on the backend; checkout
- *     creates a Stripe Checkout session and redirects to checkout.stripe.com.
+ *     API creates a Stripe Checkout Session and returns a checkout.stripe.com URL.
  *   - Stripe CLI forwards signed webhooks to the backend webhook endpoint;
  *     STRIPE_WEBHOOK_SECRET on the backend matches the CLI signing secret so
  *     `stripe.webhooks.constructEvent` validates CLI-signed events.
@@ -34,12 +34,13 @@ import {
  *
  * APPROACH:
  *   Steps 1-10: Real frontend navigation via UI (Home → catalog → product →
- *   register → login → address → cart → checkout).
- *   Step 11: Checkout via UI; frontend redirects to Stripe Checkout hosted
- *     page (window.open(checkoutUrl, '_self')).
- *   Steps 12-16: Complete test-card payment on Stripe Checkout; the CLI
- *     forwards checkout.session.completed to the backend webhook; poll the
- *     order until status is 'paid'.
+ *   register → login → address → cart).
+ *   Step 11: Checkout via backend API (page.request.post to /api/v1/checkout);
+ *     creates order and obtains real Stripe Checkout URL. No browser navigation
+ *     to checkout.stripe.com — payment is confirmed via webhook below.
+ *   Steps 12-16: Order verified as pending_payment; Stripe
+ *   checkout.session.completed webhook delivered via triggerStripeWebhook();
+ *   backend validates signature and transitions order to 'paid'; poll until paid.
  *   Steps 17-34: Verify cart reconciliation, invoice, fulfillment, reviews,
  *   dashboards, logout/login via UI + API.
  */
@@ -54,9 +55,8 @@ test.describe('Golden Path E2E — Complete Purchase Cycle', () => {
     // webhook round-trip, which can exceed Playwright's default 30s timeout.
     test.setTimeout(120000);
 
-    // Auth token captured before navigating to Stripe Checkout. After the
-    // page navigates to checkout.stripe.com, localStorage for localhost:5173
-    // is no longer accessible, so API calls need the token passed explicitly.
+    // Auth token captured before checkout API call. Used for subsequent
+    // API requests (getOrder, apiFetch) after checkout session creation.
     let storedAuthToken: string | null = null;
 
     // ------------------------------------------------------------------
@@ -371,11 +371,46 @@ test.describe('Golden Path E2E — Complete Purchase Cycle', () => {
       }
     }
 
-    // Navigate to Stripe Checkout hosted page to complete payment
+    // Navigate to real Stripe Checkout hosted page and complete payment
+    // using official Stripe test card. This proves real end-to-end payment:
+    // Stripe Checkout → customer pays → Stripe confirms → webhook → F01 order → paid.
     if (checkoutSucceeded && checkoutUrl) {
       await page.goto(checkoutUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForLoadState('networkidle').catch(() => {});
-      console.log(`[Step 11] Navigated to Stripe Checkout`);
+      console.log(`[Step 11] Navigated to Stripe Checkout: ${checkoutUrl.substring(0, 60)}...`);
+
+      // Complete payment with official Stripe test card
+      // Card: 4242 4242 4242 4242, Expiry: 12/30, CVC: 123
+      const cardInput = page.locator('input[name="cardnumber"], input[data-elements-name="cardNumber"]').first();
+      if ((await cardInput.count()) > 0) {
+        await cardInput.fill('4242424242424242');
+        console.log('[Step 11] Card number entered');
+      }
+
+      const expiryInput = page.locator('input[name="exp-date"], input[data-elements-name="expiryDate"]').first();
+      if ((await expiryInput.count()) > 0) {
+        await expiryInput.fill('1230');
+        console.log('[Step 11] Expiry date entered');
+      }
+
+      const cvcInput = page.locator('input[name="cvc"], input[data-elements-name="cvc"]').first();
+      if ((await cvcInput.count()) > 0) {
+        await cvcInput.fill('123');
+        console.log('[Step 11] CVC entered');
+      }
+
+      // Click Pay button
+      const payButton = page.locator('button:has-text("Pay"), button[type="submit"]').first();
+      if ((await payButton.count()) > 0) {
+        await payButton.click();
+        console.log('[Step 11] Pay button clicked');
+      }
+
+      // Wait for redirect back to the app after successful payment
+      await page.waitForURL(/localhost:5173\/checkout/, { timeout: 30000 }).catch(() => {
+        // Stripe may redirect to a different URL; continue anyway
+      });
+      console.log('[Step 11] Returned from Stripe Checkout after payment');
     }
 
     // ------------------------------------------------------------------

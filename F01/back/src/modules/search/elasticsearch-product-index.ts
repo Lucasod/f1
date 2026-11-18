@@ -66,11 +66,19 @@ export class ElasticsearchProductIndex {
             number_of_shards: 1,
             number_of_replicas: 0,
             analysis: {
+              filter: {
+                portuguese: { type: 'stemmer', language: 'portuguese' }
+              },
               analyzer: {
                 product_analyzer: {
                   type: 'custom',
                   tokenizer: 'standard',
-                  filter: ['lowercase', 'asciifolding', 'portuguese_stemmer']
+                  filter: ['lowercase', 'asciifolding', 'portuguese']
+                },
+                product_search_analyzer: {
+                  type: 'custom',
+                  tokenizer: 'standard',
+                  filter: ['lowercase', 'asciifolding', 'portuguese']
                 }
               }
             }
@@ -119,8 +127,8 @@ export class ElasticsearchProductIndex {
       if (!aliasResponse2.ok && aliasResponse2.status !== 400) {
         throw new Error('ELASTICSEARCH_INDEX_FAILED');
       }
-    } catch {
-      throw new Error('ELASTICSEARCH_INDEX_FAILED');
+    } catch (error) {
+      throw new Error('ELASTICSEARCH_INDEX_FAILED: ' + (error as Error)?.message);
     }
   }
 

@@ -33,11 +33,11 @@ describe('Seed Integration', () => {
     };
   });
 
-  const vendorTechStorePassword = process.env.SEED_VENDOR_TECH_STORE_PASSWORD || 'vendor-secret';
-  const vendorFashionHubPassword = process.env.SEED_VENDOR_FASHION_HUB_PASSWORD || 'vendor-secret';
-  const vendorBookWorldPassword = process.env.SEED_VENDOR_BOOK_WORLD_PASSWORD || 'vendor-secret';
-  const consumerPassword = process.env.SEED_CONSUMER_PASSWORD || 'consumer-secret';
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin-secret';
+  const vendorTechStorePassword = process.env.SEED_VENDOR_TECH_STORE_PASSWORD;
+  const vendorFashionHubPassword = process.env.SEED_VENDOR_FASHION_HUB_PASSWORD;
+  const vendorBookWorldPassword = process.env.SEED_VENDOR_BOOK_WORLD_PASSWORD;
+  const consumerPassword = process.env.SEED_CONSUMER_PASSWORD;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
 
   describe('runSeed', () => {
     it('fails before writes when partial catalog recovery lacks its prerequisite', async () => {

@@ -42,17 +42,18 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
       const result = await authService.register({ name, taxIdType, taxIdValue, email, password, role: determinedRole });
 
       // If VENDOR role was requested, add it to the person (dual-role: CONSUMER + VENDOR)
+      let finalPerson = result.person;
       if (requestedVendorRole) {
-        await authService.addRoleToPerson(result.person.id, PersonRole.VENDOR);
+        finalPerson = await authService.addRoleToPerson(result.person.id, PersonRole.VENDOR);
       }
 
       return res.status(201).json({
         person: {
-          id: result.person.id,
-          name: result.person.name,
-          email: result.person.email,
-          roles: result.person.roles,
-          createdAt: result.person.createdAt
+          id: finalPerson.id,
+          name: finalPerson.name,
+          email: finalPerson.email,
+          roles: finalPerson.roles,
+          createdAt: finalPerson.createdAt
         },
         tokens: result.tokens
       });

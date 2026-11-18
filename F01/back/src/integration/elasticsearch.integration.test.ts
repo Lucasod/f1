@@ -7,7 +7,7 @@ const TEST_ES_URL = process.env.TEST_ELASTICSEARCH_URL || 'http://localhost:9200
 
 async function isEsAvailable(uri: string): Promise<boolean> {
   try {
-    const response = await fetch(`${uri}`);
+    const response = await fetch(`${uri}`, { signal: AbortSignal.timeout(5000) });
     return response.ok;
   } catch {
     return false;
@@ -28,27 +28,29 @@ describeIfEs('Elasticsearch Integration Tests', () => {
   });
 
   afterAll(async () => {
-    await fetch(`${TEST_ES_URL}/products_v1`, { method: 'DELETE' }).catch(() => undefined);
+    await fetch(`${TEST_ES_URL}/products_v1`, { method: 'DELETE', signal: AbortSignal.timeout(5000) }).catch(() => undefined);
   });
 
   beforeEach(async () => {
+    await index.ensureIndex();
     await fetch(`${TEST_ES_URL}/products/_delete_by_query`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: { match_all: {} } }),
+      signal: AbortSignal.timeout(5000),
     }).catch(() => undefined);
-    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST' }).catch(() => undefined);
+    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST', signal: AbortSignal.timeout(5000) }).catch(() => undefined);
   });
 
   it('creates the products alias', async () => {
-    const response = await fetch(`${TEST_ES_URL}/_alias/products`);
+    const response = await fetch(`${TEST_ES_URL}/_alias/products`, { signal: AbortSignal.timeout(5000) });
     expect(response.ok).toBe(true);
   });
 
   it('indexes and searches a product', async () => {
     const product = Product.create({ vendorId: 'v1', categoryId: 'c1', name: 'Searchable Widget', description: 'A useful widget', price: 19.99, quantity: 3 });
     await index.indexProduct(product);
-    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST' });
+    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST', signal: AbortSignal.timeout(5000) });
 
     const results = await index.search({ search: 'widget' });
     expect(results.map((item) => item.id)).toContain(product.id);
@@ -59,7 +61,7 @@ describeIfEs('Elasticsearch Integration Tests', () => {
     const inactive = Product.create({ vendorId: 'vendor-b', categoryId: 'c1', name: 'Inactive Product', description: 'desc', price: 10, quantity: 1, status: ProductStatus.INACTIVE });
     await index.indexProduct(active);
     await index.indexProduct(inactive);
-    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST' });
+    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST', signal: AbortSignal.timeout(5000) });
 
     const activeResults = await index.search({ status: 'active' });
     expect(activeResults.map((item) => item.id)).toContain(active.id);
@@ -74,7 +76,7 @@ describeIfEs('Elasticsearch Integration Tests', () => {
     const expensive = Product.create({ vendorId: 'v', categoryId: 'c', name: 'Expensive', description: 'd', price: 50, quantity: 1 });
     await index.indexProduct(cheap);
     await index.indexProduct(expensive);
-    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST' });
+    await fetch(`${TEST_ES_URL}/products/_refresh`, { method: 'POST', signal: AbortSignal.timeout(5000) });
 
     const results = await index.search({ sortBy: 'price_asc' });
     const ids = results.map((item) => item.id);

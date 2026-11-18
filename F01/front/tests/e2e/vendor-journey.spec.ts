@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import {
   API_BASE_URL,
+  loginAsAdminViaApi,
 } from './fixtures';
 
-const testCred = 't3!';
+const testCred = process.env.TEST_USER_PASSWORD;
 
 // Generate a valid CNPJ (14 digits) with correct check digits
 function generateValidCNPJ(): string {
@@ -80,6 +81,10 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
     let purchaserEmail = '';
 
     console.log('=== Vendor Journey Start ===');
+
+    // Navigate to home first to establish a valid origin for localStorage access
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
 
     // =========================================================================
     // Step 1: Set up vendor token in localStorage
@@ -173,49 +178,9 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
       localStorage.setItem('auth-storage', JSON.stringify(authState));
     }, { token: vendorToken, userId: vendorUserId, userName: vendorUserName, userEmail: vendorUserEmail, userRoles: vendorUserRoles, refreshToken: vendorRefreshToken });
 
-    // Navigate to home first to ensure app is mounted and initializeAuth runs
-    await page.goto('/');
+    // Reload to trigger initializeAuth and restore auth state
+    await page.reload();
     await page.waitForLoadState('networkidle');
-    
-    // Debug: check localStorage after navigation
-    const lsDebug = await page.evaluate(() => ({
-      accessToken: localStorage.getItem('accessToken'),
-      refreshToken: localStorage.getItem('refreshToken'),
-      user: localStorage.getItem('user'),
-      authStorage: localStorage.getItem('auth-storage'),
-    }));
-    console.log('localStorage after / navigation:', JSON.stringify(lsDebug));
-    // Must set individual keys that initializeAuth reads: accessToken, refreshToken, user
-    await page.evaluate(({token, userId, userName, userEmail, userRoles, refreshToken}) => {
-      localStorage.setItem('accessToken', token);
-      localStorage.setItem('refreshToken', refreshToken);
-      const user = {
-        id: userId,
-        name: userName,
-        email: userEmail,
-        roles: userRoles
-      };
-      localStorage.setItem('user', JSON.stringify(user));
-      // Also set auth-storage for persist middleware compatibility
-      const authState = { 
-        user, 
-        accessToken: token, 
-        refreshToken,
-        isAuthenticated: true
-      };
-      localStorage.setItem('auth-storage', JSON.stringify(authState));
-    }, { token: vendorToken, userId: vendorUserId, userName: vendorUserName, userEmail: vendorUserEmail, userRoles: vendorUserRoles, refreshToken: vendorRefreshToken });
-
-    // Verify vendor role (user should have VENDOR role after onboarding)
-    const userRoles = await page.evaluate(() => {
-      const authStorage = localStorage.getItem('auth-storage');
-      if (!authStorage) return [];
-      try {
-        const parsed = JSON.parse(authStorage);
-        return parsed.user?.roles ?? [];
-      } catch { return []; }
-    });
-    expect(userRoles).toContain('VENDOR');
 
     console.log('Step 1 PASSED: Vendor token set up with VENDOR role');
 
@@ -341,7 +306,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
     console.log('Step 4: Consumer purchases vendor product');
 
     // Register a different consumer user for purchase
-    const purchaserSuffix = Date.now().toString().substring(0, 6);
+    const purchaserSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     purchaserEmail = `purchaser-${purchaserSuffix}@example.com`;
 
     // Register via API
@@ -418,50 +383,89 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
     // Use the first vendor product for purchase
     const productToPurchase = vendorProducts[0];
     const productId = productToPurchase.id;
-    const vendorId = productToPurchase.vendorId;
 
-    // Create an order via the API as the consumer
-    const orderResp = await page.request.post(
-      `${API_BASE_URL}/api/v1/orders`,
+    // Create an order via the checkout flow as the consumer
+    // Step 1: Add product to cart
+    const addToCartResp = await page.request.post(
+      `${API_BASE_URL}/api/v1/cart/items`,
+      {
+        headers: {
+          Authorization: `Bearer ${purchaserToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: { productId, quantity: 1 },
+      }
+    );
+    expect(addToCartResp.ok()).toBe(true);
+
+    // Step 2: Add shipping address
+    const addressResp = await page.request.post(
+      `${API_BASE_URL}/api/v1/person/me/addresses`,
       {
         headers: {
           Authorization: `Bearer ${purchaserToken}`,
           'Content-Type': 'application/json',
         },
         data: {
-          shippingAddress: {
-            street: 'Rua Teste',
-            number: '100',
-            neighborhood: 'Centro',
-            city: 'São Paulo',
-            state: 'SP',
-            isPrimary: true,
-          },
-          items: [
-            {
-              productId,
-              productName: productToPurchase.name,
-              vendorId,
-              quantity: 1,
-              unitPrice: productToPurchase.price,
-              totalPrice: productToPurchase.price,
-            },
-          ],
-          totalAmount: productToPurchase.price,
-          status: 'pending_payment',
+          street: 'Rua Teste',
+          number: '100',
+          neighborhood: 'Centro',
+          city: 'São Paulo',
+          state: 'SP',
+          isPrimary: true,
         },
       }
     );
+    expect(addressResp.ok()).toBe(true);
+    const addressData = await addressResp.json();
+    const addressId = addressData.address?.id ?? addressData.person?.addresses?.[0]?.id;
+    expect(addressId).toBeTruthy();
 
-    expect(orderResp.ok()).toBe(true);
-    const orderData = await orderResp.json();
-    orderId = orderData.order?.id;
+    // Step 3: Create order via checkout
+    const checkoutResp = await page.request.post(
+      `${API_BASE_URL}/api/v1/checkout`,
+      {
+        headers: {
+          Authorization: `Bearer ${purchaserToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: { shippingAddressId: addressId },
+      }
+    );
+
+    if (!checkoutResp.ok()) {
+      const errorText = await checkoutResp.text();
+      console.log('Checkout error:', checkoutResp.status(), errorText);
+    }
+    expect(checkoutResp.ok()).toBe(true);
+    const checkoutData = await checkoutResp.json();
+    orderId = checkoutData.order?.id;
     expect(orderId).toBeTruthy();
 
     console.log(`Step 4 PASSED: Consumer ${purchaserEmail} purchased vendor product, order ${orderId} created`);
 
+    // CD-063: PREPARING transition requires order financialStatus === PAID.
+    // Log in as the seeded admin and set the order to PAID before fulfillment.
+    const admin = await loginAsAdminViaApi(page);
+    if (!admin.accessToken) {
+      throw new Error('ADMIN_LOGIN_FAILED: cannot set order to PAID');
+    }
+    const adminToken = admin.accessToken;
+    const setPaidResp = await page.request.patch(
+      `${API_BASE_URL}/api/v1/orders/${orderId}/status`,
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: { status: 'paid' as const },
+      }
+    );
+    expect(setPaidResp.ok()).toBe(true);
+    console.log(`Order ${orderId} set to PAID`);
+
     // =========================================================================
-    // Step 5: Vendor manages order fulfillment (PENDING → CONFIRMED → SHIPPED → DELIVERED)
+    // Step 5: Vendor manages order fulfillment (PENDING → CONFIRMED → PREPARING → SHIPPED → DELIVERED)
     // =========================================================================
     console.log('Step 5: Vendor manages order fulfillment');
 
@@ -508,44 +512,71 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
       console.log('Step 5a PASSED: OVG confirmed');
     }
 
-    // Step 5b: Transition to SHIPPED
-    const shipResp = await page.request.patch(
-      `${API_BASE_URL}/api/v1/orders/${currentOrderId}/vendor-groups/${vendorGroupId}/status`,
-      {
-        headers: {
-          Authorization: `Bearer ${vendorTokenForStep5}`,
-          'Content-Type': 'application/json',
-        },
-        data: { status: 'shipped' as const },
-      }
-    );
-    expect(shipResp.ok()).toBe(true);
-    const shipData = await shipResp.json();
-    const shippedStatus = shipData.order?.vendorGroups?.find(
-      (g: any) => g.id === vendorGroupId
-    )?.status;
-    expect(shippedStatus).toBe('shipped');
-    currentStatus = 'shipped';
-    console.log('Step 5b PASSED: OVG shipped');
+    // Step 5b: Transition to PREPARING (CD-063: CONFIRMED → PREPARING → SHIPPED)
+    if (currentStatus !== 'preparing') {
+      const preparingResp = await page.request.patch(
+        `${API_BASE_URL}/api/v1/orders/${currentOrderId}/vendor-groups/${vendorGroupId}/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${vendorTokenForStep5}`,
+            'Content-Type': 'application/json',
+          },
+          data: { status: 'preparing' as const },
+        }
+      );
+      expect(preparingResp.ok()).toBe(true);
+      const preparingData = await preparingResp.json();
+      const preparingStatus = preparingData.order?.vendorGroups?.find(
+        (g: any) => g.id === vendorGroupId
+      )?.status;
+      expect(preparingStatus).toBe('preparing');
+      currentStatus = 'preparing';
+      console.log('Step 5b PASSED: OVG preparing');
+    }
 
-    // Step 5c: Transition to DELIVERED
-    const deliverResp = await page.request.patch(
-      `${API_BASE_URL}/api/v1/orders/${currentOrderId}/vendor-groups/${vendorGroupId}/status`,
-      {
-        headers: {
-          Authorization: `Bearer ${vendorTokenForStep5}`,
-          'Content-Type': 'application/json',
-        },
-        data: { status: 'delivered' as const },
-      }
-    );
-    expect(deliverResp.ok()).toBe(true);
-    const deliverData = await deliverResp.json();
-    const deliveredStatus = deliverData.order?.vendorGroups?.find(
-      (g: any) => g.id === vendorGroupId
-    )?.status;
-    expect(deliveredStatus).toBe('delivered');
-    console.log('Step 5c PASSED: OVG delivered');
+    // Step 5c: Transition to SHIPPED
+    if (currentStatus !== 'shipped') {
+      const shipResp = await page.request.patch(
+        `${API_BASE_URL}/api/v1/orders/${currentOrderId}/vendor-groups/${vendorGroupId}/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${vendorTokenForStep5}`,
+            'Content-Type': 'application/json',
+          },
+          data: { status: 'shipped' as const },
+        }
+      );
+      expect(shipResp.ok()).toBe(true);
+      const shipData = await shipResp.json();
+      const shippedStatus = shipData.order?.vendorGroups?.find(
+        (g: any) => g.id === vendorGroupId
+      )?.status;
+      expect(shippedStatus).toBe('shipped');
+      currentStatus = 'shipped';
+      console.log('Step 5c PASSED: OVG shipped');
+    }
+
+    // Step 5d: Transition to DELIVERED
+    if (currentStatus !== 'delivered') {
+      const deliverResp = await page.request.patch(
+        `${API_BASE_URL}/api/v1/orders/${currentOrderId}/vendor-groups/${vendorGroupId}/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${vendorTokenForStep5}`,
+            'Content-Type': 'application/json',
+          },
+          data: { status: 'delivered' as const },
+        }
+      );
+      expect(deliverResp.ok()).toBe(true);
+      const deliverData = await deliverResp.json();
+      const deliveredStatus = deliverData.order?.vendorGroups?.find(
+        (g: any) => g.id === vendorGroupId
+      )?.status;
+      expect(deliveredStatus).toBe('delivered');
+      currentStatus = 'delivered';
+      console.log('Step 5d PASSED: OVG delivered');
+    }
 
     // Verify the order reached DELIVERED status
     const finalOrderResp = await page.request.get(

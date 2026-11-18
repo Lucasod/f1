@@ -763,6 +763,16 @@ async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ o
       throw new Error('PERSON_EMAIL_REQUIRED');
     }
 
+    // When the configured payment provider is a mock (development without real
+    // Stripe), create the session directly through it instead of calling the
+    // real Stripe API. The real Stripe path requires customer_write permission
+    // on the secret key, which a dev/restricted key may not have, and would
+    // otherwise surface an uncaught StripeServiceError as a 500.
+    if (this.isMockPaymentProvider(this.paymentProvider, payment)) {
+      const session = await this.paymentProvider.createSession(order, payment);
+      return { id: session.id, url: session.url };
+    }
+
     // Get or create Stripe Customer
     const customerResult: StripeCustomerResult = await this.stripeService.getOrCreateCustomer(
       personId,

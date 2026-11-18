@@ -28,6 +28,7 @@ import { createStripeClientFromEnvironment, StripeCheckoutProvider, MockCheckout
 import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
 import { createOrderRoutes } from './modules/order/order.routes';
 import { createAdminMetricsRoutes, MongoAdminMetricsRepository } from './modules/admin/admin.metrics';
+import { createAdminDashboardRoutes } from './modules/admin/admin.dashboard';
 import { OrderService } from './modules/order/order.service';
 import { PaymentService } from './modules/order/payment.service';
 import { createPersonRoutes } from './modules/person/person.routes';
@@ -38,6 +39,8 @@ import { createTransferRoutes } from './modules/transfer/transfer.routes';
 import { createInvoiceRoutes } from './modules/invoice/invoice.routes';
 import { createWalletRoutes } from './modules/wallet/wallet.routes';
 import { WalletService } from './modules/wallet/wallet.service';
+import { createFinancialDashboardRoutes } from './modules/financial/financial.dashboard.routes';
+import { VendorFinancialDashboardService } from './modules/financial/financial.dashboard.service';
 import { InMemoryWalletRepository, InMemoryWalletTransactionRepository, WalletRepository, WalletTransactionRepository } from './modules/wallet/wallet.domain';
 import { MongoWalletRepository, MongoWalletTransactionRepository } from './modules/wallet/wallet.mongo.repository';
 import { FinancialService } from './modules/financial/financial.service';
@@ -128,6 +131,7 @@ let invoiceService!: InvoiceService;
 let walletService!: WalletService;
 let financialService!: FinancialService;
 let transferService!: TransferService;
+let vendorFinancialDashboardService!: VendorFinancialDashboardService;
 
 // Initialize storage adapter
 const storageAdapter = createStorageAdapter();
@@ -141,15 +145,15 @@ let transferRepo: MongoTransferRepository;
 function initializeServices(): void {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
   const isPlaceholderKey = stripeSecretKey === 'sk_test_replace_me' || stripeSecretKey === '';
-  const isTestKey = stripeSecretKey.startsWith('sk_test_');
+  const isTestKey = stripeSecretKey.startsWith('sk_test_') || stripeSecretKey.startsWith('rk_test_');
   const useRealStripeInDev = process.env.USE_REAL_STRIPE_IN_DEV === 'true';
 
-  // In development, use MockCheckoutProvider by default unless:
-  // - USE_REAL_STRIPE_IN_DEV=true is set, OR
-  // - The key is a live key (sk_live_)
+  // In development, use MockCheckoutProvider only when the Stripe key is a
+  // placeholder/empty value. A real sk_test_ key uses the real Stripe provider.
+  // Set USE_REAL_STRIPE_IN_DEV=true to force real Stripe even with a placeholder.
   const useMockCheckout = config.nodeEnv === 'development' && 
     !useRealStripeInDev && 
-    !stripeSecretKey.startsWith('sk_live_');
+    !isTestKey;
 
   let checkoutProvider;
   if (useMockCheckout) {
@@ -191,7 +195,15 @@ function initializeServices(): void {
 reviewService = new ReviewService(reviewRepo, orderRepo, productRepo, storageAdapter);
 walletService = new WalletService(walletRepo, walletTxRepo);
 financialService = new FinancialService(financialRepo);
-paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo);
+  vendorFinancialDashboardService = new VendorFinancialDashboardService(
+    vendorRepo,
+    orderRepo,
+    paymentRepo,
+    movementRepo,
+    financialRepo,
+    payoutRepo
+  );
+  paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo);
   if (transferRepo) {
     transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '', orderRepo, movementRepo, eventRepo);
   }
@@ -320,6 +332,7 @@ eventRepo = new MongoFinancialEventRepository(db);
 
       // Register routes after services are initialized
       app.use('/api/v1/admin', createAdminMetricsRoutes({ authService, metrics: new MongoAdminMetricsRepository(db) }));
+      app.use('/api/v1/admin', createAdminDashboardRoutes({ authService }));
       // Auth routes
       app.use('/api/v1/auth', createAuthRoutes({ authService }));
 
@@ -364,6 +377,13 @@ eventRepo = new MongoFinancialEventRepository(db);
 
       // Invoice routes (T-1103)
       app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
+
+      // Financial dashboard routes (vendor dashboard)
+      app.use('/api/v1/financial', createFinancialDashboardRoutes({
+        authService,
+        vendorFinancialDashboardService,
+        vendorRepo
+      }));
 
       // Wallet routes (T-1007)
       app.use('/api/v1', createWalletRoutes({ authService, walletService, vendorRepo }));
@@ -474,6 +494,13 @@ eventRepo = new InMemoryFinancialEventRepository();
 
         // Invoice routes (T-1103)
         app.use('/api/v1/invoices', createInvoiceRoutes({ authService, invoiceService, orderRepo, vendorRepo }));
+
+        // Financial dashboard routes (vendor dashboard)
+        app.use('/api/v1/financial', createFinancialDashboardRoutes({
+          authService,
+          vendorFinancialDashboardService,
+          vendorRepo
+        }));
 
         // Wallet routes (T-1007)
         app.use('/api/v1', createWalletRoutes({ authService, walletService, vendorRepo }));

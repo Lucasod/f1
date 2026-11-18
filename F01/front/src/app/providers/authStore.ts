@@ -33,6 +33,7 @@ interface AuthState {
     role: UserRole;
   }) => Promise<void>;
   logout: () => void;
+  clearAuthData: () => void;
   refreshAccessToken: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
   initializeAuth: () => void;
@@ -66,9 +67,13 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const epoch = ++authEpoch;
-        set({ isLoading: true, error: null });
         let apiSucceeded = false;
+        let loadingStatePersisted = false;
         try {
+          // Persist loading state first (fail-closed: if this throws, we fail closed)
+          set({ isLoading: true, error: null });
+          loadingStatePersisted = true;
+          
           const response = await authApi.login({ email, password });
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           apiSucceeded = true;
@@ -105,7 +110,9 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           const message = error instanceof Error ? error.message : 'LOGIN_FAILED';
           if (epoch === authEpoch) {
-            if (apiSucceeded) {
+            // Fail closed if loading state persistence failed, or if API succeeded but later steps failed
+            // Preserve session only if loading state persisted AND API failed (invalid credentials)
+            if (!loadingStatePersisted || apiSucceeded) {
               // localStorage or later step failed - fail closed: clear everything
               localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
               localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -113,7 +120,7 @@ export const useAuthStore = create<AuthState>()(
               // queryClient.clear() handled by subscription on isAuthenticated transition
               set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: message });
             } else {
-              // API failed - preserve existing session
+              // API failed (invalid credentials) but loading state persisted - preserve existing session
               set({ isLoading: false, error: message });
             }
           }
@@ -123,9 +130,13 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (input) => {
         const epoch = ++authEpoch;
-        set({ isLoading: true, error: null });
         let apiSucceeded = false;
+        let loadingStatePersisted = false;
         try {
+          // Persist loading state first (fail-closed: if this throws, we fail closed)
+          set({ isLoading: true, error: null });
+          loadingStatePersisted = true;
+          
           const response = await authApi.register(input);
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           apiSucceeded = true;
@@ -162,7 +173,9 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           const message = error instanceof Error ? error.message : 'REGISTRATION_FAILED';
           if (epoch === authEpoch) {
-            if (apiSucceeded) {
+            // Fail closed if loading state persistence failed, or if API succeeded but later steps failed
+            // Preserve session only if loading state persisted AND API failed (invalid credentials)
+            if (!loadingStatePersisted || apiSucceeded) {
               // localStorage or later step failed - fail closed: clear everything
               localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
               localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -170,7 +183,7 @@ export const useAuthStore = create<AuthState>()(
               // queryClient.clear() handled by subscription on isAuthenticated transition
               set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: message });
             } else {
-              // API failed - preserve existing session
+              // API failed (invalid credentials) but loading state persisted - preserve existing session
               set({ isLoading: false, error: message });
             }
           }
@@ -189,6 +202,25 @@ export const useAuthStore = create<AuthState>()(
 
         // Clear sensitive React Query cached data to prevent cross-account leakage
         // (handled by subscription on isAuthenticated transition)
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
+      },
+
+      clearAuthData: () => {
+        // Clear individual localStorage keys for apiClient compatibility
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
+
+        // Clear sensitive React Query cached data to prevent cross-account leakage
+        queryClient.clear();
+
         set({
           user: null,
           accessToken: null,
@@ -220,7 +252,11 @@ export const useAuthStore = create<AuthState>()(
           });
           
         } catch (error) {
-          if (epoch === authEpoch && session === sessionEpoch && refreshOperation === refreshEpoch) get().logout();
+          // Only clear auth data if this refresh is still the current auth operation
+          // Don't increment epochs - let pending login/register proceed
+          if (epoch === authEpoch && session === sessionEpoch && refreshOperation === refreshEpoch) {
+            get().clearAuthData();
+          }
           throw error;
         }
       },
@@ -257,32 +293,37 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initializeAuth: async () => {
-        const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-        const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-        const userStr = localStorage.getItem(STORAGE_KEYS.USER);
+        set({ isLoading: true }); // Set loading at start
+        try {
+          const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+          const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+          const userStr = localStorage.getItem(STORAGE_KEYS.USER);
 
-        if (accessToken && refreshToken && userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            set({
-              user,
-              accessToken,
-              refreshToken,
-              isAuthenticated: true
-            });
-
-            // Trigger guest cart merge after restoring auth state
-            // Wrap in try-catch to avoid triggering logout on merge failure
+          if (accessToken && refreshToken && userStr) {
             try {
-              await get().mergeGuestCartOnLogin();
-            } catch (error) {
-              // Log merge failure but don't clear auth state
-              console.error('Guest cart merge failed during init:', error);
+              const user = JSON.parse(userStr);
+              set({
+                user,
+                accessToken,
+                refreshToken,
+                isAuthenticated: true
+              });
+
+              // Trigger guest cart merge after restoring auth state
+              // Wrap in try-catch to avoid triggering logout on merge failure
+              try {
+                await get().mergeGuestCartOnLogin();
+              } catch (error) {
+                // Log merge failure but don't clear auth state
+                console.error('Guest cart merge failed during init:', error);
+              }
+            } catch {
+              // Invalid stored data, clear it
+              get().logout();
             }
-          } catch {
-            // Invalid stored data, clear it
-            get().logout();
           }
+        } finally {
+          set({ isLoading: false }); // Always clear loading at end
         }
       },
 
@@ -303,14 +344,8 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          // Check if the guest cart has items before attempting merge
-          const cart = await cartApi.getCart();
-          if (!cart || cart.cart.items.length === 0) {
-            // No items in guest cart, skip merge
-            return;
-          }
-
           // Attempt merge but handle errors gracefully
+          // The merge endpoint handles empty/non-existent guest carts gracefully
           // 403 should not fail login - guest cart merge is best effort
           await cartApi.mergeGuestCart({ guestCartId });
           // After successful merge, clear the guestCartId

@@ -500,6 +500,27 @@ describe('CheckoutPage', () => {
     expect(screen.getByLabelText(/rua das flores, 123 - centro/i)).toBeInTheDocument();
   });
 
+  it('pre-selects the single address when only one option exists', async () => {
+    mockPersonApi.getMe.mockResolvedValueOnce({
+      person: {
+        addresses: [mockAddresses[0]],
+      },
+    });
+
+    const { rerender } = renderWithNav(<CheckoutPage />);
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+    // Address selection should have been set in state without a manual click
+    await waitFor(() => expect(mockUseCheckoutState.setSelectedAddressId).toHaveBeenCalledWith('addr-1'));
+
+    // Force re-render so the UI reflects the pre-selected address
+    rerender(<CheckoutPage />);
+
+    // The single address radio should be pre-selected (checked)
+    expect(screen.getByLabelText(/rua das flores, 123 - centro/i)).toBeChecked();
+  });
+
   it('validates address is required (button disabled when not selected)', async () => {
     renderWithNav(<CheckoutPage />);
 

@@ -7,7 +7,7 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
   });
 
   test('Home page loads and displays Products heading in English', async ({ page }) => {
-    await gotoAndWait(page, '/');
+    await gotoAndWait(page, '/products');
 
     // Home page should show English heading
     await expect(page.locator('h1')).toContainText('Products');
@@ -100,7 +100,8 @@ test.describe('LC-01 — Visitante e catálogo (E2E)', () => {
       await route.continue();
     });
 
-    await gotoAndWait(page, '/products');
+    // Navigate WITHOUT waiting for networkidle to catch the loading state
+    await page.goto('/products');
 
     // Loading spinner should be visible (accessible name includes sr-only label)
     await expect(page.getByRole('status', { name: 'Loading products...' })).toBeVisible();
