@@ -1,4 +1,3 @@
-import json
 import unittest
 import yaml
 from pathlib import Path
@@ -41,7 +40,7 @@ class AgentConfigurationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.kilo_config = json.loads((ROOT / "kilo.jsonc").read_text())
+        cls.kilo_config = yaml.safe_load((ROOT / "kilo.jsonc").read_text())
         cls.agent_frontmatters = {}
         for agent_file in AGENT_DIR.glob("*.md"):
             agent_name = agent_file.stem
@@ -60,7 +59,7 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertEqual(set(self.agent_frontmatters), {"code-developer", "code-reviewer", "code-orchestrator"})
         for removed_name in ("docs-specialist", "frontend-specialist", "test-engineer"):
             self.assertNotIn(removed_name, self.agent_frontmatters)
-            self.assertFalse((ROOT / "F01.kilo/agents" / f"{removed_name}.md").exists())
+            self.assertFalse((ROOT / ".kilo/agents" / f"{removed_name}.md").exists())
 
     def test_core_skills_are_removed(self):
         """Specialist skills were consolidated into the core developer and must no longer exist as separate skills."""
@@ -86,7 +85,8 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertEqual(perm.get("bash"), "deny")
         self.assertEqual(perm.get("webfetch"), "allow")
         self.assertEqual(perm.get("websearch"), "allow")
-        self.assertEqual(perm.get("read"), "allow")
+        self.assertEqual(perm.get("read", {}).get("*"), "allow")
+        self.assertEqual(perm.get("read", {}).get("*.env"), "deny")
         self.assertEqual(perm.get("glob"), "allow")
         self.assertEqual(perm.get("grep"), "allow")
         self.assertEqual(perm.get("list"), "allow")
@@ -114,7 +114,8 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertEqual(perm.get("edit"), "deny")
         self.assertEqual(perm.get("bash"), "deny")
         self.assertEqual(perm.get("task"), "deny")
-        self.assertEqual(perm.get("read"), "allow")
+        self.assertEqual(perm.get("read", {}).get("*"), "allow")
+        self.assertEqual(perm.get("read", {}).get("*.env"), "deny")
         self.assertEqual(perm.get("glob"), "allow")
         self.assertEqual(perm.get("grep"), "allow")
         self.assertEqual(perm.get("list"), "allow")
@@ -205,7 +206,7 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertRegex(frontmatter, r"(?m)^\s*bash:\s*deny\s*$")
         self.assertRegex(frontmatter, r"(?m)^\s*webfetch:\s*allow\s*$")
         self.assertRegex(frontmatter, r"(?m)^\s*websearch:\s*allow\s*$")
-        self.assertRegex(frontmatter, r"(?m)^\s*read:\s*allow\s*$")
+        self.assertRegex(frontmatter, r'(?m)^\s*read:\s*$\n\s*"\*":\s*allow\s*$')
         self.assertRegex(frontmatter, r"(?m)^\s*glob:\s*allow\s*$")
         self.assertRegex(frontmatter, r"(?m)^\s*grep:\s*allow\s*$")
         self.assertRegex(frontmatter, r"(?m)^\s*list:\s*allow\s*$")

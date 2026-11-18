@@ -429,4 +429,4 @@ evidence rather than importing assumptions from another project.
 
 ## Secrets Protection
 
-Mandatory secrets-protection rules are defined in `F01.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.
+Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.

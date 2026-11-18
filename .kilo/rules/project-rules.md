@@ -55,7 +55,7 @@ The Dev's self-review does not substitute the independent review.
 
 ### B. Code Reviewer Responsibilities
 
-The Code Reviewer agent (configured in `F01.kilo/agents/code-reviewer.md`) must:
+The Code Reviewer agent (configured in `.kilo/agents/code-reviewer.md`) must:
 
 - Inspect the actual diff, not rely solely on the Dev's summary.
 - Consult pertinent requirements and acceptance criteria.
@@ -111,4 +111,4 @@ If the Dev cannot invoke the Code Reviewer automatically:
 Do not alter permissions, tools, or global configuration without confirmed necessity and proper authorization.
 ## Secrets Protection
 
-Mandatory secrets-protection rules are defined in `F01.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.
+Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.

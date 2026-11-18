@@ -527,7 +527,7 @@ When reviewing FS-01 Marketplace changes, use these as authoritative sources:
 - **Non-Functional Requirements:** `F01/docs/non-functional_requirements.md`
 - **Conceptual Model:** `F01/docs/conceptual_model.md`
 - **Project Context:** `F01/docs/project_context.md`
-- **Rules:** `F01.kilo/rules/universal-rules.md`, `F01.kilo/rules/project-rules.md`
+- **Rules:** `.kilo/rules/universal-rules.md`, `.kilo/rules/project-rules.md`
 
 ### Key Confirmed Decisions Relevant to Reviews
 
@@ -569,7 +569,7 @@ The agent receives the current working directory as the repository root.
 
 ## DELEGATION CONTRACT COHERENCE (C-REV-003 / C-REV-014 / C-REV-014A)
 
-This section consolidates and strengthens the Reviewer's obligations in light of the standardized delegation contract defined in `.kilo/fird/contratos-delegacao.md` (single source of truth). It was added per the Etapa C residual corrections (MP-ETAPA-C-07), addressing C-REV-003 (traceability), C-REV-014 (closed scope), and C-REV-014A (evidence-based verdict) (Etapa C, Cycle C4). It does not contradict existing content; it reinforces independence, diff inspection, verdict format, and evidence of independence, and references the contract rather than reproducing it. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
+This section consolidates and strengthens the Reviewer's obligations in light of the standardized delegation contract defined in `.kilo/fird/contratos-delegacao.md` (single source of truth). It was added per the Etapa C residual corrections (MP-ETAPA-C-07), addressing C-REV-003 (traceability), C-REV-014 (closed scope), and C-REV-014A (evidence-based verdict) (Etapa C, Cycle C4). It does not contradict existing content; it reinforces independence, diff inspection, verdict format, and evidence of independence, and references the contract rather than reproducing it. Guidelines for the Reviewer role are maintained in `.kilo/fird/guidelines-reviewer.md`.
 
 ### 1. Independence Verification (Independência — auto-revisão não substitui revisão independente)
 
@@ -622,7 +622,7 @@ If any of the above cannot be established, the review's independence is NOT veri
 
 ### 5. Retry and Limits (Limites de tentativas)
 
-- Max 3 attempts per finding; max 10 total per run/task (contract §10; `F01.kilo/rules/autonomous-execution.md`).
+- Max 3 attempts per finding; max 10 total per run/task (contract §10; `.kilo/rules/autonomous-execution.md`).
 - After 3 attempts without demonstrable progress → stop, record blocker, escalate if needed.
 - Continue independent eligible tasks when safe.
 - Re-review is mandatory after corrections (contract §9.2).
@@ -638,7 +638,7 @@ Error handling and limits (contract §9–§10):
 
 ### 7. Coherence Note (Nota de coerência)
 
-This section is coherent with the delegation contract (`.kilo/fird/contratos-delegacao.md`), the autonomous execution contract (`F01.kilo/rules/autonomous-execution.md`), the project rules (`F01.kilo/rules/project-rules.md`), the universal rules (`F01.kilo/rules/universal-rules.md`), and the secrets-protection rules (`.kilo/rules/secrets-protection.md`, absolute precedence). It does not contradict existing content in this agent file; it consolidates and strengthens independence, diff inspection, verdict format, and evidence-of-independence boundaries into a single reference. Runtime enforcement of declared permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`. Guidelines for the Reviewer role are maintained in `F01.kilo/fird/guidelines-reviewer.md`.
+This section is coherent with the delegation contract (`.kilo/fird/contratos-delegacao.md`), the autonomous execution contract (`.kilo/rules/autonomous-execution.md`), the project rules (`.kilo/rules/project-rules.md`), the universal rules (`.kilo/rules/universal-rules.md`), and the secrets-protection rules (`.kilo/rules/secrets-protection.md`, absolute precedence). It does not contradict existing content in this agent file; it consolidates and strengthens independence, diff inspection, verdict format, and evidence-of-independence boundaries into a single reference. Runtime enforcement of declared permissions remains `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`. Guidelines for the Reviewer role are maintained in `.kilo/fird/guidelines-reviewer.md`.
 
 ## SHARED CONTRACTS (ARCH-012)
 

@@ -1,23 +1,23 @@
 # Guidelines — Code Reviewer (FIRD)
 
-**Documento:** `F01.kilo/fird/guidelines-reviewer.md`
+**Documento:** `.kilo/fird/guidelines-reviewer.md`
 **Versão:** 1.0 (Cycle C4 — Etapa C)
 **Status:** Rascunho para revisão (C4). Documentação FIRD — Grupo A.
-**Autoridade:** Orientações operacionais do papel **Reviewer** (`code-reviewer`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `F01.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
+**Autoridade:** Orientações operacionais do papel **Reviewer** (`code-reviewer`) no projeto FIRD. Este documento referencia a fonte única (single source of truth) do formato de delegação em `.kilo/fird/contratos-delegacao.md` e não a reproduz integralmente.
 
 **Referências autoritativas:**
-- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
-- `F01.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
-- `F01.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
-- `F01.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
-- `F01.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
-- `F01.kilo/agents/code-reviewer.md` — reviewer: verdicto, independência, formato de findings.
+- `.kilo/fird/contratos-delegacao.md` — contrato de delegação padronizado (9 elementos, FIPR, verdicto, evidência).
+- `.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites de tentativas.
+- `.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
+- `.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F), documentação (Seção "Documentation Linking and Single Source of Truth").
+- `.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
+- `.kilo/agents/code-reviewer.md` — reviewer: verdicto, independência, formato de findings.
 
 ---
 
 ## 1. Propósito e escopo
 
-Este documento fornece orientações práticas para o papel **Reviewer** (`code-reviewer`): independência, inspeção real do diff, vereditos com evidência, evidências de independência, limites de tentativas e tratamento de erros. Complementa (não substitui) o contrato de delegação (`F01.kilo/fird/contratos-delegacao.md`), o contrato de execução autônoma (`F01.kilo/rules/autonomous-execution.md`) e o agent file (`F01.kilo/agents/code-reviewer.md`).
+Este documento fornece orientações práticas para o papel **Reviewer** (`code-reviewer`): independência, inspeção real do diff, vereditos com evidência, evidências de independência, limites de tentativas e tratamento de erros. Complementa (não substitui) o contrato de delegação (`.kilo/fird/contratos-delegacao.md`), o contrato de execução autônoma (`.kilo/rules/autonomous-execution.md`) e o agent file (`.kilo/agents/code-reviewer.md`).
 
 **Em escopo (in-scope):**
 - Validação de autorização de revisão (run record, task ID, escopo, base ref).
@@ -174,7 +174,7 @@ Cada finding DEVE seguir:
 - Classification: CONFIRMED | PARTIALLY_CONFIRMED | UNCONFIRMED | RECOMMENDATION | OPEN_QUESTION
 ```
 
-Severidade: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (conforme `F01.kilo/agents/code-reviewer.md` §"SEVERITY CLASSIFICATION").
+Severidade: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (conforme `.kilo/agents/code-reviewer.md` §"SEVERITY CLASSIFICATION").
 
 **Proibições do Reviewer:** editar/criar/remover/renomear arquivos; aplicar patches; corrigir findings; formatar; alterar testes/configs; rodar migrações; alterar DB; staging/unstaging; commits; push/merge/rebase; instalar deps; delegar correções.
 
@@ -202,7 +202,7 @@ Toda afirmação de verificação DEVE ser acompanhada de (contrato §7):
 - Nunca inventar resultados de teste, saída de ferramenta, mudanças de código ou verificação.
 - Nunca listar comandos como executados sem evidência de execução.
 - Mocks/stubs são fronteiras para cenários controlados, não prova de comportamento real de sistemas externos (universal-rules §5.7).
-- Nenhum valor de segredo em evidência, relatórios, documentação, testes ou logs (`F01.kilo/rules/secrets-protection.md`).
+- Nenhum valor de segredo em evidência, relatórios, documentação, testes ou logs (`.kilo/rules/secrets-protection.md`).
 
 **O que as verificações provam:** apenas o que foi executado e observado no escopo. `PASS` não garante ausência total de defeitos. Verificações de configuração/frontmatter/allowlists não provam enforcement de runtime real (classificar como `NÃO VERIFICADO` per `orchestra_gate_evidence_classification`).
 
@@ -212,7 +212,7 @@ Toda afirmação de verificação DEVE ser acompanhada de (contrato §7):
 
 ### 6.1 Uso do contrato de delegação
 
-O Reviewer recebe requisição de revisão no formato §4 do contrato (`F01.kilo/fird/contratos-delegacao.md`). Deve validar autorização (§2.1 deste documento) e tratar todas as afirmações como não confiáveis até verificar contra o workspace (contrato §4.2).
+O Reviewer recebe requisição de revisão no formato §4 do contrato (`.kilo/fird/contratos-delegacao.md`). Deve validar autorização (§2.1 deste documento) e tratar todas as afirmações como não confiáveis até verificar contra o workspace (contrato §4.2).
 
 **Regras:**
 - O Reviewer é independente e somente leitura (`edit`, `bash`, `task` negados). Não corrige findings.
@@ -227,7 +227,7 @@ Elementos obrigatórios (9): Run ID, Task ID, Scope, Base Reference, Changed Fil
 
 ### 6.3 Matriz de responsabilidade
 
-Ver seção "Responsibility Matrix and Delegation Routing" em `F01.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
+Ver seção "Responsibility Matrix and Delegation Routing" em `.kilo/agents/code-orchestrator.md` (adicionada per C-REV-014/C-REV-014A). Resumo:
 
 | Papel | Agente | Permissões-chave | Função |
 |---|---|---|---|
@@ -311,14 +311,14 @@ O Reviewer NÃO pode, sem autorização explícita (contrato §8.2; agent file �
 
 ## 10. Referências cruzadas
 
-- `F01.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
-- `F01.kilo/agents/code-reviewer.md` — reviewer (inclui DELEGATION CONTRACT COHERENCE).
-- `F01.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
-- `F01.kilo/agents/code-developer.md` — developer.
-- `F01.kilo/rules/autonomous-execution.md` — execução autônoma.
-- `F01.kilo/rules/universal-rules.md` — baseline de engenharia.
-- `F01.kilo/rules/project-rules.md` — regras do projeto.
-- `F01.kilo/rules/secrets-protection.md` — proteção de segredos.
+- `.kilo/fird/contratos-delegacao.md` — contrato de delegação (fonte única do formato).
+- `.kilo/agents/code-reviewer.md` — reviewer (inclui DELEGATION CONTRACT COHERENCE).
+- `.kilo/agents/code-orchestrator.md` — orquestrador (inclui matriz de responsabilidade).
+- `.kilo/agents/code-developer.md` — developer.
+- `.kilo/rules/autonomous-execution.md` — execução autônoma.
+- `.kilo/rules/universal-rules.md` — baseline de engenharia.
+- `.kilo/rules/project-rules.md` — regras do projeto.
+- `.kilo/rules/secrets-protection.md` — proteção de segredos.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md` — run record do Cycle C1.
 - `docs/agent_runs/orch-etapa-c-c2-2026-11-04.md` — run record do Cycle C2.
 - `docs/agent_runs/orch-etapa-c-c3-2026-11-04.md` — run record do Cycle C3.

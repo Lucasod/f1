@@ -1,18 +1,18 @@
 # Contrato de Delegação — FIRD (Orchestra, Developer, Reviewer)
 
-**Documento:** `F01.kilo/fird/contratos-delegacao.md`
+**Documento:** `.kilo/fird/contratos-delegacao.md`
 **Versão:** 1.0 (Cycle C1 — Etapa C)
 **Status:** Rascunho para revisão (C4). Documentação FIRD — Grupo A.
 **Autoridade:** Este documento é a fonte única (single source of truth) do formato padronizado de delegação entre os agentes `code-orchestrator`, `code-developer` e `code-reviewer` no projeto FIRD. Outros documentos devem referenciar este contrato em vez de reproduzir seu conteúdo integral.
 
 **Referências autoritativas:**
-- `F01.kilo/rules/autonomous-execution.md` — contrato de execução autônoma, run records, FIPR, limites de tentativas.
-- `F01.kilo/rules/universal-rules.md` — baseline de engenharia (TDD, evidência, segurança).
-- `F01.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F).
-- `F01.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
-- `F01.kilo/agents/code-orchestrator.md` — orquestrador: delegação, integração de revisão, FIPR.
-- `F01.kilo/agents/code-developer.md` — developer: execução escopada, TDD, relatório de evidência.
-- `F01.kilo/agents/code-reviewer.md` — reviewer: verdicto, independência, formato de findings.
+- `.kilo/rules/autonomous-execution.md` — contrato de execução autônoma, run records, FIPR, limites de tentativas.
+- `.kilo/rules/universal-rules.md` — baseline de engenharia (TDD, evidência, segurança).
+- `.kilo/rules/project-rules.md` — regras do projeto, fluxo obrigatório de code review (Seção A–F).
+- `.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
+- `.kilo/agents/code-orchestrator.md` — orquestrador: delegação, integração de revisão, FIPR.
+- `.kilo/agents/code-developer.md` — developer: execução escopada, TDD, relatório de evidência.
+- `.kilo/agents/code-reviewer.md` — reviewer: verdicto, independência, formato de findings.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md` — run record do Cycle C1.
 
 **Ciclos dependentes:**
@@ -43,20 +43,20 @@ Este contrato padroniza a comunicação entre três papéis:
 - Gatilho de atualização documental (somente após `PASS`).
 
 **Fora de escopo (out-of-scope):**
-- Modificação de `F01.kilo/agents/*.md` (Grupo C — compartilhado; ciclos C2/C3/C4).
-- Modificação de `F01.kilo/rules/*.md` (Grupo C — compartilhado).
+- Modificação de `.kilo/agents/*.md` (Grupo C — compartilhado; ciclos C2/C3/C4).
+- Modificação de `.kilo/rules/*.md` (Grupo C — compartilhado).
 - Modificação de arquivos de `F01/` (Marketplace — Grupo D, requer avaliação de impacto).
 - Implementação de código, testes ou configuração.
 - Decisões de negócio não resolvidas (devem permanecer `BLOCKED`).
 - Qualquer operação destrutiva (commit, push, merge, deploy) — requer autorização humana explícita.
 
 **Regra de precedência:** Em caso de conflito, a ordem de autoridade é:
-1. `F01.kilo/rules/secrets-protection.md` (precedência absoluta)
-2. `F01.kilo/rules/autonomous-execution.md`
-3. `F01.kilo/rules/project-rules.md`
-4. `F01.kilo/rules/universal-rules.md`
-5. Este contrato (`F01.kilo/fird/contratos-delegacao.md`)
-6. Arquivos de agente (`F01.kilo/agents/*.md`)
+1. `.kilo/rules/secrets-protection.md` (precedência absoluta)
+2. `.kilo/rules/autonomous-execution.md`
+3. `.kilo/rules/project-rules.md`
+4. `.kilo/rules/universal-rules.md`
+5. Este contrato (`.kilo/fird/contratos-delegacao.md`)
+6. Arquivos de agente (`.kilo/agents/*.md`)
 
 ---
 
@@ -70,8 +70,8 @@ Toda delegação (Orchestra → Developer ou Orchestra → Reviewer) DEVE conter
 - **Tipo:** string (identificador único de run)
 - **Formato:** `orch-<slug>-<YYYY-MM-DD>` (ex.: `orch-etapa-c-2026-11-04`) ou outro ID de run já existente em `docs/agent_runs/`.
 - **Obrigatório:** sim.
-- **Regra de validação:** Deve corresponder a um run record existente em `docs/agent_runs/<run_id>.md` OU ser criado antes da delegação (C1). O run record deve conter as seções obrigatórias do contrato de execução autônoma (metadados, task log, findings log, checkpoints, próxima ação, limitações, conclusão).
-- **Critério de aceite verificável:** `test -f docs/agent_runs/<run_id>.md` retorna sucesso e o arquivo contém as 7 seções obrigatórias (ver §7).
+- **Regra de validação:** Deve corresponder a um run record existente em `docs/agent_runs/<run_id>.md` OU ser criado exclusivamente pelas exceções de bootstrap de §3.4 ou §3.4.1. O run record deve conter as seções obrigatórias do contrato de execução autônoma (metadados, task log, findings log, checkpoints, próxima ação, limitações, conclusão).
+- **Critério de aceite verificável:** `test -f docs/agent_runs/<run_id>.md` retorna sucesso e o arquivo contém as 7 seções obrigatórias (ver §13).
 - **Rastreabilidade C-REV:** C-REV-003 (run record como fonte de rastreabilidade entre tarefa, mudanças e evidência).
 
 ### Elemento 2 — Task ID
@@ -209,7 +209,7 @@ observed_test_results (input): [...]   # opcional; resultados prévios que infor
 ### 3.3 Validação de entrada (Developer)
 
 Antes de implementar, o Developer DEVE:
-1. Verificar que `run_id` corresponde a run record existente.
+1. Verificar que `run_id` corresponde a run record existente e válido, salvo exclusivamente o bootstrap delimitado em §3.4 ou §3.4.1.
 2. Verificar que `base_ref.commit` existe (`git cat-file -t`).
 3. Confirmar que todos os `authorized_paths` estão dentro do repositório.
 4. Confirmar que nenhum `forbidden_paths` será tocado.
@@ -227,7 +227,17 @@ Apesar da regra de §3.3 item 1 (run record pré-existente obrigatório para `ru
 4. **Não há autorização por texto de prompt:** o texto da delegação por si só não comprova autoridade; a exceção se aplica apenas quando o `run_id` corresponder a uma delegação formalmente autorizada pelo Orchestra para bootstrap de documentação FIRD.
 5. **Cessa após criação e validação:** a exceção cessa de aplicar-se imediatamente após a criação e validação do run record correspondente (verificação de existência e das 7 seções obrigatórias de §13). Delegações subsequentes exigem run record válido pré-existente, conforme regra normal de §3.3 item 1 e Elemento 1 — Run ID (§2).
 
-Fora dessas condições, a regra padrão continua: `run_id` deve corresponder a run record existente em `docs/agent_runs/<run_id>.md`; caso contrário, reportar `BLOCKED` sem implementar.
+Fora dessas condições e da exceção distinta de §3.4.1, a regra padrão continua: `run_id` deve corresponder a run record existente em `docs/agent_runs/<run_id>.md`; caso contrário, reportar `BLOCKED` sem implementar.
+
+### 3.4.1 PRODUCT-RUN-BOOTSTRAP (registro inicial de missão de produto)
+
+Quando uma missão de produto já tiver autorização humana verificável, mas ainda não possuir run record, o Orchestra pode delegar ao Developer uma tarefa separada para **somente criar** `docs/agent_runs/<run_id>.md`. Esta exceção dispensa unicamente a preexistência desse registro para a delegação de bootstrap; não dispensa os demais requisitos de §3.3 nem os nove elementos de §2, aplicados à tarefa de bootstrap. O task log e os demais campos ainda inexistentes são fornecidos na requisição e validados no registro criado, não presumidos como já existentes.
+
+1. O Orchestra verifica a autorização humana para a missão e para iniciar seu registro, a identidade do run, escopo, critérios, dependências e decisões; registra na requisição a fonte verificável da autorização, base, estado preexistente e limites. Texto da delegação não cria autorização. Missão sem autorização ou decisão necessária permanece `BLOCKED`.
+2. A delegação de bootstrap autoriza exclusivamente o caminho exato do novo registro, dentro do repositório; identifica os caminhos proibidos e critérios verificáveis. Não autoriza implementação, testes ou configuração de produto, alterações de regras, nem outros arquivos. O diretório pode ser criado se necessário.
+3. O Developer verifica identidade e caminho seguro do run (sem separadores, `..` ou links que escapem do repositório), ausência do destino, base e escopo. Cria o arquivo sem sobrescrever registro existente, com as sete seções de §13, metadados, tarefa, estado inicial e próxima ação; não inclui segredos. Se existir, estiver inválido, faltar autorização ou uma verificação falhar, reporta `BLOCKED`, preserva os dados e não implementa produto.
+4. `edit: ask`, `bash: ask`, denies de arquivos sensíveis, políticas de segredos, Autoredact, scanner e hooks permanecem vigentes; aprovação efetiva das ferramentas continua necessária. Esta exceção não concede permissões nem contorna recusas. Sem capacidade ou aprovação, retornar `BLOCKED` e solicitar intervenção humana.
+5. Após criação, o Orchestra verifica existência, conteúdo, sete seções, correspondência de ID, escopo e evidência; registra limitações. A exceção termina aí. Qualquer implementação exige delegação separada com registro válido preexistente, e a revisão independente continua obrigatória. Um registro existente é retomado conforme regras append-only, nunca recriado.
 
 ---
 
@@ -305,7 +315,7 @@ Cada finding DEVE seguir:
 - Classification: CONFIRMED | PARTIALLY_CONFIRMED | UNCONFIRMED | RECOMMENDATION | OPEN_QUESTION
 ```
 
-Severidade: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (conforme `F01.kilo/agents/code-reviewer.md`).
+Severidade: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (conforme `.kilo/agents/code-reviewer.md`).
 
 **Proibições do Reviewer:** editar/criar/remover/renomear arquivos; aplicar patches; corrigir findings; formatar; alterar testes/configs; rodar migrações; alterar DB; staging/unstaging; commits; push/merge/rebase; instalar deps; delegar correções.
 
@@ -339,8 +349,8 @@ Cada critério de aceite DEVE ser expresso de forma verificável. Formato obriga
 **Exemplo (C1):**
 ```
 - id: AC-1
-  statement: "F01.kilo/fird/contratos-delegacao.md existe e contém os 9 elementos (Run ID, Task ID, Scope, Base reference, Changed files, Acceptance criteria, Relevant decisions, Observed test results, Review verdict format)."
-  verification: "grep -c 'Elemento [0-9]' F01.kilo/fird/contratos-delegacao.md"
+  statement: ".kilo/fird/contratos-delegacao.md existe e contém os 9 elementos (Run ID, Task ID, Scope, Base reference, Changed files, Acceptance criteria, Relevant decisions, Observed test results, Review verdict format)."
+  verification: "grep -c 'Elemento [0-9]' .kilo/fird/contratos-delegacao.md"
   expected: "9"
 ```
 
@@ -361,7 +371,7 @@ Toda afirmação de verificação DEVE ser acompanhada de:
 - Nunca listar comandos como executados sem evidência de execução.
 - Mocks/stubs são fronteiras para cenários controlados, não prova de comportamento real de sistemas externos (universal-rules §5.7).
 
-**Secrets:** Nenhum valor de segredo pode aparecer em evidência, relatórios, documentação, testes ou logs. Apenas nome da variável, presença/ausência, ambiente alvo e validação estrutural (ver `F01.kilo/rules/secrets-protection.md`).
+**Secrets:** Nenhum valor de segredo pode aparecer em evidência, relatórios, documentação, testes ou logs. Apenas nome da variável, presença/ausência, ambiente alvo e validação estrutural (ver `.kilo/rules/secrets-protection.md`).
 
 ---
 
@@ -373,12 +383,12 @@ Toda afirmação de verificação DEVE ser acompanhada de:
 - Edição de arquivos dentro de `authorized_paths`.
 - Execução de testes/checks relevantes usando comandos verificados do projeto.
 - Criação de run records em `docs/agent_runs/`.
-- Criação de documentação FIRD em `F01.kilo/fird/` (quando autorizado pelo ciclo).
+- Criação de documentação FIRD em `.kilo/fird/` (quando autorizado pelo ciclo).
 
 ### 8.2 Não autorizado (out-of-scope) — requer autorização explícita
 
-- Modificar `F01.kilo/agents/*.md` (Grupo C — compartilhado; ciclos C2/C3/C4 quando autorizado).
-- Modificar `F01.kilo/rules/*.md` (Grupo C — compartilhado; quando autorizado).
+- Modificar `.kilo/agents/*.md` (Grupo C — compartilhado; ciclos C2/C3/C4 quando autorizado).
+- Modificar `.kilo/rules/*.md` (Grupo C — compartilhado; quando autorizado).
 - Modificar arquivos de `F01/` (Marketplace) — requer avaliação de impacto (FIRD isolation: grupos C e D).
 - Commit, push, merge, rebase, publicação.
 - Alterar dados operacionais ou sistemas externos.
@@ -428,7 +438,7 @@ Se o Developer identificar necessidade fora do escopo:
 
 ### 9.5 Falha de delegação/autorização
 
-- Se a requisição de delegação não contiver os 9 elementos ou autorização insuficiente → Reviewer/Developer retorna `BLOCKED` com detalhes faltantes (conforme `F01.kilo/agents/code-reviewer.md` §"What constitutes authorization").
+- Se a requisição de delegação não contiver os 9 elementos ou autorização insuficiente → Reviewer/Developer retorna `BLOCKED` com detalhes faltantes (conforme `.kilo/agents/code-reviewer.md` §"What constitutes authorization").
 - Não inventar invocação ou autorização.
 
 ---
@@ -441,7 +451,7 @@ Se o Developer identificar necessidade fora do escopo:
 - Continuar tarefas independentes elegíveis quando seguro.
 - Registrar erros exatos no run record.
 
-Fonte: `F01.kilo/rules/autonomous-execution.md` e `F01.kilo/agents/code-orchestrator.md` (Self-Correction Engine).
+Fonte: `.kilo/rules/autonomous-execution.md` e `.kilo/agents/code-orchestrator.md` (Self-Correction Engine).
 
 ---
 
@@ -457,7 +467,7 @@ Fonte: `F01.kilo/rules/autonomous-execution.md` e `F01.kilo/agents/code-orchestr
 
 ## 12. FIPR — fluxo canônico de orquestração
 
-Conforme `F01.kilo/agents/code-orchestrator.md`:
+Conforme `.kilo/agents/code-orchestrator.md`:
 
 | Fase | Nome | Objetivo | Saída | Verificação |
 |---|---|---|---|---|
@@ -477,7 +487,7 @@ Conforme `F01.kilo/agents/code-orchestrator.md`:
 
 ## 13. Run record — contrato (resumo)
 
-Per `F01.kilo/rules/autonomous-execution.md`, um run record por run em `docs/agent_runs/<run-id>.md`, append-only, com seções obrigatórias:
+Per `.kilo/rules/autonomous-execution.md`, um run record por run em `docs/agent_runs/<run-id>.md`, append-only, com seções obrigatórias:
 
 1. Run metadata (ID, start time, branch, base commit, authorized task, scope)
 2. Task log (task ID, status, dependencies, start/end times, findings, attempts, current FIPR phase)
@@ -545,13 +555,13 @@ Para uma delegação ser considerada conforme a este contrato, TODOS os itens de
 
 ## 17. Referências cruzadas
 
-- `F01.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites.
-- `F01.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
-- `F01.kilo/rules/project-rules.md` — regras do projeto, fluxo de code review (§A–F), documentação (§"Documentation Linking").
-- `F01.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
-- `F01.kilo/agents/code-orchestrator.md` — orquestrador.
-- `F01.kilo/agents/code-developer.md` — developer.
-- `F01.kilo/agents/code-reviewer.md` — reviewer.
+- `.kilo/rules/autonomous-execution.md` — execução autônoma, run records, FIPR, limites.
+- `.kilo/rules/universal-rules.md` — baseline de engenharia (TDD §5, evidência §18, segurança §9).
+- `.kilo/rules/project-rules.md` — regras do projeto, fluxo de code review (§A–F), documentação (§"Documentation Linking").
+- `.kilo/rules/secrets-protection.md` — proteção de segredos (precedência absoluta).
+- `.kilo/agents/code-orchestrator.md` — orquestrador.
+- `.kilo/agents/code-developer.md` — developer.
+- `.kilo/agents/code-reviewer.md` — reviewer.
 - `docs/agent_runs/orch-etapa-c-2026-11-04.md` — run record do Cycle C1.
 - `F01/docs/decisions.md` — decisões confirmadas (CD-XXX) — fonte autoritativa para `relevant_decisions`.
 - `F01/docs/task_list.md` — backlog de tarefas (T-XXX).
