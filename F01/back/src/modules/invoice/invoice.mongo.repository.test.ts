@@ -51,6 +51,9 @@ describeIfMongo('MongoInvoiceRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
+    // Clear collection for test isolation
+    await invoicesCollection.deleteMany({});
+    
     repo = new MongoInvoiceRepository(db);
   });
 

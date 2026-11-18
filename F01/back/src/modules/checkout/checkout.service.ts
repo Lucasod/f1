@@ -19,6 +19,7 @@ import { PersonRepository, PersonRole } from '../person/person.domain';
 import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
 import { CheckoutPaymentProvider } from './stripe-checkout.provider';
+import { StripeService, StripeCustomerResult, createStripeService } from '../stripe/stripe.service';
 import { CouponService } from '../coupon/coupon.service';
 import { CouponSelection, CouponTerms, CouponError, priceToMinor, safeMinor, sumMinor } from '../coupon/coupon.domain';
 import { allocateMinorDiscount } from './coupon-allocation';
@@ -78,6 +79,7 @@ export class CheckoutService {
   private readonly config: typeof import('../../config').config;
   private readonly paymentProvider: CheckoutPaymentProvider;
   private readonly searchIndex?: ElasticsearchProductIndex;
+  private readonly stripeService: StripeService;
 
   constructor(
     orderRepo: OrderRepository,
@@ -92,7 +94,8 @@ export class CheckoutService {
     categoryRepo?: import('../product/product.domain').CategoryRepository,
     searchIndex?: ElasticsearchProductIndex,
     private readonly coupons?: CouponService,
-    private readonly attempts?: CheckoutAttemptRepository
+    private readonly attempts?: CheckoutAttemptRepository,
+    stripeService?: StripeService
   ) {
     this.orderRepo = orderRepo;
     this.paymentRepo = paymentRepo;
@@ -105,6 +108,7 @@ export class CheckoutService {
     this.paymentProvider = paymentProvider;
     this.categoryRepo = categoryRepo;
     this.searchIndex = searchIndex;
+    this.stripeService = stripeService ?? createStripeService();
   }
 
   async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
@@ -175,7 +179,7 @@ export class CheckoutService {
         await this.paymentRepo.save(existingPayment);
       }
 
-      const session = await this.paymentProvider.createSession(existing, existingPayment);
+      const session = await this.createCheckoutSessionWithCustomer(existing, existingPayment, consumerId);
       existingPayment.providerTransactionId = session.id;
       await this.paymentRepo.update(existingPayment);
 
@@ -278,7 +282,7 @@ export class CheckoutService {
       paymentSaved = true;
       savedPayment = payment;
 
-      const session = await this.paymentProvider.createSession(order, payment);
+      const session = await this.createCheckoutSessionWithCustomer(order, payment, consumerId);
       checkoutSessionId = session.id;
       payment.providerTransactionId = session.id;
       payment.checkoutUrl = session.url;
@@ -534,7 +538,7 @@ async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ o
         }
       }
       if (!payment.providerTransactionId) {
-        const session = await this.paymentProvider.createSession(existingOrder, payment);
+        const session = await this.createCheckoutSessionWithCustomer(existingOrder, payment, owner);
         payment.providerTransactionId = session.id;
         payment.checkoutUrl = session.url;
         await this.paymentRepo.update(payment);
@@ -731,12 +735,55 @@ async checkoutFromAcceptedAttempt(owner: string, attemptId: string): Promise<{ o
     try { await this.orderRepo.update(persistedOrder); } catch { /* ignore update failure on already-persisted */ }
 
     // Persist session request before calling provider (SESSION_REQUESTED marker via payment providerTransactionId placeholder).
-    const session = await this.paymentProvider.createSession(persistedOrder, persistedPayment);
+    const session = await this.createCheckoutSessionWithCustomer(persistedOrder, persistedPayment, owner);
     persistedPayment.providerTransactionId = session.id;
     persistedPayment.checkoutUrl = session.url;
     await this.paymentRepo.update(persistedPayment);
 
     return { order: persistedOrder, payment: persistedPayment, checkoutUrl: session.url };
+  }
+
+  /**
+   * Creates a Stripe Checkout Session with the customer attached.
+   * Gets or creates the Stripe Customer for the person, saves the customer ID,
+   * and creates the checkout session using StripeService.
+   */
+  private async createCheckoutSessionWithCustomer(
+    order: Order,
+    payment: Payment,
+    personId: string
+  ): Promise<{ id: string; url: string }> {
+    const person = await this.personRepo.findById(personId);
+    if (!person) {
+      throw new Error('PERSON_NOT_FOUND');
+    }
+
+    const email = person.primaryEmail || person.email;
+    if (!email) {
+      throw new Error('PERSON_EMAIL_REQUIRED');
+    }
+
+    // Get or create Stripe Customer
+    const customerResult: StripeCustomerResult = await this.stripeService.getOrCreateCustomer(
+      personId,
+      email,
+      person.stripeCustomerId
+    );
+
+    // Save customer ID on person if new or changed
+    if (customerResult.isNew || (person.stripeCustomerId !== customerResult.customerId)) {
+      person.setStripeCustomerId(customerResult.customerId);
+      await this.personRepo.update(person);
+    }
+
+    // Create checkout session with customer
+    return this.stripeService.createCheckoutSessionWithCustomer(
+      order,
+      payment,
+      customerResult.customerId,
+      this.config.frontendUrl,
+      this.config.stripePaymentMethodConfiguration || undefined
+    );
   }
 
   private async decrementStock(cart: Cart, decremented: { productId: string; amount: number }[]): Promise<void> {

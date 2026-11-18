@@ -133,7 +133,7 @@ export function Navigation() {
                     </li>
                     <li role="none">
                       <Link to="/orders" className={navLinkClassName(location.pathname.startsWith('/orders'))} role="menuitem" onClick={closeMenu}>
-                        My Orders
+                        My Purchases
                       </Link>
                     </li>
                     <li role="none">
@@ -154,13 +154,23 @@ export function Navigation() {
                 {hasRole('VENDOR') && (
                   <>
                     <li role="none">
-                      <Link to="/vendor/dashboard" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor'))} role="menuitem" onClick={closeMenu}>
+                      <Link to="/vendor/dashboard" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor/dashboard'))} role="menuitem" onClick={closeMenu}>
                         Vendor Dashboard
                       </Link>
                     </li>
                     <li role="none">
                       <Link to="/vendor/orders" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor/orders'))} role="menuitem" onClick={closeMenu}>
-                        Vendor Orders
+                        Sales Orders
+                      </Link>
+                    </li>
+                    <li role="none">
+                      <Link to="/vendor/products" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor/products'))} role="menuitem" onClick={closeMenu}>
+                        My Products
+                      </Link>
+                    </li>
+                    <li role="none">
+                      <Link to="/vendor/settings" className={vendorNavLinkClassName(location.pathname.startsWith('/vendor/settings'))} role="menuitem" onClick={closeMenu}>
+                        Store Settings
                       </Link>
                     </li>
                   </>

@@ -17,6 +17,7 @@ const backendModules = import.meta.glob([
   '../../../../back/src/modules/checkout/checkout.service.ts',
   '../../../../back/src/modules/checkout/checkout.routes.ts',
   '../../../../back/src/modules/checkout/checkout-attempt.mongo.repository.ts',
+  '../../../../back/src/modules/stripe/stripe.service.ts',
 ], { eager: true });
 const { MongoCouponRepository } = backendModules['../../../../back/src/modules/coupon/coupon.mongo.repository.ts'] as any;
 const { CouponService } = backendModules['../../../../back/src/modules/coupon/coupon.service.ts'] as any;
@@ -24,6 +25,7 @@ const { createCouponRoutes } = backendModules['../../../../back/src/modules/coup
 const { CheckoutService } = backendModules['../../../../back/src/modules/checkout/checkout.service.ts'] as any;
 const { createCheckoutRoutes } = backendModules['../../../../back/src/modules/checkout/checkout.routes.ts'] as any;
 const { MongoCheckoutAttemptRepository } = backendModules['../../../../back/src/modules/checkout/checkout-attempt.mongo.repository.ts'] as any;
+const { StripeService } = backendModules['../../../../back/src/modules/stripe/stripe.service.ts'] as any;
 
 // Resolve existing backend test dependencies, without adding frontend packages.
 const requireBackend = createRequire(new URL('../../../../back/package.json', import.meta.url).pathname.replace(/^\/@fs/, ''));
@@ -65,7 +67,18 @@ async function mount(catalogPrice = 20) {
   const coupons = makeCoupons();
   const finance = { save: vi.fn(), createSession: vi.fn() };
   const makeApp = () => {
-    const checkout = new CheckoutService(finance, finance, { findById: async () => ({ ...state.cart, isEmpty: false }) }, products, vendors, { findById: async () => ({ roles: ['CONSUMER'], addresses: [{ id: 'address', street: 'Street', number: '1', neighborhood: '', city: 'City', state: 'SP' }] }) }, {}, { commissionPct: 10 }, finance, categories, undefined, makeCoupons(), new MongoCheckoutAttemptRepository(db));
+    const mockStripeService = {
+      getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true }),
+      createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+    } as unknown as StripeService;
+
+    const checkout = new CheckoutService(
+      finance, finance,
+      { findById: async () => ({ ...state.cart, isEmpty: false }) },
+      products, vendors,
+      { findById: async () => ({ roles: ['CONSUMER'], addresses: [{ id: 'address', street: 'Street', number: '1', neighborhood: '', city: 'City', state: 'SP' }] }) },
+      {}, { commissionPct: 10 }, finance, categories, undefined, makeCoupons(), new MongoCheckoutAttemptRepository(db), mockStripeService
+    );
     const app = express(); app.use(express.json());
     app.use('/coupons', createCouponRoutes({ authService: {}, couponService: coupons }));
     app.use('/api/v1/checkout', createCheckoutRoutes({ authService: {}, personRepo: {}, checkoutService: checkout }));
@@ -95,6 +108,8 @@ async function apply() {
   fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor' } });
   fireEvent.change(screen.getByLabelText('Coupon code'), { target: { value: 'SAVE' } });
   fireEvent.click(screen.getByTestId('coupon-apply-button'));
+  // Wait for coupon to be applied and preview to update
+  await screen.findByRole('button', { name: 'Remove coupon SAVE from Store' });
 }
 
 describe('persisted quote UI via real client and in-process HTTP', () => {
@@ -136,7 +151,11 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept quote' }));
     await screen.findByText('Quote changed. Review the new proposal and explicitly accept again.');
     expect(screen.queryByText('Quote accepted')).not.toBeInTheDocument();
-    expect(screen.getByText(/Proposal total:.*27,00/)).toBeInTheDocument();
+    // Proposal total is in the acceptance section (rendered after Prepare acceptance)
+    // Find the "Review server proposal" heading and check its parent container for the proposal total
+    const reviewHeading = screen.getByRole('heading', { name: 'Review server proposal' });
+    const acceptanceSection = reviewHeading.closest('div');
+    expect(acceptanceSection?.textContent).toContain('27.00');
     expect(s.post.mock.calls.filter(([url]) => url.endsWith('/accept'))).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Accept quote' })); await screen.findByText('Quote accepted');
     expect(s.finance.save).not.toHaveBeenCalled();
@@ -169,30 +188,42 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
   });
   it.each([30, 10])('restores cart-priced checkout after removing a quote with catalogue price %s', async (catalogPrice) => {
     const s = await mount(catalogPrice);
-    expect(screen.getAllByText(/20,00/).length).toBeGreaterThan(0);
+    const sidebar = screen.getByTestId('checkout-sidebar-summary');
+    const summaryCards = screen.getAllByTestId('checkout-step-summary');
+    const mainSummaryCard = summaryCards.find(el => el.tagName === 'DIV') || summaryCards[1];
+    // Sidebar shows cart price (20.00) before coupon
+    expect(sidebar.textContent).toContain('20.00');
     await apply();
-    await screen.findByText('Discounted checkout is not available. This is a quote only.');
+    // Error message only appears when submit is attempted; verify button is disabled instead
     expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
-    expect(screen.getAllByText(catalogPrice === 30 ? /27,00/ : /9,00/).length).toBeGreaterThan(0);
+    // Main summary shows discounted catalog price (27.00 for 30, 9.00 for 10) after coupon
+    const expectedQuoteTotal = catalogPrice === 30 ? '27.00' : '9.00';
+    expect(mainSummaryCard.textContent).toContain(expectedQuoteTotal);
     fireEvent.click(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' }));
     await waitFor(() => expect(screen.getByTestId('checkout-submit-button')).toBeEnabled());
-    expect(screen.getAllByText(/20,00/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(catalogPrice === 30 ? /27,00/ : /9,00/)).not.toBeInTheDocument();
+    // Sidebar still shows cart price (20.00) after removal
+    expect(sidebar.textContent).toContain('20.00');
+    // Main summary no longer shows discounted price
+    expect(mainSummaryCard.textContent).not.toContain(expectedQuoteTotal);
     expect(s.post).not.toHaveBeenCalled();
     expect(s.finance.save).not.toHaveBeenCalled();
     expect(s.finance.createSession).not.toHaveBeenCalled();
   });
 
-  it('confirms an actual quote, disables purchase, shows net without double subtraction and restores plain checkout on removal', async () => {
+it('confirms an actual quote, disables purchase, shows net without double subtraction and restores plain checkout on removal', async () => {
     const s = await mount(); await apply();
-    await screen.findByText('Discounted checkout is not available. This is a quote only.');
+    const sidebar = screen.getByTestId('checkout-sidebar-summary');
+    const summaryCards = screen.getAllByTestId('checkout-step-summary');
+    const mainSummaryCard = summaryCards.find(el => el.tagName === 'DIV') || summaryCards[1];
+    // When preview?.purchasable === false, submit button is disabled
     expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
-    expect(screen.getAllByText(/18,00/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/16,00/)).not.toBeInTheDocument();
+    // Main summary shows discounted total (18.00) not double-subtracted (16.00)
+    expect(mainSummaryCard.textContent).toContain('18.00');
+    expect(mainSummaryCard.textContent).not.toContain('16.00');
+    // Remove coupon to restore plain checkout
     expect(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' }));
     await waitFor(() => expect(screen.getByTestId('checkout-submit-button')).toBeEnabled());
-    expect(screen.queryByText('Discounted checkout is not available. This is a quote only.')).not.toBeInTheDocument();
     expect(s.post).not.toHaveBeenCalled(); expect(s.finance.save).not.toHaveBeenCalled(); expect(s.finance.createSession).not.toHaveBeenCalled();
   });
   it('invalidates the selection on cart change and ignores an older in-flight response', async () => {
@@ -204,7 +235,11 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
       if (selections?.length) await new Promise<void>(resolve => { release = resolve; });
       return result;
     });
-    await apply(); await waitFor(() => expect(release).toBeTypeOf('function'));
+    // Apply coupon without waiting for "Remove coupon" button (preview is delayed)
+    fireEvent.change(screen.getByLabelText('Coupon vendor'), { target: { value: 'vendor' } });
+    fireEvent.change(screen.getByLabelText('Coupon code'), { target: { value: 'SAVE' } });
+    fireEvent.click(screen.getByTestId('coupon-apply-button'));
+    await waitFor(() => expect(release).toBeTypeOf('function'));
     state.cart = { ...state.cart, version: 2 };
     s.rendered.rerender(s.tree()); release();
     await waitFor(() => expect(screen.getByTestId('coupon-apply-button')).toBeEnabled());

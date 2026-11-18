@@ -71,6 +71,7 @@ export interface PersonData {
   roles?: PersonRole[];
   permissionLevel?: PermissionLevel;
   credential?: string | null;
+  stripeCustomerId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -92,6 +93,7 @@ export class Person {
   public readonly roles: PersonRole[];
   public permissionLevel?: PermissionLevel;
   public readonly credential: string | null;
+  public readonly stripeCustomerId: string | undefined;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -104,6 +106,7 @@ export class Person {
     this.roles = data.roles || [];
     this.permissionLevel = data.permissionLevel ?? PermissionLevel.READ;
     this.credential = data.credential || null;
+    this.stripeCustomerId = data.stripeCustomerId;
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
   }
@@ -210,6 +213,14 @@ export class Person {
       throw new Error('CREDENTIAL_REQUIRED');
     }
     (this as any).credential = hashedPassword;
+    (this as any).updatedAt = new Date();
+  }
+
+  setStripeCustomerId(customerId: string): void {
+    if (!customerId || customerId.trim().length === 0) {
+      throw new Error('STRIPE_CUSTOMER_ID_REQUIRED');
+    }
+    (this as any).stripeCustomerId = customerId.trim();
     (this as any).updatedAt = new Date();
   }
 

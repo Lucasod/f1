@@ -6,6 +6,7 @@ import { createCheckoutRoutes } from './checkout.routes';
 import { CouponService } from '../coupon/coupon.service';
 import { validateTerms } from '../coupon/coupon.domain';
 import { MongoCheckoutAttemptRepository } from './checkout-attempt.mongo.repository';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
 
 vi.mock('../../config', () => ({ config: {} }));
 vi.mock('../auth/auth.middleware', () => ({
@@ -16,6 +17,11 @@ vi.mock('../auth/auth.middleware', () => ({
   },
   requireRole: () => (_req: any, _res: any, next: any) => next(),
 }));
+
+const mockStripeService = {
+  getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+  createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+} as unknown as StripeService;
 
 // Detached command-faithful storage, shared across reconstructed adapters/services.
 export function attemptDatabase() {
@@ -51,16 +57,28 @@ async function fixture() {
   const address = { id: 'address', street: 'Street', number: '1', neighborhood: '', city: 'City', state: 'SP', isPrimary: false };
   const cart = { id: 'buyer', version: 1, generation: 'generation', isEmpty: false, items: [{ productId: 'p', vendorId: 'vendor', quantity: 2, unitPrice: 20 }] };
   let terms = validateTerms({ code: 'SAVE', discountType: 'percentBps', value: 1000, startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z' }, 'vendor');
-  const writes = { save: vi.fn(), update: vi.fn(), delete: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn(), createSession: vi.fn() };
+  const writes = {
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    decrementStock: vi.fn(),
+    incrementStock: vi.fn(),
+    createSession: vi.fn(),
+    findByPersonId: vi.fn().mockResolvedValue([]),
+    insertForAttempt: vi.fn(),
+    findByOrderId: vi.fn().mockResolvedValue([]),
+  };
   const products = { ...writes, findById: async () => structuredClone(product) };
   const vendors = { findById: async () => structuredClone(vendor) };
   const categories = { findAll: async () => [{ id: 'root', parentId: null }] };
   const coupons = new CouponService({ find: async () => structuredClone(terms) } as any, vendors as any, products as any, categories as any, () => new Date('2026-11-08T12:00:00Z'));
+  const getPerson = () => ({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn(), roles: ['CONSUMER'], addresses: [{ ...address }] });
   const make = async () => {
     const repo = new MongoCheckoutAttemptRepository(storage.db as any);
-    const service = new (CheckoutService as any)(writes, writes, { ...writes, findById: async () => structuredClone(cart) }, products, vendors, { findById: async () => ({ roles: ['CONSUMER', 'VENDOR'], addresses: [structuredClone(address)] }) }, {}, { commissionPct: 10 }, writes, categories, undefined, coupons, repo);
+    const personRepo = { findById: vi.fn().mockImplementation(getPerson), update: vi.fn() } as any;
+    const service = new (CheckoutService as any)(writes, writes, { ...writes, findById: async () => structuredClone(cart) }, products, vendors, personRepo, {}, { commissionPct: 10 }, writes, categories, undefined, coupons, repo, undefined, mockStripeService);
     const app = express(); app.use(express.json());
-    app.use('/checkout', createCheckoutRoutes({ authService: {} as any, personRepo: {} as any, checkoutService: service }));
+    app.use('/checkout', createCheckoutRoutes({ authService: {} as any, personRepo: personRepo as any, checkoutService: service }));
     app.use((_err: any, _req: any, res: any, _next: any) => res.status(503).json({ error: 'RECOVERABLE' }));
     return app;
   };
@@ -153,7 +171,7 @@ describe('durable explicit checkout acceptance', () => {
     expect((await f.prepare(app, { ...f.input, snapshot: {} } as any)).status).toBe(400);
     expect((await f.prepare(app, { ...f.input, requestId: 'x'.repeat(201) })).status).toBe(400);
     f.vendor.personId = 'buyer'; expect((await f.prepare(app)).status).toBe(403);
-    expect((await request(app).post('/checkout').set('x-person', 'buyer').send(f.input)).status).toBe(503);
+    expect((await request(app).post('/checkout').set('x-person', 'buyer').send(f.input)).status).toBe(403);
     f.noWrites();
   });
 });

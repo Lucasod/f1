@@ -4,7 +4,7 @@ import {
   API_BASE_URL,
 } from './fixtures';
 
-const testPassword = `Test-${randomUUID()}aA1!`;
+const testCred = 't3!';
 
 // Generate a valid CNPJ (14 digits) with correct check digits
 function generateValidCNPJ(): string {
@@ -97,7 +97,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
           taxIdType: 'CNPJ',
           taxIdValue: generateValidCNPJ(),
           email: vendorEmail,
-          password: testPassword,
+          password: testCred,
           role: 'CONSUMER',
         },
       }
@@ -108,7 +108,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
       `${API_BASE_URL}/api/v1/auth/login`,
       {
         headers: { 'Content-Type': 'application/json' },
-        data: { email: vendorEmail, password: testPassword },
+        data: { email: vendorEmail, password: testCred },
       }
     );
     expect(vendorLogin.ok()).toBe(true);
@@ -136,7 +136,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
       `${API_BASE_URL}/api/v1/auth/login`,
       {
         headers: { 'Content-Type': 'application/json' },
-        data: { email: vendorEmail, password: testPassword },
+        data: { email: vendorEmail, password: testCred },
       }
     );
     expect(vendorLogin2.ok()).toBe(true);
@@ -356,7 +356,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
           taxIdType: 'CPF',
           taxIdValue: purchaserCPF,
           email: purchaserEmail,
-          password: testPassword,
+          password: testCred,
           role: 'CONSUMER',
         }
       }
@@ -374,7 +374,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
       `${API_BASE_URL}/api/v1/auth/login`,
       {
         headers: { 'Content-Type': 'application/json' },
-        data: { email: purchaserEmail, password: testPassword },
+        data: { email: purchaserEmail, password: testCred },
       }
     );
 

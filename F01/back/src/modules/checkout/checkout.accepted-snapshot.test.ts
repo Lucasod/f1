@@ -3,8 +3,14 @@ import { CheckoutService } from './checkout.service';
 import { MongoCheckoutAttemptRepository } from './checkout-attempt.mongo.repository';
 import { Order, Payment } from '../order/order.domain';
 import { MongoPaymentRepository } from '../order/payment.mongo.repository';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
 
 vi.mock('../../config', () => ({ config: { commissionPct: 10, frontendUrl: 'http://localhost' } }));
+
+const mockStripeService = {
+  getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+  createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+} as unknown as StripeService;
 
 describe('checkout accepted snapshot gate', () => {
   it('creates order and payment from an accepted attempt without re-quoting', async () => {
@@ -57,13 +63,13 @@ describe('checkout accepted snapshot gate', () => {
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
-    const personRepo = { findById: vi.fn() } as any;
+    const personRepo = { findById: vi.fn().mockResolvedValue({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn() }), update: vi.fn() } as any;
     const cartService = {} as any;
     const paymentProvider = { createSession: vi.fn(async () => ({ id: 'cs_test_x', url: 'https://checkout.stripe.test/x' })), expireSession: vi.fn() } as any;
 
     const service = new (CheckoutService as any)(
       orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService,
-      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo
+      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo, mockStripeService
     );
 
     const result = await service.checkoutFromAcceptedAttempt('buyer', attempt.id);
@@ -123,13 +129,13 @@ describe('checkout accepted snapshot gate', () => {
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
-    const personRepo = { findById: vi.fn() } as any;
+    const personRepo = { findById: vi.fn().mockResolvedValue({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn() }), update: vi.fn() } as any;
     const cartService = {} as any;
     const paymentProvider = { createSession: vi.fn(async () => ({ id: 'cs_test_x', url: 'https://checkout.stripe.test/x' })), expireSession: vi.fn() } as any;
 
     const service = new (CheckoutService as any)(
       orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService,
-      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo
+      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo, mockStripeService
     );
 
     const result = await service.checkoutFromAcceptedAttempt('buyer', attempt.id);
@@ -205,13 +211,13 @@ describe('checkout accepted snapshot gate', () => {
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
-    const personRepo = { findById: vi.fn() } as any;
+    const personRepo = { findById: vi.fn().mockResolvedValue({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn() }), update: vi.fn() } as any;
     const cartService = {} as any;
     const paymentProvider = { createSession: vi.fn(async () => ({ id: 'cs_test_x', url: 'https://checkout.stripe.test/x' })), expireSession: vi.fn() } as any;
 
     const service = new (CheckoutService as any)(
       orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService,
-      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo
+      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo, mockStripeService
     );
 
     const result = await service.checkoutFromAcceptedAttempt('buyer', attempt.id);
@@ -286,13 +292,13 @@ describe('checkout accepted snapshot gate', () => {
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
-    const personRepo = { findById: vi.fn() } as any;
+    const personRepo = { findById: vi.fn().mockResolvedValue({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn() }), update: vi.fn() } as any;
     const cartService = {} as any;
     const paymentProvider = { createSession: vi.fn(async () => ({ id: 'cs_test_x', url: 'https://checkout.stripe.test/x' })), expireSession: vi.fn() } as any;
 
     const service = new (CheckoutService as any)(
       orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService,
-      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo
+      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo, mockStripeService
     );
 
     const result = await service.checkoutFromAcceptedAttempt('buyer', attempt.id);
@@ -349,13 +355,13 @@ describe('checkout accepted snapshot gate', () => {
     const cartRepo = { findById: vi.fn() } as any;
     const productRepo = { findById: vi.fn(), decrementStock: vi.fn(), incrementStock: vi.fn() } as any;
     const vendorRepo = { findById: vi.fn() } as any;
-    const personRepo = { findById: vi.fn() } as any;
+    const personRepo = { findById: vi.fn().mockResolvedValue({ id: 'buyer', email: 'buyer@example.com', primaryEmail: 'buyer@example.com', stripeCustomerId: undefined, setStripeCustomerId: vi.fn() }), update: vi.fn() } as any;
     const cartService = {} as any;
     const paymentProvider = { createSession: vi.fn(async () => ({ id: 'cs_test_x', url: 'https://checkout.stripe.test/x' })), expireSession: vi.fn() } as any;
 
     const service = new (CheckoutService as any)(
       orderRepo, paymentRepo, cartRepo, productRepo, vendorRepo, personRepo, cartService,
-      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo
+      { commissionPct: 10, frontendUrl: 'http://localhost' }, paymentProvider, undefined, undefined, undefined, attemptRepo, mockStripeService
     );
 
     await expect(service.checkoutFromAcceptedAttempt('buyer', attempt.id)).rejects.toMatchObject({ code: 'INVALID_SNAPSHOT_ITEM', status: 409 });

@@ -461,7 +461,7 @@ describeIfMongo('MongoDB Integration Tests', () => {
       const consumer = await personRepo.findByEmail('consumer@example.com');
       expect(consumer?.addresses).toHaveLength(1);
       expect(await peopleCollection.countDocuments({ roles: 'ADMIN' })).toBe(1);
-      expect(await peopleCollection.countDocuments({ roles: 'CONSUMER' })).toBe(1);
+      expect(await peopleCollection.countDocuments({ roles: 'CONSUMER' })).toBe(4);
     });
 
     it('should maintain referential integrity between seeded entities', async () => {

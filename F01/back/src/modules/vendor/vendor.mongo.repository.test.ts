@@ -54,6 +54,8 @@ describeIfMongo('MongoVendorRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
+    // Clear the vendors collection before each test for isolation
+    await vendorsCollection.deleteMany({});
     // Create repository instance
     repo = new MongoVendorRepository(db);
   });

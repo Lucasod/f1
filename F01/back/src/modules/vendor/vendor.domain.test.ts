@@ -207,6 +207,40 @@ describe('Vendor Domain', () => {
 
       expect(() => vendor.updateStoreName('')).toThrow('STORE_NAME_REQUIRED');
     });
+
+    it('should set stripeAccountId', () => {
+      const vendor = Vendor.create({
+        personId: 'person-123',
+        storeName: 'Test Store',
+        slug: 'test-store',
+        commissionPct: 10
+      });
+
+      vendor.setStripeAccountId('acct_test123');
+      expect(vendor.stripeAccountId).toBe('acct_test123');
+    });
+
+    it('should throw error for empty stripeAccountId', () => {
+      const vendor = Vendor.create({
+        personId: 'person-123',
+        storeName: 'Test Store',
+        slug: 'test-store',
+        commissionPct: 10
+      });
+
+      expect(() => vendor.setStripeAccountId('')).toThrow('STRIPE_ACCOUNT_ID_REQUIRED');
+    });
+
+    it('should throw error for whitespace-only stripeAccountId', () => {
+      const vendor = Vendor.create({
+        personId: 'person-123',
+        storeName: 'Test Store',
+        slug: 'test-store',
+        commissionPct: 10
+      });
+
+      expect(() => vendor.setStripeAccountId('   ')).toThrow('STRIPE_ACCOUNT_ID_REQUIRED');
+    });
   });
 
   describe('InMemoryVendorRepository', () => {

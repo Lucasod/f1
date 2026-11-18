@@ -7,6 +7,7 @@ import { Person, InMemoryPersonRepository, Address } from '../person/person.doma
 import { Order, OrderStatus, FinancialStatus, Payment, PaymentStatus, OrderError, InMemoryOrderRepository, InMemoryPaymentRepository } from '../order/order.domain';
 import { CartService } from '../cart/cart.service';
 import { config } from '../../config';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
 
 describe('Checkout stock Elasticsearch sync (CR002)', () => {
   let checkoutService: CheckoutService;
@@ -18,6 +19,7 @@ describe('Checkout stock Elasticsearch sync (CR002)', () => {
   let paymentRepo: InMemoryPaymentRepository;
   let cartService: CartService;
   let searchIndex: { indexProduct: ReturnType<typeof vi.fn> };
+  let mockStripeService: StripeService;
 
   const consumerId = 'consumer-1';
   const vendorId = 'vendor-1';
@@ -72,6 +74,11 @@ describe('Checkout stock Elasticsearch sync (CR002)', () => {
     cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
     searchIndex = { indexProduct: vi.fn().mockResolvedValue(undefined) };
 
+    mockStripeService = {
+      getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+      createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+    } as unknown as StripeService;
+
     checkoutService = new CheckoutService(
       orderRepo,
       paymentRepo,
@@ -83,7 +90,10 @@ describe('Checkout stock Elasticsearch sync (CR002)', () => {
       config,
       { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) },
       undefined,
-      searchIndex as any
+      searchIndex as any,
+      undefined,
+      undefined,
+      mockStripeService
     );
   });
 

@@ -3,16 +3,35 @@ import { VendorService, VendorError } from './vendor.service';
 import { Vendor, VendorStatus, InMemoryVendorRepository } from './vendor.domain';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
 import { config } from '../../config';
+import { StripeService, ConnectOnboardingResult } from '../stripe/stripe.service';
 
 describe('Vendor Service', () => {
   let vendorRepo: InMemoryVendorRepository;
   let personRepo: InMemoryPersonRepository;
   let vendorService: VendorService;
+  let mockStripeService: StripeService;
 
   beforeEach(() => {
     vendorRepo = new InMemoryVendorRepository();
     personRepo = new InMemoryPersonRepository();
-    vendorService = new VendorService(vendorRepo, personRepo, config);
+
+    mockStripeService = {
+      createConnectAccount: vi.fn().mockResolvedValue({
+        accountId: 'acct_test123',
+        onboardingUrl: 'https://connect.stripe.com/onboard/acct_test123'
+      } as ConnectOnboardingResult),
+      getConnectAccountStatus: vi.fn().mockResolvedValue({
+        accountId: 'acct_test123',
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        capabilities: { transfers: 'active' },
+        requirements: { currently_due: [], eventually_due: [], past_due: [] }
+      }),
+      createConnectLoginLink: vi.fn().mockResolvedValue('https://dashboard.stripe.com/login/acct_test123')
+    } as unknown as StripeService;
+
+    vendorService = new VendorService(vendorRepo, personRepo, config, mockStripeService);
   });
 
   describe('onboardVendor', () => {
@@ -308,6 +327,159 @@ describe('Vendor Service', () => {
       await expect(vendorService.updateVendor('non-existent', {
         storeName: 'Updated Store'
       })).rejects.toThrow(VendorError.VENDOR_NOT_FOUND);
+    });
+  });
+
+  describe('initiateConnectOnboarding', () => {
+    let vendorId: string;
+    let personId: string;
+
+    beforeEach(async () => {
+      const person = Person.create({
+        name: 'Test Vendor',
+        mainInfo: { taxIdType: 'CNPJ', taxIdValue: '11222333000181' },
+        contactInfos: [{ type: 'email', value: 'vendor@example.com', isPrimary: true }],
+        addresses: []
+      });
+      person.addRole(PersonRole.VENDOR);
+      await personRepo.save(person);
+      personId = person.id;
+
+      const vendor = await vendorService.onboardVendor(personId, {
+        storeName: 'Test Store',
+        slug: 'test-store'
+      });
+      vendorId = vendor.id;
+    });
+
+    it('should initiate Connect onboarding for new vendor', async () => {
+      const result = await vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh');
+
+      expect(result).toEqual({
+        accountId: 'acct_test123',
+        onboardingUrl: 'https://connect.stripe.com/onboard/acct_test123'
+      });
+      expect(mockStripeService.createConnectAccount).toHaveBeenCalledWith(
+        personId,
+        'vendor@example.com',
+        'individual',
+        'https://app.example.com/return',
+        'https://app.example.com/refresh',
+        expect.stringMatching(/^vendor-onboarding-/)
+      );
+
+      // Verify stripeAccountId is saved on vendor
+      const updatedVendor = await vendorRepo.findById(vendorId);
+      expect(updatedVendor!.stripeAccountId).toBe('acct_test123');
+    });
+
+    it('should return login link for vendor with completed onboarding', async () => {
+      // Pre-set stripeAccountId
+      const vendor = await vendorRepo.findById(vendorId);
+      vendor!.setStripeAccountId('acct_existing123');
+      await vendorRepo.update(vendor!);
+
+      mockStripeService.getConnectAccountStatus.mockResolvedValue({
+        accountId: 'acct_existing123',
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        capabilities: { transfers: 'active' },
+        requirements: { currently_due: [], eventually_due: [], past_due: [] }
+      });
+      mockStripeService.createConnectLoginLink.mockResolvedValue('https://dashboard.stripe.com/login/acct_existing123');
+
+      const result = await vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh');
+
+      expect(result).toEqual({
+        accountId: 'acct_existing123',
+        onboardingUrl: 'https://dashboard.stripe.com/login/acct_existing123'
+      });
+      expect(mockStripeService.getConnectAccountStatus).toHaveBeenCalledWith('acct_existing123');
+      expect(mockStripeService.createConnectLoginLink).toHaveBeenCalledWith('acct_existing123');
+    });
+
+    it('should throw VENDOR_NOT_FOUND for non-existent vendor', async () => {
+      await expect(vendorService.initiateConnectOnboarding('non-existent', 'return', 'refresh'))
+        .rejects.toThrow(VendorError.VENDOR_NOT_FOUND);
+    });
+
+    it('should throw PERSON_NOT_FOUND if vendor person not found', async () => {
+      // Create vendor with non-existent personId
+      const vendor = Vendor.create({
+        personId: 'non-existent-person',
+        storeName: 'Test Store',
+        slug: 'test-store-2',
+        commissionPct: 10
+      });
+      vendor.id = 'vendor-2';
+      await vendorRepo.save(vendor);
+
+      await expect(vendorService.initiateConnectOnboarding(vendor.id, 'return', 'refresh'))
+        .rejects.toThrow(VendorError.PERSON_NOT_FOUND);
+    });
+
+    it('should throw STRIPE_CONNECT_ONBOARDING_FAILED when StripeService not configured', async () => {
+      const vendorServiceWithoutStripe = new VendorService(vendorRepo, personRepo, config);
+      await expect(vendorServiceWithoutStripe.initiateConnectOnboarding(vendorId, 'return', 'refresh'))
+        .rejects.toThrow(VendorError.STRIPE_CONNECT_ONBOARDING_FAILED);
+    });
+
+    it('should handle concurrent calls idempotently (CR-001)', async () => {
+      // Track call count to verify Stripe is only called once
+      let callCount = 0;
+      mockStripeService.createConnectAccount.mockImplementation(async () => {
+        callCount++;
+        return {
+          accountId: 'acct_test123',
+          onboardingUrl: 'https://connect.stripe.com/onboard/acct_test123'
+        } as ConnectOnboardingResult;
+      });
+
+      // Fire multiple concurrent requests for the same vendorId
+      const promises = [
+        vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh'),
+        vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh'),
+        vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh'),
+      ];
+
+      const results = await Promise.all(promises);
+
+      // All calls should return the same accountId
+      expect(results[0].accountId).toBe('acct_test123');
+      expect(results[1].accountId).toBe('acct_test123');
+      expect(results[2].accountId).toBe('acct_test123');
+
+      // Stripe should only be called once due to the lock
+      expect(callCount).toBe(1);
+      expect(mockStripeService.createConnectAccount).toHaveBeenCalledTimes(1);
+
+      // Verify stripeAccountId is saved on vendor
+      const updatedVendor = await vendorRepo.findById(vendorId);
+      expect(updatedVendor!.stripeAccountId).toBe('acct_test123');
+    });
+
+    it('should handle sequential calls idempotently after first completes', async () => {
+      let callCount = 0;
+      mockStripeService.createConnectAccount.mockImplementation(async () => {
+        callCount++;
+        return {
+          accountId: 'acct_test123',
+          onboardingUrl: 'https://connect.stripe.com/onboard/acct_test123'
+        } as ConnectOnboardingResult;
+      });
+
+      // First call
+      const result1 = await vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh');
+      expect(result1.accountId).toBe('acct_test123');
+
+      // Second call (sequential, after first completes)
+      const result2 = await vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh');
+      expect(result2.accountId).toBe('acct_test123');
+
+      // Stripe should only be called once because vendor now has stripeAccountId
+      expect(callCount).toBe(1);
+      expect(mockStripeService.createConnectAccount).toHaveBeenCalledTimes(1);
     });
   });
 });

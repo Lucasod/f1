@@ -55,6 +55,9 @@ describeIfMongo('MongoCategoryRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
+    // Clear collection for test isolation
+    await categoriesCollection.deleteMany({});
+
     // Create repository instance
     repo = new MongoCategoryRepository(db);
   });

@@ -17,6 +17,7 @@ import { PersonRole } from '../person/person.domain';
 import { config } from '../../config';
 import { hashPassword } from '../auth/credential.domain';
 import { OrderError } from '../order/order.domain';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
 
 // Valid test CPF/CNPJ values (these pass validation)
 const VALID_CPF_1 = '52998224725';
@@ -49,6 +50,8 @@ describe('Checkout Routes', () => {
   let vendorToken: string;
   let adminToken: string;
 
+  let mockStripeService: StripeService;
+
   beforeEach(async () => {
     // Initialize repositories
     personRepo = new InMemoryPersonRepository();
@@ -61,6 +64,12 @@ describe('Checkout Routes', () => {
     // Initialize services
     authService = new AuthService(personRepo, 'test-secret-key', '24h', '30d');
     cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
+
+    mockStripeService = {
+      getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+      createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+    } as unknown as StripeService;
+
     checkoutService = new CheckoutService(
       orderRepo,
       paymentRepo,
@@ -70,7 +79,12 @@ describe('Checkout Routes', () => {
       personRepo,
       cartService,
       config,
-      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) }
+      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockStripeService
     );
 
     // Create Express app

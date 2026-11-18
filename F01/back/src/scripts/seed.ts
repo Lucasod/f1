@@ -614,7 +614,8 @@ export async function runSeed(repositories: SeedRepositories, searchIndexCandida
     const hashedPassword = await hashPassword(vendorPassword);
     person.setCredential(hashedPassword);
 
-    // Add VENDOR role
+    // Add CONSUMER role first (for buyer capabilities), then VENDOR role (for seller capabilities)
+    person.addRole(PersonRole.CONSUMER);
     person.addRole(PersonRole.VENDOR);
 
     await personRepo.save(person);

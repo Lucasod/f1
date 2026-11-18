@@ -47,7 +47,10 @@ export function createReviewRoutes({ authService, reviewService }: ReviewRoutesC
         page,
         limit,
       );
-      return res.json(result);
+      return res.json({
+        ...result,
+        items: result.items.map(review => reviewService.toReviewWithUrls(review)),
+      });
     } catch (error) {
       return handleReviewError(error, res, next);
     }
@@ -66,7 +69,7 @@ export function createReviewRoutes({ authService, reviewService }: ReviewRoutesC
         rating: req.body.rating,
         comment: req.body.comment,
       });
-      return res.status(201).json({ review });
+      return res.status(201).json({ review: reviewService.toReviewWithUrls(review) });
     } catch (error) {
       return handleReviewError(error, res, next);
     }
@@ -100,7 +103,7 @@ router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsum
         req.file.buffer,
         req.file.mimetype,
       );
-      return res.status(201).json({ review });
+      return res.status(201).json({ review: reviewService.toReviewWithUrls(review) });
     } catch (error) {
       return handleReviewError(error, res, next);
     }
@@ -109,7 +112,11 @@ router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsum
   router.get('/admin/reviews', authMw as RequestHandler, requireAdmin as RequestHandler, (async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { page, limit } = parsePagination(req);
-      return res.json(await reviewService.listAdminReviews(page, limit));
+      const result = await reviewService.listAdminReviews(page, limit);
+      return res.json({
+        ...result,
+        items: result.items.map(review => reviewService.toReviewWithUrls(review)),
+      });
     } catch (error) {
       return handleReviewError(error, res, next);
     }
@@ -125,7 +132,7 @@ router.post('/reviews/:reviewId/images', authMw as RequestHandler, requireConsum
         readPathParameter(req.params.reviewId),
         status,
       );
-      return res.json({ review });
+      return res.json({ review: reviewService.toReviewWithUrls(review) });
     } catch (error) {
       return handleReviewError(error, res, next);
     }

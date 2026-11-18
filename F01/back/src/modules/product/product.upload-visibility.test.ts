@@ -12,8 +12,8 @@ describe('public uploaded image visibility', () => {
       getUrl: (key: string) => `/api/v1/uploads/${key}`,
       getSignedUrl,
     } as any;
-    const product = { id: 'p1', vendorId: 'v1', status: 'active', images: ['/api/v1/uploads/products/v1/p1/one.jpg'] };
-    const review = { id: 'r1', productId: 'p1', status: 'published', images: ['/api/v1/uploads/reviews/p1/r1/one.jpg'] };
+    const product = { id: 'p1', vendorId: 'v1', status: 'active', images: ['products/v1/p1/one.jpg'] };
+    const review = { id: 'r1', productId: 'p1', status: 'published', images: ['reviews/p1/r1/one.jpg'] };
     const productRepo = { findById: vi.fn().mockImplementation(async id => id === 'p1' ? product : null) };
     const reviewService = { findReviewById: vi.fn().mockImplementation(async id => id === 'r1' ? review : null) };
     const app = express();
@@ -27,16 +27,16 @@ describe('public uploaded image visibility', () => {
     for (const key of ['invoices/2026/10/private.pdf', 'products/v2/p1/one.jpg', 'products/v1/p1/missing.jpg', 'reviews/p2/r1/one.jpg', 'products/v1/p1/one%40.jpg']) {
       expect((await request(app).get(`/${key}`)).status).toBe(404);
     }
-    product.images = ['https://other.example/api/v1/uploads/products/v1/p1/one.jpg'];
+    product.images = ['https://other.example/products/v1/p1/one.jpg'];
     expect((await request(app).get('/products/v1/p1/one.jpg')).status).toBe(404);
-    product.images = ['/api/v1/uploads/products/v1/p1/one.jpg'];
+    product.images = ['products/v1/p1/one.jpg'];
     product.status = 'inactive';
     expect((await request(app).get('/products/v1/p1/one.jpg')).status).toBe(404);
     product.status = 'active';
     review.status = 'hidden';
     expect((await request(app).get('/reviews/p1/r1/one.jpg')).status).toBe(404);
     review.status = 'published';
-    review.images = ['https://other.example/api/v1/uploads/reviews/p1/r1/one.jpg'];
+    review.images = ['https://other.example/reviews/p1/r1/one.jpg'];
     expect((await request(app).get('/reviews/p1/r1/one.jpg')).status).toBe(404);
     expect(getSignedUrl).toHaveBeenCalledTimes(2);
   });

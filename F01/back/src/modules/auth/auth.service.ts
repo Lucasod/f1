@@ -38,7 +38,8 @@ export enum AuthError {
   INVALID_CURRENT_CREDENTIAL = 'INVALID_CURRENT_PASSWORD',
   INVALID_SESSION = 'INVALID_TOKEN',
   TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  PERSON_NOT_FOUND = 'PERSON_NOT_FOUND'
+  PERSON_NOT_FOUND = 'PERSON_NOT_FOUND',
+  STRIPE_CUSTOMER_ID_REQUIRED = 'STRIPE_CUSTOMER_ID_REQUIRED'
 }
 
 export interface RegisterInput {
@@ -228,6 +229,29 @@ export class AuthService {
     }
 
     person.replaceCredential(passwordHash);
+    await this.repo.update(person);
+  }
+
+  async addRoleToPerson(personId: string, role: PersonRole): Promise<Person> {
+    const person = await this.repo.findById(personId);
+    if (!person) {
+      throw new Error(AuthError.PERSON_NOT_FOUND);
+    }
+    person.addRole(role);
+    return this.repo.update(person);
+  }
+
+  async setStripeCustomerId(personId: string, customerId: string): Promise<void> {
+    const person = await this.repo.findById(personId);
+    if (!person) {
+      throw new Error(AuthError.PERSON_NOT_FOUND);
+    }
+
+    if (!customerId || customerId.trim().length === 0) {
+      throw new Error(AuthError.STRIPE_CUSTOMER_ID_REQUIRED);
+    }
+
+    person.setStripeCustomerId(customerId.trim());
     await this.repo.update(person);
   }
 

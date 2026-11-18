@@ -1029,6 +1029,58 @@ export async function simulatePayment(
   return result;
 }
 
+/**
+ * Create an order via the checkout flow (POST /checkout).
+ * Adds item to cart, adds shipping address, then calls checkout.
+ * Returns the created order or null on failure.
+ */
+export async function createOrderViaCheckout(page: Page, productId: string, quantity: number = 1): Promise<{ orderId: string; checkoutUrl: string } | null> {
+  try {
+    // Add item to cart
+    const addToCartResp = await apiFetch(page, 'POST', '/api/v1/cart/items', {
+      productId,
+      quantity,
+    });
+    if (!addToCartResp.ok) {
+      console.warn('Add to cart failed:', addToCartResp.status);
+      return null;
+    }
+
+    // Add shipping address
+    const address = await addAddress(page, {
+      street: 'Rua Teste',
+      number: '100',
+      neighborhood: 'Centro',
+      city: 'São Paulo',
+      state: 'SP',
+      isPrimary: true,
+    });
+    if (!address) {
+      console.warn('Add address failed');
+      return null;
+    }
+
+    // Call checkout
+    const checkoutResp = await apiFetch(page, 'POST', '/api/v1/checkout', {
+      shippingAddressId: address.id,
+    });
+    if (!checkoutResp.ok) {
+      const errorText = await checkoutResp.text().catch(() => '');
+      console.warn('Checkout failed:', checkoutResp.status, errorText);
+      return null;
+    }
+
+    const data = await checkoutResp.json();
+    return {
+      orderId: data.order?.id,
+      checkoutUrl: data.checkoutUrl,
+    };
+  } catch (error) {
+    console.warn('Create order via checkout exception:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 // Extended test type with fixtures
 type AuthFixtures = {
   consumerEmail: string;

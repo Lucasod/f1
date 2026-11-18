@@ -250,7 +250,7 @@ describe('VendorOrderPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check header with total count - component uses "grupo(s) de pedido(s) encontrado(s)"
-    expect(screen.getByText(/My Orders \(Seller\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sales Orders/i)).toBeInTheDocument();
     expect(screen.getByText(/3 order groups founds/i)).toBeInTheDocument();
 
     // Check vendor group cards are displayed - check Order IDs

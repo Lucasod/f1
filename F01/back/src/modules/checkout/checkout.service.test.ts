@@ -9,6 +9,7 @@ import { CartService } from '../cart/cart.service';
 import { CouponService } from '../coupon/coupon.service';
 import { InMemoryCouponRepository, validateTerms } from '../coupon/coupon.domain';
 import { config } from '../../config';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
 
 describe('Checkout Service', () => {
   let checkoutService: CheckoutService;
@@ -68,6 +69,8 @@ describe('Checkout Service', () => {
   });
   validPerson.id = consumerId;
 
+  let mockStripeService: StripeService;
+
   beforeEach(() => {
     cartRepo = new InMemoryCartRepository();
     productRepo = new InMemoryProductRepository();
@@ -78,6 +81,12 @@ describe('Checkout Service', () => {
 
     cartService = new CartService(cartRepo, productRepo, vendorRepo, config);
 
+    // Create mock StripeService
+    mockStripeService = {
+      getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+      createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+    } as unknown as StripeService;
+
     checkoutService = new CheckoutService(
       orderRepo,
       paymentRepo,
@@ -87,7 +96,12 @@ describe('Checkout Service', () => {
       personRepo,
       cartService,
       config,
-      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) }
+      { createSession: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockStripeService
     );
   });
 

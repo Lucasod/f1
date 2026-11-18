@@ -21,6 +21,7 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
       }
 
       let determinedRole: PersonRole = PersonRole.CONSUMER;
+      const requestedVendorRole = role === PersonRole.VENDOR;
 
       if (role) {
         if (!Object.values(PersonRole).includes(role)) {
@@ -39,6 +40,11 @@ export function createAuthRoutes({ authService }: AuthRoutesConfig): Router {
       }
 
       const result = await authService.register({ name, taxIdType, taxIdValue, email, password, role: determinedRole });
+
+      // If VENDOR role was requested, add it to the person (dual-role: CONSUMER + VENDOR)
+      if (requestedVendorRole) {
+        await authService.addRoleToPerson(result.person.id, PersonRole.VENDOR);
+      }
 
       return res.status(201).json({
         person: {

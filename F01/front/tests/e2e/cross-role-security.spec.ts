@@ -14,23 +14,13 @@ import {
   generateValidCNPJ,
 } from './fixtures';
 
-const testPassword = `Test-${randomUUID()}aA1!`;
+const testCred = 't3!';
 
 test.describe('FS-01 Cross-Role Security Testing', () => {
   test.beforeEach(async ({ page }) => {
     await clearAuth(page);
   });
 
-  test('1. Consumer attempting Vendor-only actions', async ({ page }) => {
-    // This test is currently blocked by a Vite dev server infrastructure issue
-    // (recharts import resolution failure in development mode).
-    // The registerUser() timeout fix (Fix 3) is implemented.
-    // Once the Vite issue is resolved, this test should verify consumer cannot access vendor endpoints.
-    test.skip('Blocked by Vite dev server recharts import issue - Fix 3 implemented');
-  });
-
-  // Original test implementation preserved for when Vite issue is resolved:
-  /*
   test('1. Consumer attempting Vendor-only actions', async ({ page }) => {
     const consumerData = getConsumerRegistrationData();
     await registerUser(page, consumerData);
@@ -73,7 +63,6 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
 
     expect(pass1 && pass2 && pass3).toBeTruthy();
   });
-  */
 
   test('2. Vendor attempting Admin-only actions', async ({ page }) => {
     const vendorEmail = 'vendor-sec-' + Date.now() + '@example.com';
@@ -85,12 +74,12 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
         taxIdType: 'CNPJ',
         taxIdValue: vendorCNPJ,
         email: vendorEmail,
-        password: testPassword,
+        password: testCred,
         role: 'VENDOR',
       } });
     expect(registerResponse.ok()).toBeTruthy();
 
-    const loginResult = await loginViaApi(page, vendorEmail, testPassword);
+    const loginResult = await loginViaApi(page, vendorEmail, testCred);
     expect(loginResult.accessToken).not.toBeNull();
 
     await page.evaluate((args) => {
@@ -128,12 +117,12 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
         taxIdType: 'CPF',
         taxIdValue: generateValidCPF(),
         email: consumer1Email,
-        password: testPassword,
+        password: testCred,
         role: 'CONSUMER',
       } });
     expect(register1Response.ok()).toBeTruthy();
 
-    const consumer1Login = await loginViaApi(page, consumer1Email, testPassword);
+    const consumer1Login = await loginViaApi(page, consumer1Email, testCred);
     expect(consumer1Login.accessToken).not.toBeNull();
     const consumer1Token = consumer1Login.accessToken;
 
@@ -149,12 +138,12 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
         taxIdType: 'CPF',
         taxIdValue: generateValidCPF(),
         email: consumer2Email,
-        password: testPassword,
+        password: testCred,
         role: 'CONSUMER',
       } });
     expect(register2Response.ok()).toBeTruthy();
 
-    const consumer2Login = await loginViaApi(page, consumer2Email, testPassword);
+    const consumer2Login = await loginViaApi(page, consumer2Email, testCred);
     const consumer2Token = consumer2Login.accessToken;
     await page.evaluate((args) => {
       localStorage.setItem('auth-storage', JSON.stringify({ state: { accessToken: args.token, user: { id: '1', name: 'Consumer 2', email: args.email, roles: ['CONSUMER'] } } }));
@@ -187,12 +176,12 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
         taxIdType: 'CNPJ',
         taxIdValue: vendorCNPJ,
         email: vendorEmail,
-        password: testPassword,
+        password: testCred,
         role: 'VENDOR',
       } });
     expect(registerResponse.ok()).toBeTruthy();
 
-    const vendorLogin = await loginViaApi(page, vendorEmail, testPassword);
+    const vendorLogin = await loginViaApi(page, vendorEmail, testCred);
     expect(vendorLogin.accessToken).not.toBeNull();
     const vendorToken = vendorLogin.accessToken;
 
@@ -225,19 +214,35 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
   });
 
   test('5. Unauthenticated access to protected pages', async ({ page }) => {
-    // This test is currently blocked by a Vite dev server infrastructure issue
-    // (recharts import resolution failure in development mode).
-    // The clearAuth() fix (Fix 1) is implemented and verified by Test 7.
-    // Once the Vite issue is resolved, this test should verify redirects to /login.
-    test.skip('Blocked by Vite dev server recharts import issue - Fix 1 verified by Test 7');
+    // Test that unauthenticated users are redirected to /login when accessing protected pages
+    const protectedPages = ['/checkout', '/orders', '/profile'];
+
+    for (const protectedPage of protectedPages) {
+      await page.goto(protectedPage);
+      // Wait for client-side redirect to /login
+      await page.waitForURL(/\/login/, { timeout: 10000 });
+
+      const currentUrl = page.url();
+      const isRedirectedToLogin = currentUrl.includes('/login');
+      console.log(`Test 5 - Page: ${protectedPage}, Redirected to: ${currentUrl}, Pass: ${isRedirectedToLogin}`);
+      expect(isRedirectedToLogin).toBeTruthy();
+    }
   });
 
   test('6. Direct URL navigation to protected routes', async ({ page }) => {
-    // This test is currently blocked by a Vite dev server infrastructure issue
-    // (recharts import resolution failure in development mode).
-    // The clearAuth() fix (Fix 1) is implemented and verified by Test 7.
-    // Once the Vite issue is resolved, this test should verify redirects to /login.
-    test.skip('Blocked by Vite dev server recharts import issue - Fix 1 verified by Test 7');
+    // Test direct navigation to protected routes without authentication
+    const protectedRoutes = ['/orders', '/profile'];
+
+    for (const route of protectedRoutes) {
+      await page.goto(route);
+      // Wait for client-side redirect to /login
+      await page.waitForURL(/\/login/, { timeout: 10000 });
+
+      const currentUrl = page.url();
+      const isRedirectedToLogin = currentUrl.includes('/login');
+      console.log(`Test 6 - Route: ${route}, Redirected to: ${currentUrl}, Pass: ${isRedirectedToLogin}`);
+      expect(isRedirectedToLogin).toBeTruthy();
+    }
   });
 
   test('7. Logout followed by browser back/refresh', async ({ page }) => {
@@ -249,12 +254,12 @@ test.describe('FS-01 Cross-Role Security Testing', () => {
         taxIdType: 'CPF',
         taxIdValue: generateValidCPF(),
         email: consumerEmail,
-        password: testPassword,
+        password: testCred,
         role: 'CONSUMER',
       } });
     expect(registerResponse.ok()).toBeTruthy();
 
-    const loginResponse = await loginViaApi(page, consumerEmail, testPassword);
+    const loginResponse = await loginViaApi(page, consumerEmail, testCred);
     expect(loginResponse.accessToken).not.toBeNull();
 
     await page.evaluate((args) => {

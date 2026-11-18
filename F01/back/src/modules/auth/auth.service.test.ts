@@ -404,6 +404,47 @@ describe('Auth Service', () => {
       expect(payload.exp).toBeDefined();
     });
   });
+
+  describe('setStripeCustomerId', () => {
+    let personId: string;
+
+    beforeEach(async () => {
+      const result = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+      personId = result.person.id;
+    });
+
+    it('should set stripeCustomerId on person', async () => {
+      const customerId = 'cus_test123';
+
+      await authService.setStripeCustomerId(personId, customerId);
+
+      const person = await repo.findById(personId);
+      expect(person).toBeDefined();
+      expect(person!.stripeCustomerId).toBe(customerId);
+    });
+
+    it('should throw PERSON_NOT_FOUND for non-existent person', async () => {
+      await expect(authService.setStripeCustomerId('non-existent-id', 'cus_test123'))
+        .rejects.toThrow(AuthError.PERSON_NOT_FOUND);
+    });
+
+    it('should throw error for empty customerId', async () => {
+      await expect(authService.setStripeCustomerId(personId, ''))
+        .rejects.toThrow(AuthError.STRIPE_CUSTOMER_ID_REQUIRED);
+    });
+
+    it('should throw error for whitespace-only customerId', async () => {
+      await expect(authService.setStripeCustomerId(personId, '   '))
+        .rejects.toThrow(AuthError.STRIPE_CUSTOMER_ID_REQUIRED);
+    });
+  });
 });
 
 describe('AuthError', () => {
@@ -417,5 +458,6 @@ describe('AuthError', () => {
     expect(AuthError.INVALID_SESSION).toBe('INVALID_TOKEN');
     expect(AuthError.TOKEN_EXPIRED).toBe('TOKEN_EXPIRED');
     expect(AuthError.PERSON_NOT_FOUND).toBe('PERSON_NOT_FOUND');
+    expect(AuthError.STRIPE_CUSTOMER_ID_REQUIRED).toBe('STRIPE_CUSTOMER_ID_REQUIRED');
   });
 });

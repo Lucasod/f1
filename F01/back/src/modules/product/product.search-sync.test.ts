@@ -13,6 +13,7 @@ import { InMemoryPersonRepository, Person } from '../person/person.domain';
 import { InMemoryCartRepository } from '../cart/cart.domain';
 import { CartService } from '../cart/cart.service';
 import { CheckoutService } from '../checkout/checkout.service';
+import { StripeService } from '../stripe/stripe.service';
 import { InMemoryOrderRepository, InMemoryPaymentRepository } from '../order/order.domain';
 import { PaymentService } from '../order/payment.service';
 
@@ -451,7 +452,13 @@ describe('Mongo product atomic search capture (no services)', () => {
     const index = new ElasticsearchProductIndex('http://localhost:9200', vi.fn(), sync);
     const provider = { createSession: providerFails ? vi.fn().mockRejectedValue(new Error('synthetic provider failure'))
       : vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' }) };
-    const checkout = new CheckoutService(orders, payments, carts, s.repo, vendors, people, cart, config, provider, undefined, index);
+    const mockStripeService = {
+      getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true }),
+      createCheckoutSessionWithCustomer: providerFails
+        ? vi.fn().mockRejectedValue(new Error('synthetic stripe service failure'))
+        : vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+    } as unknown as StripeService;
+    const checkout = new CheckoutService(orders, payments, carts, s.repo, vendors, people, cart, config, provider, undefined, index, undefined, undefined, mockStripeService);
     await cart.addItem(buyer.id, 'product-1', 2);
     if (providerFails) {
       await expect(checkout.checkout(buyer.id, 'address')).rejects.toThrow();

@@ -252,6 +252,22 @@ export class PaymentService {
     return payment;
   }
 
+  /**
+   * Completes checkout payment after successful Stripe webhook verification.
+   * 
+   * SECURITY ARCHITECTURE NOTE:
+   * This method is ONLY called from the verified Stripe webhook handler
+   * (stripe-webhook.handler.ts) AFTER signature verification:
+   *   stripe.webhooks.constructEvent(req.body, signature, webhookSecret)
+   * 
+   * Public API endpoints for authorize/capture are EXPLICITLY BLOCKED
+   * with 403 "PROVIDER_CONFIRMATION_REQUIRED" - they cannot be called
+   * directly by clients. Payment completion flows exclusively through
+   * the webhook path which guarantees Stripe signature verification.
+   * 
+   * This method is INTERNAL and must not be exposed as a public endpoint.
+   * It handles idempotency for duplicate webhook deliveries.
+   */
   async completeCheckoutPayment(paymentId: string, providerTransactionId: string, amountTotal: number): Promise<Payment> {
     const existing = await this.paymentRepo.findById(paymentId);
     if (!existing) {

@@ -18,10 +18,11 @@ vi.mock('../auth/auth.middleware', () => ({
 
 describe('product image deletion safety', () => {
   it('denies deletion without changing storage or the reference while preserving authorization and not-found checks', async () => {
-    const key = 'products/vendor/product/image.jpg';
-    const url = `/uploads/${key}`;
+    const productId = 'product-123';
+    const imageKey = 'products/vendor/product-123/image.jpg';
+    const url = `/uploads/${imageKey}`;
     const removeImage = vi.fn();
-    const product = { vendorId: 'vendor', images: [url], removeImage };
+    const product = { vendorId: 'vendor', id: productId, images: [imageKey], removeImage };
     const remove = vi.fn();
     const updateProduct = vi.fn();
     const app = express();
@@ -32,11 +33,11 @@ describe('product image deletion safety', () => {
       productService: { getProductById: vi.fn().mockResolvedValue(product), updateProduct } as any,
       storageAdapter: { getUrl: (imageKey: string) => `/uploads/${imageKey}`, delete: remove } as any,
     }));
-    const route = `/product/images/${key}`;
+    const route = `/${productId}/images/${imageKey}`;
     expect((await request(app).delete(route)).status).toBe(401);
     expect((await request(app).delete(route).set('x-test-role', 'CONSUMER').set('x-test-person', 'owner')).status).toBe(403);
     expect((await request(app).delete(route).set('x-test-role', 'VENDOR').set('x-test-person', 'other')).status).toBe(403);
-    expect((await request(app).delete('/product/images/products/vendor/product/missing.jpg').set('x-test-role', 'VENDOR').set('x-test-person', 'owner')).status).toBe(404);
+    expect((await request(app).delete(`/${productId}/images/products/vendor/product-123/missing.jpg`).set('x-test-role', 'VENDOR').set('x-test-person', 'owner')).status).toBe(404);
     for (const role of ['VENDOR', 'ADMIN']) {
       const response = await request(app).delete(route).set('x-test-role', role).set('x-test-person', 'owner');
       expect(response.status).toBe(503);
@@ -45,6 +46,6 @@ describe('product image deletion safety', () => {
     expect(remove).not.toHaveBeenCalled();
     expect(removeImage).not.toHaveBeenCalled();
     expect(updateProduct).not.toHaveBeenCalled();
-    expect(product.images).toEqual([url]);
+    expect(product.images).toEqual([imageKey]);
   });
 });

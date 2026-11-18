@@ -72,6 +72,7 @@ describe('VendorFinancialDashboardService (FIND-A02-P1-001: currency BRL)', () =
       personId: 'person-1',
       amount: 100,
     });
+    payment.authorize('txn_test_123');
     payment.capture();
     void paymentRepo.save(payment);
   });

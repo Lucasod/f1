@@ -6,8 +6,10 @@ import { createCheckoutRoutes } from './checkout.routes';
 import { MongoCouponRepository } from '../coupon/coupon.mongo.repository';
 import { CouponService } from '../coupon/coupon.service';
 import { createCouponRoutes } from '../coupon/coupon.routes';
+import { StripeService, StripeCustomerResult } from '../stripe/stripe.service';
+import { config } from '../../config';
 
-vi.mock('../../config', () => ({ config: { currency: 'BRL' } }));
+vi.mock('../../config', () => ({ config: { currency: 'BRL', frontendUrl: 'http://localhost:5173', stripePaymentMethodConfiguration: '' } }));
 vi.mock('../auth/auth.middleware', () => ({
   authMiddleware: () => (req: any, res: any, next: any) => {
     const id = req.header('x-test-person');
@@ -17,16 +19,44 @@ vi.mock('../auth/auth.middleware', () => ({
   requireRole: (...roles: string[]) => (req: any, res: any, next: any) => roles.some(r => req.user.roles.includes(r)) ? next() : res.sendStatus(403),
 }));
 
+const mockStripeService = {
+  getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true } as StripeCustomerResult),
+  createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
+} as unknown as StripeService;
+
 describe('persisted coupon HTTP quote', () => {
-  it.each([30, 10])('keeps cart pricing before and after a catalogue-priced quote at %s without financial writes', async (catalogPrice) => {
-    const products = { findById: async () => ({ id: 'p', vendorId: 'vendor', categoryId: 'root', name: 'Product', price: catalogPrice, quantity: 10 }), decrementStock: vi.fn(), incrementStock: vi.fn() };
+  it.each([30, 10])('keeps cart pricing before and after a catalogue-priced quote at %s and completes checkout', async (catalogPrice) => {
+    const products = { findById: async () => ({ id: 'p', vendorId: 'vendor', categoryId: 'root', name: 'Product', price: catalogPrice, quantity: 10 }), decrementStock: vi.fn().mockResolvedValue(true), incrementStock: vi.fn() };
     const vendors = { findById: async () => ({ id: 'vendor', personId: 'seller', storeName: 'Store', commissionPct: 10 }) };
     const cart = { isEmpty: false, items: [{ productId: 'p', vendorId: 'vendor', quantity: 2, unitPrice: 20 }] };
     const carts = { findById: async () => cart, save: vi.fn(), update: vi.fn(), delete: vi.fn() };
+    const orderRepo = {
+      findByPersonId: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      save: vi.fn(),
+      update: vi.fn(),
+    };
+    const paymentRepo = {
+      findByOrderId: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      save: vi.fn(),
+      update: vi.fn(),
+    };
     const finance = { save: vi.fn(), update: vi.fn(), delete: vi.fn(), createSession: vi.fn() };
     const terms = { vendorId: 'vendor', code: 'SAVE', discountType: 'percentBps', value: 1000, startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z', includeProducts: [], excludeProducts: [], includeCategories: [], excludeCategories: [] };
     const coupons = new CouponService({ find: async () => terms } as any, vendors as any, products as any, { findAll: async () => [{ id: 'root', parentId: null }] } as any, () => new Date('2026-11-08T12:00:00Z'));
-    const checkout = new CheckoutService(finance as any, finance as any, carts as any, products as any, vendors as any, { findById: async () => ({ addresses: [] }) } as any, {} as any, {} as any, finance as any, undefined, undefined, coupons);
+    const personRepo = { 
+      findById: async () => ({ 
+        addresses: [{ id: 'address', street: 'Street', number: '1', neighborhood: '', city: 'City', state: 'SP', isPrimary: false }],
+        primaryEmail: 'buyer@test.com',
+        stripeCustomerId: null,
+        setStripeCustomerId: vi.fn(),
+        save: vi.fn(), 
+        update: vi.fn() 
+      }), 
+      update: vi.fn() 
+    };
+    const checkout = new CheckoutService(orderRepo as any, paymentRepo as any, carts as any, products as any, vendors as any, personRepo as any, {} as any, config, finance as any, undefined, undefined, coupons, undefined, mockStripeService);
     const app = express(); app.use(express.json());
     app.use('/checkout', createCheckoutRoutes({ authService: {} as any, checkoutService: checkout, personRepo: {} as any }));
     const plain = async () => {
@@ -41,13 +71,19 @@ describe('persisted coupon HTTP quote', () => {
     expect(quote.status).toBe(200);
     expect(quote.body.preview).toMatchObject({ purchasable: false, grossMinor: catalogPrice * 200, discountMinor: catalogPrice * 20, netMinor: catalogPrice * 180, totalAmount: catalogPrice * 1.8 });
     expect(quote.body.preview.vendorGroups[0].items[0].unitPrice).toBe(catalogPrice);
-    expect(await plain()).toEqual(before);
-    expect((await request(app).post('/checkout').set('x-test-person', 'buyer').send({ shippingAddressId: 'address', couponSelections: [{ vendorId: 'vendor', code: 'SAVE' }] })).status).toBe(503);
+expect(await plain()).toEqual(before);
+    const orderSaveSpy = vi.spyOn(orderRepo, 'save');
+    const paymentSaveSpy = vi.spyOn(paymentRepo, 'save');
+    const checkoutResponse = await request(app).post('/checkout').set('x-test-person', 'buyer').send({ shippingAddressId: 'address', couponSelections: [{ vendorId: 'vendor', code: 'SAVE' }] });
+    expect(checkoutResponse.status).toBe(201);
+    expect(checkoutResponse.body.order).toBeDefined();
+    expect(checkoutResponse.body.checkoutUrl).toBeDefined();
     expect(cart.items[0].unitPrice).toBe(20);
-    expect(spy).not.toHaveBeenCalled();
+    expect(orderSaveSpy).toHaveBeenCalled();
+    expect(paymentSaveSpy).toHaveBeenCalled();
   });
 
-  it('creates and lists vendor terms, restores in another service and quotes eligible cents without financial writes', async () => {
+  it('creates and lists vendor terms, restores in another service and quotes eligible cents and completes checkout', async () => {
     const documents = new Map<string, any>();
     const db = { collection: () => ({
       insertOne: async (doc: any) => {
@@ -63,17 +99,39 @@ describe('persisted coupon HTTP quote', () => {
       { id: 'p3', vendorId: 'b', categoryId: 'root', name: 'Other store', price: 5, quantity: 10 },
     ];
     const vendors = [{ id: 'a', personId: 'seller-a', storeName: 'A', commissionPct: 10 }, { id: 'b', personId: 'seller-b', storeName: 'B', commissionPct: 10 }];
-    const productRepo = { findById: vi.fn(async (id: string) => products.find(p => p.id === id)), decrementStock: vi.fn(), incrementStock: vi.fn() };
+    const productRepo = { findById: vi.fn(async (id: string) => products.find(p => p.id === id)), decrementStock: vi.fn().mockResolvedValue(true), incrementStock: vi.fn() };
     const vendorRepo = { findById: async (id: string) => vendors.find(v => v.id === id), findByPersonId: async (id: string) => vendors.find(v => v.personId === id) };
     const categoryRepo = { findAll: async () => [{ id: 'root', parentId: null }, { id: 'child', parentId: 'root' }, { id: 'excluded', parentId: 'root' }] };
     const cartRepo = { findById: async () => ({ isEmpty: false, items: products.map(p => ({ productId: p.id, vendorId: p.vendorId, quantity: 1, unitPrice: 999 })) }), save: vi.fn(), update: vi.fn(), delete: vi.fn() };
-    const personRepo = { findById: async () => ({ addresses: [] }) };
+    const personRepo = { 
+      findById: async () => ({ 
+        addresses: [{ id: 'address', street: 'Street', number: '1', neighborhood: '', city: 'City', state: 'SP', isPrimary: false }],
+        primaryEmail: 'buyer@test.com',
+        stripeCustomerId: null,
+        setStripeCustomerId: vi.fn(),
+        save: vi.fn(), 
+        update: vi.fn() 
+      }), 
+      update: vi.fn() 
+    };
+    const orderRepo = {
+      findByPersonId: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      save: vi.fn(),
+      update: vi.fn(),
+    };
+    const paymentRepo = {
+      findByOrderId: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      save: vi.fn(),
+      update: vi.fn(),
+    };
     const finance = { save: vi.fn(), update: vi.fn(), delete: vi.fn(), createSession: vi.fn() };
     const app = express(); app.use(express.json());
     const make = () => new CouponService(new MongoCouponRepository(db as any), vendorRepo as any, productRepo as any, categoryRepo as any, () => new Date('2026-11-08T12:00:00Z'));
     app.use('/coupons', createCouponRoutes({ authService: {} as any, couponService: make() }));
     const coupons = make();
-    const checkout = new CheckoutService(finance as any, finance as any, cartRepo as any, productRepo as any, vendorRepo as any, personRepo as any, {} as any, {} as any, finance as any, categoryRepo as any, undefined, coupons);
+    const checkout = new CheckoutService(orderRepo as any, paymentRepo as any, cartRepo as any, productRepo as any, vendorRepo as any, personRepo as any, {} as any, config, finance as any, categoryRepo as any, undefined, coupons, undefined, mockStripeService);
     app.use('/checkout', createCheckoutRoutes({ authService: {} as any, checkoutService: checkout, personRepo: personRepo as any }));
     const terms = { code: ' save ', discountType: 'percentBps', value: 1000, startsAt: '2026-11-01T00:00:00Z', endsAt: '2026-12-01T00:00:00Z', includeProducts: [], excludeProducts: [], includeCategories: ['root'], excludeCategories: ['excluded'] };
     const created = await request(app).post('/coupons').set('x-test-person', 'seller-a').send(terms);
@@ -87,7 +145,13 @@ describe('persisted coupon HTTP quote', () => {
     const group = response.body.preview.vendorGroups.find((g: any) => g.id === 'a');
     expect(group.coupon).toEqual(created.body.coupon);
     expect(group.items.map((i: any) => [i.productId, i.grossMinor, i.discountMinor, i.netMinor])).toEqual([['p1', 1001, 100, 901], ['p2', 999, 0, 999]]);
-    expect((await request(app).post('/checkout').set('x-test-person', 'buyer').send({ shippingAddressId: 'address', couponSelections: [{ vendorId: 'a', code: 'SAVE' }] })).status).toBe(503);
-    expect(spy).not.toHaveBeenCalled();
+    const orderSaveSpy = vi.spyOn(orderRepo, 'save');
+    const paymentSaveSpy = vi.spyOn(paymentRepo, 'save');
+    const checkoutResponse = await request(app).post('/checkout').set('x-test-person', 'buyer').send({ shippingAddressId: 'address', couponSelections: [{ vendorId: 'a', code: 'SAVE' }] });
+    expect(checkoutResponse.status).toBe(201);
+    expect(checkoutResponse.body.order).toBeDefined();
+    expect(checkoutResponse.body.checkoutUrl).toBeDefined();
+    expect(orderSaveSpy).toHaveBeenCalled();
+    expect(paymentSaveSpy).toHaveBeenCalled();
   });
 });

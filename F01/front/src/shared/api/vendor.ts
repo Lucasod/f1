@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, ApiError } from './client';
 
 export interface Vendor {
   id: string;
@@ -36,34 +36,35 @@ export class VendorApiException extends Error {
   }
 }
 
+function toVendorApiException(error: unknown): VendorApiException {
+  if (error instanceof ApiError) {
+    return new VendorApiException(error.message, error.status, error.code);
+  }
+  if (error instanceof VendorApiException) {
+    return error;
+  }
+  return new VendorApiException(
+    error instanceof Error ? error.message : 'Unknown error',
+    0
+  );
+}
+
 export const vendorApi = {
   async getMe(): Promise<{ vendor: Vendor }> {
-    const response = await apiClient.get('/api/v1/vendor/me');
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new VendorApiException(
-        errorData.message || `API error: ${response.status}`,
-        response.status,
-        errorData.error
-      );
+    try {
+      const response = await apiClient.get('/api/v1/vendor/me');
+      return response.json();
+    } catch (error) {
+      throw toVendorApiException(error);
     }
-    
-    return response.json();
   },
 
   async onboard(input: VendorOnboardInput): Promise<{ vendor: Vendor }> {
-    const response = await apiClient.post('/api/v1/vendor/onboard', input);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new VendorApiException(
-        errorData.message || `API error: ${response.status}`,
-        response.status,
-        errorData.error
-      );
+    try {
+      const response = await apiClient.post('/api/v1/vendor/onboard', input);
+      return response.json();
+    } catch (error) {
+      throw toVendorApiException(error);
     }
-    
-    return response.json();
   },
 };

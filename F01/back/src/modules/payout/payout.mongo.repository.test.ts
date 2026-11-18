@@ -52,6 +52,9 @@ describeIfMongo('MongoPayoutRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
+    // Clear collection for test isolation
+    await payoutsCollection.deleteMany({});
+    
     repo = new MongoPayoutRepository(db);
   });
 

@@ -116,6 +116,14 @@ export class Vendor {
     this.updatedAt = new Date();
   }
 
+  setStripeAccountId(accountId: string): void {
+    if (!accountId || accountId.trim().length === 0) {
+      throw new Error('STRIPE_ACCOUNT_ID_REQUIRED');
+    }
+    (this as any).stripeAccountId = accountId.trim();
+    this.updatedAt = new Date();
+  }
+
   static reconstruct(data: VendorData): Vendor {
     return new Vendor(data);
   }

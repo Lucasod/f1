@@ -199,7 +199,9 @@ describe('Seed Integration', () => {
       const persons = Array.from((personRepo as any).persons.values());
       expect(persons).toHaveLength(5);
       expect(persons.filter((person: any) => person.roles.includes('ADMIN'))).toHaveLength(1);
-      expect(persons.filter((person: any) => person.roles.includes('CONSUMER'))).toHaveLength(1);
+      // Vendors now have both CONSUMER and VENDOR roles (dual-role)
+      expect(persons.filter((person: any) => person.roles.includes('CONSUMER'))).toHaveLength(4);
+      expect(persons.filter((person: any) => person.roles.includes('VENDOR'))).toHaveLength(3);
     });
 
     it('recreates persistent demo accounts when products already exist', async () => {

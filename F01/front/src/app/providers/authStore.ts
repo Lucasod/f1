@@ -67,9 +67,11 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
+        let apiSucceeded = false;
         try {
           const response = await authApi.login({ email, password });
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
+          apiSucceeded = true;
           const { person, tokens } = response;
           
           const user = {
@@ -80,10 +82,13 @@ export const useAuthStore = create<AuthState>()(
           };
           
           ++sessionEpoch;
-          queryClient.clear();
+          // Write to localStorage FIRST (fail-closed: if this throws, state isn't updated)
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
           localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+          // Then clear queryClient
+          queryClient.clear();
+          // Then update state
           set({
             user,
             accessToken: tokens.accessToken,
@@ -99,7 +104,19 @@ export const useAuthStore = create<AuthState>()(
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         } catch (error) {
           const message = error instanceof Error ? error.message : 'LOGIN_FAILED';
-          if (epoch === authEpoch) set({ isLoading: false, error: message });
+          if (epoch === authEpoch) {
+            if (apiSucceeded) {
+              // localStorage or later step failed - fail closed: clear everything
+              localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+              localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+              localStorage.removeItem(STORAGE_KEYS.USER);
+              // queryClient.clear() handled by subscription on isAuthenticated transition
+              set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: message });
+            } else {
+              // API failed - preserve existing session
+              set({ isLoading: false, error: message });
+            }
+          }
           throw error;
         }
       },
@@ -107,9 +124,11 @@ export const useAuthStore = create<AuthState>()(
       register: async (input) => {
         const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
+        let apiSucceeded = false;
         try {
           const response = await authApi.register(input);
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
+          apiSucceeded = true;
           const { person, tokens } = response;
           
           const user = {
@@ -120,10 +139,13 @@ export const useAuthStore = create<AuthState>()(
           };
           
           ++sessionEpoch;
-          queryClient.clear();
+          // Write to localStorage FIRST (fail-closed: if this throws, state isn't updated)
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
           localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+          // Then clear queryClient
+          queryClient.clear();
+          // Then update state
           set({
             user,
             accessToken: tokens.accessToken,
@@ -139,7 +161,19 @@ export const useAuthStore = create<AuthState>()(
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
         } catch (error) {
           const message = error instanceof Error ? error.message : 'REGISTRATION_FAILED';
-          if (epoch === authEpoch) set({ isLoading: false, error: message });
+          if (epoch === authEpoch) {
+            if (apiSucceeded) {
+              // localStorage or later step failed - fail closed: clear everything
+              localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+              localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+              localStorage.removeItem(STORAGE_KEYS.USER);
+              // queryClient.clear() handled by subscription on isAuthenticated transition
+              set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: message });
+            } else {
+              // API failed - preserve existing session
+              set({ isLoading: false, error: message });
+            }
+          }
           throw error;
         }
       },
@@ -154,8 +188,7 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem(STORAGE_KEYS.USER);
 
         // Clear sensitive React Query cached data to prevent cross-account leakage
-        queryClient.clear();
-
+        // (handled by subscription on isAuthenticated transition)
         set({
           user: null,
           accessToken: null,
@@ -300,3 +333,13 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Subscribe to auth state changes to clear queryClient on logout/cross-tab invalidation
+let wasAuthenticated = false;
+useAuthStore.subscribe((state) => {
+  const isAuthenticated = state.isAuthenticated;
+  if (wasAuthenticated && !isAuthenticated) {
+    queryClient.clear();
+  }
+  wasAuthenticated = isAuthenticated;
+});

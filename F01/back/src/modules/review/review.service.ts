@@ -196,14 +196,22 @@ export class ReviewService {
 
     const imageName = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}.${extension}`;
     const imageKey = `reviews/${review.productId}/${review.id}/${imageName}`;
-    const { url } = await this.storageAdapter.save(buffer, imageKey, contentType);
-    review.addImage(url);
+    await this.storageAdapter.save(buffer, imageKey, contentType);
+    review.addImage(imageKey);
     // A failed update may have committed; deleting could break a persisted reference.
-    return this.reviewRepo.update(review, { consumerId, status: ReviewStatus.PUBLISHED });
+    const updatedReview = await this.reviewRepo.update(review, { consumerId, status: ReviewStatus.PUBLISHED });
+    return updatedReview;
+  }
+
+  toReviewWithUrls(review: Review): Review {
+    return {
+      ...review,
+      images: review.images.map(key => this.storageAdapter.getUrl(key)),
+    } as Review;
   }
 
   async getReviewImageUrls(): Promise<string[]> {
     const reviews = await this.reviewRepo.findAll();
-    return reviews.flatMap(review => review.images);
+    return reviews.flatMap(review => review.images.map(key => this.storageAdapter.getUrl(key)));
   }
 }

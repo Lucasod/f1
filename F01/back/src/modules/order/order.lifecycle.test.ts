@@ -304,12 +304,12 @@ describe('Order lifecycle transitions and ownership', () => {
     const forbidden = await request(app)
       .get(`/api/v1/orders/${otherOrderId}`)
       .set('Authorization', `Bearer ${vendorToken}`)
-      .expect(403);
+      .expect(404);
     expect(forbidden.body.order).toBeUndefined();
     await request(app)
       .get('/api/v1/orders/nonexistent-order')
       .set('Authorization', `Bearer ${vendorToken}`)
-      .expect(403);
+      .expect(404);
 
     await request(app)
       .get(`/api/v1/orders/${orderId}`)

@@ -108,7 +108,6 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
 
       let order: Order | null = null;
       let responseVendorId: string | undefined;
-      let attemptedVendorAccess = false;
       const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
       const isConsumer = req.user.roles.includes(PersonRole.CONSUMER);
       const isVendor = req.user.roles.includes(PersonRole.VENDOR);
@@ -126,7 +125,6 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
             return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
           }
           if (vendor) {
-            attemptedVendorAccess = true;
             order = await orderService.getOrderById(orderId, personId, 'vendor', vendor.id);
             if (order) responseVendorId = vendor.id;
           }
@@ -134,7 +132,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       }
 
       if (!order) {
-        if (attemptedVendorAccess) return res.status(403).json({ error: OrderError.FORBIDDEN, message: 'Access denied' });
+        // Always return 404 to prevent order enumeration
         return res.status(404).json({ error: OrderError.ORDER_NOT_FOUND, message: 'Order not found' });
       }
 

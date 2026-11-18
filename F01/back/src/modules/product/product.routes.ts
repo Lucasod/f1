@@ -559,7 +559,7 @@ export function createProductRoutes({ authService, productService, personRepo, v
       }
 
       // Add images to product (maintain order: main first, then gallery)
-      const allImages = [...newImageUrls, ...product.images];
+      const allImages = [...uploadedImages.map(img => img.key), ...product.images];
       // A failed persistence call can have committed; deleting here could destroy referenced images.
       await productService.updateProduct(productId, vendorId, { images: allImages }, isAdmin);
 
@@ -617,9 +617,8 @@ export function createProductRoutes({ authService, productService, personRepo, v
         return res.status(403).json({ error: ProductError.PRODUCT_OWNERSHIP_VIOLATION, message: 'Access denied. You can only manage your own products.' });
       }
 
-      // Check if image exists in product
-      const imageUrl = storageAdapter.getUrl(imageKey);
-      if (!product.images.includes(imageUrl)) {
+      // Check if image exists in product (product.images now stores keys)
+      if (!product.images.includes(imageKey)) {
         return res.status(404).json({ error: 'IMAGE_NOT_FOUND', message: 'Image not found for this product' });
       }
 

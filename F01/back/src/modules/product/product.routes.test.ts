@@ -1840,7 +1840,7 @@ describe('Product Routes', () => {
         .attach('image', image, 'admin.jpg');
       expect(uploaded.status).toBe(201);
       expect(uploaded.body.image.key).toMatch(new RegExp(`^products/${vendorId}/${testProductId}/`));
-      expect((await productRepo.findById(testProductId))?.images).toContain(uploaded.body.image.url);
+      expect((await productRepo.findById(testProductId))?.images).toContain(uploaded.body.image.key);
       expect((await request(app).get(uploaded.body.image.url)).status).toBe(200);
       expect((await request(app).get(`/api/v1/uploads/${uploaded.body.image.key.replace(`products/${vendorId}/`, `products/${vendor2Id}/`)}`)).status).toBe(404);
 
@@ -1912,7 +1912,7 @@ describe('Product Routes', () => {
       expect(productResponse.body.product.images).toBeDefined();
       expect(Array.isArray(productResponse.body.product.images)).toBe(true);
       expect(productResponse.body.product.images.length).toBe(1);
-      expect(productResponse.body.product.images[0]).toBe(uploadResponse.body.image.url);
+      expect(productResponse.body.product.images[0]).toBe(uploadResponse.body.image.key);
     });
 
     it('should save image file to storage', async () => {
@@ -2130,7 +2130,7 @@ describe('Product Routes', () => {
       // Verify image exists before deletion
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toContain(imageUrl);
+      expect(productResponse.body.product.images).toContain(imageKey);
 
       // The request must fail explicitly without changing references.
       await request(app)
@@ -2140,7 +2140,7 @@ describe('Product Routes', () => {
       // Verify the reference is intact.
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toEqual([imageUrl]);
+      expect(productResponse.body.product.images).toEqual([imageKey]);
     });
 
     it('preserves the image file after a rejected deletion', async () => {
@@ -2366,8 +2366,8 @@ describe('Product Routes', () => {
       expect(productResponse.body.product.images).toBeDefined();
       expect(productResponse.body.product.images.length).toBe(2);
       // First image (main) should be first in array
-      expect(productResponse.body.product.images[0]).toBe(uploadResponse.body.images[0].url);
-      expect(productResponse.body.product.images[1]).toBe(uploadResponse.body.images[1].url);
+      expect(productResponse.body.product.images[0]).toBe(uploadResponse.body.images[0].key);
+      expect(productResponse.body.product.images[1]).toBe(uploadResponse.body.images[1].key);
     });
 
     it('should support up to 10 gallery images (11 total including main)', async () => {
@@ -2487,7 +2487,7 @@ describe('Product Routes', () => {
     it('preserves all product references after rejected gallery deletion', async () => {
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toContain(galleryImageUrl);
+      expect(productResponse.body.product.images).toContain(galleryImageKey);
       expect(productResponse.body.product.images.length).toBe(2);
 
       await request(app)
@@ -2496,7 +2496,7 @@ describe('Product Routes', () => {
 
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toEqual([mainImageUrl, galleryImageUrl]);
+      expect(productResponse.body.product.images).toEqual([mainImageKey, galleryImageKey]);
     });
 
     it('preserves the gallery file after rejected deletion', async () => {
@@ -2524,7 +2524,7 @@ describe('Product Routes', () => {
     it('preserves all product references after rejected main image deletion', async () => {
       let productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toContain(mainImageUrl);
+      expect(productResponse.body.product.images).toContain(mainImageKey);
 
       await request(app)
         .delete(`/api/v1/products/${testProductId}/images/${mainImageKey}`)
@@ -2532,7 +2532,7 @@ describe('Product Routes', () => {
 
       productResponse = await request(app)
         .get(`/api/v1/products/${testProductId}`);
-      expect(productResponse.body.product.images).toEqual([mainImageUrl, galleryImageUrl]);
+      expect(productResponse.body.product.images).toEqual([mainImageKey, galleryImageKey]);
     });
   });
 });

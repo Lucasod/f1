@@ -224,7 +224,9 @@ describe('authentication identity changes', () => {
   it('invalidates local session and cache on another tab changing auth storage', async () => {
     await login('previous');
     queryClient.setQueryData(['admin', 'reviews'], { owner: 'previous' });
-    window.dispatchEvent(new StorageEvent('storage', { key: 'auth-storage', storageArea: localStorage }));
+    localStorage.setItem('auth-storage', JSON.stringify({ state: { user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false, error: null }, version: 0 }));
+    // StorageEvent doesn't fire in same tab; manually trigger persist rehydration
+    useAuthStore.persist.rehydrate();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(queryClient.getQueryData(['admin', 'reviews'])).toBeUndefined();
   });

@@ -237,7 +237,7 @@ describe('OrderHistoryPage', () => {
     renderWithNav(<OrderHistoryPage />);
 
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText(/carregando pedidos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading orders/i)).toBeInTheDocument();
   });
 
   it('shows error state when fetch fails with retry button', async () => {
@@ -245,8 +245,8 @@ describe('OrderHistoryPage', () => {
 
     renderWithNav(<OrderHistoryPage />);
 
-    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedidos/i)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Error loading order history/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeInTheDocument();
   });
 
   it('shows empty state when no orders', async () => {
@@ -282,7 +282,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.getByText(/Try adjusting the status filter to see more orders./i)).toBeInTheDocument());
 
     expect(screen.getByText(/No orders found/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument();
   });
 
   it('displays orders list when data loads', async () => {
@@ -291,7 +291,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check header with total count
-    expect(screen.getByText(/meus pedidos/i)).toBeInTheDocument();
+    expect(screen.getByText(/My Purchases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 orders founds/i)).toBeInTheDocument();
 
     // Check order cards are displayed - use ORDER-1 which is unique
@@ -299,15 +299,15 @@ describe('OrderHistoryPage', () => {
     expect(screen.getByText(/ORDER-2/i)).toBeInTheDocument();
     expect(screen.getByText(/ORDER-3/i)).toBeInTheDocument();
 
-    // Check dates are formatted
-    expect(screen.getByText(/15\/01\/2024/i)).toBeInTheDocument();
-    expect(screen.getByText(/20\/01\/2024/i)).toBeInTheDocument();
-    expect(screen.getByText(/10\/01\/2024/i)).toBeInTheDocument();
+    // Check dates are formatted (MM/DD/YYYY)
+    expect(screen.getByText(/01\/15\/2024/i)).toBeInTheDocument();
+    expect(screen.getByText(/01\/20\/2024/i)).toBeInTheDocument();
+    expect(screen.getByText(/01\/10\/2024/i)).toBeInTheDocument();
 
     // Check totals
-    expect(screen.getByText(/R\$ 59,98/i)).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 94,99/i)).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 99,99/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$59.98/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$94.99/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$99.99/i)).toBeInTheDocument();
 
     // Check vendor groups count - rendered as two separate <p> elements
     // Order 1 has 1 vendor group, Order 3 has 1 vendor group, Order 2 has 2 vendor groups
@@ -315,12 +315,12 @@ describe('OrderHistoryPage', () => {
     const vendorCountOnes = screen.getAllByText('1', { selector: 'p.text-sm.font-medium.text-gray-900' });
     expect(vendorCountOnes).toHaveLength(2);
     expect(screen.getByText('2', { selector: 'p.text-sm.font-medium.text-gray-900' })).toBeInTheDocument();
-    const vendorLabels = screen.getAllByText(/vendedor$/i);
+    const vendorLabels = screen.getAllByText(/seller$/i);
     expect(vendorLabels).toHaveLength(2);
-    expect(screen.getByText(/vendedores$/i)).toBeInTheDocument();
+    expect(screen.getByText(/sellers$/i)).toBeInTheDocument();
 
     // Check View Details buttons
-    expect(screen.getAllByRole('button', { name: 'Ver detalhes' })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: 'View details' })).toHaveLength(3);
   });
 
   it('filters by status - Select change triggers refetch with page=1', async () => {
@@ -353,7 +353,7 @@ describe('OrderHistoryPage', () => {
     expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
 
     // Previous button should be disabled on page 1
-    expect(screen.getByRole('button', { name: /anterior/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Previous/i })).toBeDisabled();
 
     // Mock page 2 response
     vi.mocked(orderApi.list).mockResolvedValueOnce(mockPaginatedOrdersResponsePage2);
@@ -370,14 +370,14 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.getByText(/Page 2 of 3/i)).toBeInTheDocument());
 
     // Previous button should be enabled now
-    expect(screen.getByRole('button', { name: /anterior/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Previous/i })).not.toBeDisabled();
 
     // Mock page 1 response again for going back
     vi.mocked(orderApi.list).mockResolvedValueOnce(mockPaginatedOrdersResponsePage1);
 
     // Click Previous
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /anterior/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Previous/i }));
     });
 
     // Should call API with page 1
@@ -394,7 +394,7 @@ describe('OrderHistoryPage', () => {
 
     // The order card is a div with role="button" and tabindex="0"
     // It has accessible name containing the order info
-    const orderCard = screen.getByRole('button', { name: /Pedido ORDER-1/i });
+    const orderCard = screen.getByRole('button', { name: /Order ORDER-1/i });
     fireEvent.click(orderCard);
 
     // Should call navigate with /orders/order-1
@@ -413,17 +413,17 @@ describe('OrderHistoryPage', () => {
 
     // Find badges within order cards (not the select options)
     // Delivered order badge
-    const order1Card = screen.getByRole('button', { name: /Pedido ORDER-1/i });
+    const order1Card = screen.getByRole('button', { name: /Order ORDER-1/i });
     const deliveredBadge = order1Card.querySelector('span[class*="bg-green-100"]');
     expect(deliveredBadge).toBeInTheDocument();
 
     // Processing order badge
-    const order2Card = screen.getByRole('button', { name: /Pedido ORDER-2/i });
+    const order2Card = screen.getByRole('button', { name: /Order ORDER-2/i });
     const processingBadge = order2Card.querySelector('span[class*="bg-cyan-100"]');
     expect(processingBadge).toBeInTheDocument();
 
     // Cancelled order badge
-    const order3Card = screen.getByRole('button', { name: /Pedido ORDER-3/i });
+    const order3Card = screen.getByRole('button', { name: /Order ORDER-3/i });
     const cancelledBadge = order3Card.querySelector('span[class*="bg-red-100"]');
     expect(cancelledBadge).toBeInTheDocument();
   });
@@ -444,9 +444,9 @@ describe('OrderHistoryPage', () => {
 
     // Find badges within order cards (not the select options)
     // The badge is the span with the status text inside the status column
-    const order1Card = screen.getByRole('button', { name: /Pedido ORDER-1/i });
-    const order2Card = screen.getByRole('button', { name: /Pedido ORDER-2/i });
-    const order3Card = screen.getByRole('button', { name: /Pedido ORDER-3/i });
+    const order1Card = screen.getByRole('button', { name: /Order ORDER-1/i });
+    const order2Card = screen.getByRole('button', { name: /Order ORDER-2/i });
+    const order3Card = screen.getByRole('button', { name: /Order ORDER-3/i });
 
     // Check badge texts within each order card - find the badge span specifically
     const badge1 = order1Card.querySelector('span[class*="bg-green-100"]');
@@ -479,10 +479,10 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(orderApi.list).toHaveBeenCalledWith(expect.objectContaining({ status: 'delivered', page: 1 })));
 
     // Wait for the empty state to render with clear filter button
-    await waitFor(() => expect(screen.getByRole('button', { name: /limpar filtro/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument());
 
     // Clear filter
-    const clearButton = screen.getByRole('button', { name: /limpar filtro/i });
+    const clearButton = screen.getByRole('button', { name: /Clear filter/i });
     await act(async () => {
       fireEvent.click(clearButton);
     });
@@ -498,7 +498,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const startShoppingButton = screen.getByRole('button', { name: /start shopping/i });
+    const startShoppingButton = screen.getByRole('button', { name: /Start shopping/i });
     fireEvent.click(startShoppingButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/products');
@@ -513,12 +513,12 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Should show "2 vendedores" for order-2
-    // The text "2 vendedores" is split across two <p> elements: "2" and "vendedores"
+    // Should show "2 sellers" for order-2
+    // The text "2 sellers" is split across two <p> elements: "2" and "sellers"
     // So we check for the text in the order card
-    const order2Card = screen.getByRole('button', { name: /Pedido ORDER-2/i });
+    const order2Card = screen.getByRole('button', { name: /Order ORDER-2/i });
     expect(order2Card).toHaveTextContent('2');
-    expect(order2Card).toHaveTextContent('vendedores');
+    expect(order2Card).toHaveTextContent('sellers');
   });
 
   it('View Details button stops propagation and navigates', async () => {
@@ -527,7 +527,7 @@ describe('OrderHistoryPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Click View Details button directly (should not trigger card click handler twice)
-    const viewDetailsButton = screen.getAllByRole('button', { name: /ver detalhes/i })[0];
+    const viewDetailsButton = screen.getAllByRole('button', { name: /View details/i })[0];
     fireEvent.click(viewDetailsButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
@@ -538,7 +538,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const orderCard = screen.getByRole('button', { name: /Pedido ORDER-1/i });
+    const orderCard = screen.getByRole('button', { name: /Order ORDER-1/i });
     fireEvent.keyDown(orderCard, { key: 'Enter' });
     expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
   });
@@ -548,7 +548,7 @@ describe('OrderHistoryPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const orderCard = screen.getByRole('button', { name: /Pedido ORDER-1/i });
+    const orderCard = screen.getByRole('button', { name: /Order ORDER-1/i });
     fireEvent.keyDown(orderCard, { key: ' ' });
     expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
   });

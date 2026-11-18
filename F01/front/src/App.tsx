@@ -51,10 +51,10 @@ function App() {
             </Route>
             
             {/* Vendor only routes */}
-            <Route element={<ProtectedRoute allowedRoles={['CONSUMER', 'VENDOR']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['CONSUMER']} />}>
               <Route path="/vendor/onboard" element={<OnboardingForm />} />
             </Route>
-            <Route element={<ProtectedRoute allowedRoles={['VENDOR', 'ADMIN']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
               <Route path="/vendor/dashboard" element={<VendorDashboard />} />
               <Route path="/vendor/products" element={<ProductForm />} />
               <Route path="/vendor/products/new" element={<ProductForm />} />

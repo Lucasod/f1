@@ -52,6 +52,9 @@ describeIfMongo('MongoProductRepository Contract Tests', () => {
   });
 
   beforeEach(async () => {
+    // Clear collection for test isolation
+    await productsCollection.deleteMany({});
+
     repo = new MongoProductRepository(db);
   });
 
@@ -163,13 +166,11 @@ describeIfMongo('MongoProductRepository Contract Tests', () => {
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(product.updatedAt.getTime());
     });
 
-    it('should delete product', async () => {
+    it('should throw when attempting physical delete', async () => {
       const product = Product.create({ vendorId: 'vendor-1', categoryId: 'cat-1', name: 'To Delete', description: 'Desc', price: 10, quantity: 5 });
       await repo.save(product);
-      await repo.delete(product.id);
 
-      const found = await repo.findById(product.id);
-      expect(found).toBeNull();
+      await expect(repo.delete(product.id)).rejects.toThrow('PRODUCT_SEARCH_PHYSICAL_DELETE_UNAVAILABLE');
     });
 
     it('should persist all Product fields completely', async () => {

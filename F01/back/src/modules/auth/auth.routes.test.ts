@@ -48,7 +48,7 @@ describe('Auth Routes', () => {
       expect(response.body.tokens.refreshToken).toBeDefined();
     });
 
-    it('should register with VENDOR role defaulting to CONSUMER and return 201', async () => {
+    it('should register with VENDOR role granting both CONSUMER and VENDOR roles and return 201', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -62,7 +62,7 @@ describe('Auth Routes', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.person.roles).toContain(PersonRole.CONSUMER);
-      expect(response.body.person.roles).not.toContain(PersonRole.VENDOR);
+      expect(response.body.person.roles).toContain(PersonRole.VENDOR);
     });
 
     it('should reject ADMIN role registration with 403', async () => {

@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { orderApi, Order, OrderVendorGroup, OrderItem, OrderStatus, Address } from '@/shared/api/order';
 import { vendorApi } from '@/shared/api/vendor';
+import { cartApi } from '@/shared/api/cart';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
 import React from 'react';
@@ -53,6 +54,12 @@ vi.mock('@/shared/api/order', () => ({
 vi.mock('@/shared/api/vendor', () => ({
   vendorApi: {
     getMe: vi.fn(),
+  },
+}));
+
+vi.mock('@/shared/api/cart', () => ({
+  cartApi: {
+    addItem: vi.fn().mockResolvedValue({ success: true }),
   },
 }));
 
@@ -206,7 +213,7 @@ describe('OrderDetailPage', () => {
     renderWithNav(<OrderDetailPage />);
 
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText(/carregando detalhes do pedido/i)).toBeInTheDocument();
+    expect(screen.getByText(/loading order details/i)).toBeInTheDocument();
     
     // Resolve the promise to clean up
     resolvePromise!({ order: mockOrder });
@@ -219,8 +226,8 @@ describe('OrderDetailPage', () => {
     vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...vendorOrder, vendorGroups: [mockVendorGroup1], totalAmount: mockVendorGroup1.subtotal } as Order });
     renderWithNav(<OrderDetailPage />);
     expect(await screen.findByText('Produto Teste 1')).toBeInTheDocument();
-    expect(screen.queryByText('Status do Pedido')).not.toBeInTheDocument();
-    expect(screen.queryByText('Frete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Order Status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shipping')).not.toBeInTheDocument();
   });
 
   it('shows vendor profile error and refetches on retry', async () => {
@@ -289,8 +296,8 @@ describe('OrderDetailPage', () => {
 
     renderWithNav(<OrderDetailPage />);
 
-    await waitFor(() => expect(screen.getByText(/Erro ao carregar pedido/i)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Error loading order/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
   it('shows not found state when order does not exist (404)', async () => {
@@ -301,7 +308,7 @@ describe('OrderDetailPage', () => {
 
     await waitFor(() => expect(screen.getByText(/Order not found/i)).toBeInTheDocument());
     expect(screen.getByText(/The requested order does not exist or has been removed./i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /voltar para meus pedidos/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /back to my orders/i })).toBeInTheDocument();
   });
 
 it('displays order header: ID, status badge, date, financial status', async () => {
@@ -321,7 +328,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(financialStatusBadges.length).toBeGreaterThanOrEqual(1);
 
     // Check date
-    expect(screen.getByText(/data do pedido/i)).toBeInTheDocument();
+    expect(screen.getByText(/order date/i)).toBeInTheDocument();
     expect(screen.getByText(/01\/01\/2024/i)).toBeInTheDocument();
   });
 
@@ -341,17 +348,17 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    // Check vendor group header - "Vendedor: VENDOR-1" is in a single h3 element
-    expect(screen.getByText(/Vendedor: VENDOR-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vendedor: VENDOR-2/i)).toBeInTheDocument();
+    // Check vendor group header - "Seller: VENDOR-1" is in a single h3 element
+    expect(screen.getByText(/Seller: VENDOR-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Seller: VENDOR-2/i)).toBeInTheDocument();
 
     // Check items table headers - use getAllByText since there are two vendor groups
-    const produtoHeaders = screen.getAllByText(/produto/i);
-    expect(produtoHeaders.length).toBeGreaterThanOrEqual(1);
-    const qtdHeaders = screen.getAllByText(/qtd/i);
-    expect(qtdHeaders.length).toBeGreaterThanOrEqual(1);
-    const precoHeaders = screen.getAllByText(/preço unit\./i);
-    expect(precoHeaders.length).toBeGreaterThanOrEqual(1);
+    const productHeaders = screen.getAllByText(/product/i);
+    expect(productHeaders.length).toBeGreaterThanOrEqual(1);
+    const qtyHeaders = screen.getAllByText(/qty/i);
+    expect(qtyHeaders.length).toBeGreaterThanOrEqual(1);
+    const unitPriceHeaders = screen.getAllByText(/unit price/i);
+    expect(unitPriceHeaders.length).toBeGreaterThanOrEqual(1);
     const totalHeaders = screen.getAllByText(/total/i);
     expect(totalHeaders.length).toBeGreaterThanOrEqual(1);
 
@@ -359,14 +366,14 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(screen.getByText(/Produto Teste 1/i)).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('SKU:') && content.includes('PROD-1'))).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument(); // quantity
-    expect(screen.getByText(/R\$ 29,99/i)).toBeInTheDocument(); // unit price
-    const totalPrice1 = screen.getAllByText(/R\$ 59,98/i);
+    expect(screen.getByText(/\$29\.99/i)).toBeInTheDocument(); // unit price
+    const totalPrice1 = screen.getAllByText(/\$59\.98/i);
     expect(totalPrice1.length).toBeGreaterThanOrEqual(1);
 
     expect(screen.getByText(/Produto Teste 2/i)).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('SKU:') && content.includes('PROD-2'))).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument(); // quantity
-    const unitPrice2 = screen.getAllByText(/R\$ 49,99/i);
+    const unitPrice2 = screen.getAllByText(/\$49\.99/i);
     expect(unitPrice2.length).toBeGreaterThanOrEqual(1);
 
     // Check vendor group financial summary
@@ -383,21 +390,21 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/totais do pedido/i)).toBeInTheDocument();
+    expect(screen.getByText(/order totals/i)).toBeInTheDocument();
     
     // Subtotal: 59.98 + 49.99 = 109.97
-    expect(screen.getByText((content) => content.includes('Subtotal') && content.includes('2 vendedores'))).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 109,97/i)).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Subtotal') && content.includes('2 sellers'))).toBeInTheDocument();
+    expect(screen.getByText(/\$109\.97/i)).toBeInTheDocument();
     
     // Shipping: 119.97 - 109.97 = 10.00
-    expect(screen.getByText(/frete/i)).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 10,00/i)).toBeInTheDocument();
+    expect(screen.getByText(/shipping/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$10\.00/i)).toBeInTheDocument();
     
-    // Total - in the order totals card (not table headers)
-    const totalsCard = screen.getByText(/totais do pedido/i).closest('div[class*="rounded-xl"]');
+// Total - in the order totals card (not table headers)
+    const totalsCard = screen.getByText(/order totals/i).closest('div[class*="rounded-xl"]');
     expect(totalsCard).not.toBeNull();
-    expect(totalsCard!.textContent).toMatch(/119,97/);
-    expect(screen.getByText(/R\$ 119,97/i)).toBeInTheDocument();
+    expect(totalsCard!.textContent).toMatch(/119\.97/);
+    expect(screen.getByText(/\$119\.97/i)).toBeInTheDocument();
   });
 
   it('displays timeline tracker with correct step highlighting for paid status', async () => {
@@ -405,14 +412,14 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText(/rastreamento do pedido/i)).toBeInTheDocument();
+    expect(screen.getByText(/order tracking/i)).toBeInTheDocument();
     
     // Check all timeline steps exist - use descriptions which are unique to timeline
-    expect(screen.getByText((content) => content.includes('Aguardando pagamento'))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('Pagamento confirmado'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Awaiting payment'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Payment confirmed'))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('Preparing'))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('Enviado para entrega'))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('Entregue'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Shipped for delivery'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Delivered'))).toBeInTheDocument();
     
     // Also check the step labels exist (they may appear multiple times)
     expect(screen.getAllByText(/PENDING_PAYMENT/i).length).toBeGreaterThanOrEqual(1);
@@ -428,7 +435,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: /comprar novamente/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /buy again/i })).toBeInTheDocument();
   });
 
   it('hides "Comprar Novamente" button for consumer when order is terminal (cancelled)', async () => {
@@ -439,7 +446,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.queryByRole('button', { name: /comprar novamente/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /buy again/i })).not.toBeInTheDocument();
   });
 
   it('shows "Atualizar status" buttons for vendor on their vendor groups', async () => {
@@ -465,7 +472,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     // For vendor-2 group, available statuses from 'pending' would be 'confirmed', 'cancelled'
     // But these should not be visible since vendor-1 doesn't own vendor-2 group
     // We verify by checking the vendor group for vendor-2 doesn't have action buttons
-    const vendor2Group = screen.getByText(/vendedor: VENDOR-2/i).closest('div[class*="rounded-xl"]');
+    const vendor2Group = screen.getByText(/Seller: VENDOR-2/i).closest('div[class*="rounded-xl"]');
     expect(vendor2Group).not.toBeNull();
     expect(vendor2Group!.querySelectorAll('button').length).toBe(0);
   });
@@ -500,19 +507,21 @@ it('displays order header: ID, status badge, date, financial status', async () =
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const backButton = screen.getByRole('button', { name: /voltar/i });
+    const backButton = screen.getByRole('button', { name: /back/i });
     fireEvent.click(backButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/orders');
   });
 
-  it('clicking "Comprar Novamente" navigates to /cart', async () => {
+  it('clicking "Buy Again" navigates to /cart', async () => {
     renderWithNav(<OrderDetailPage />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    const reorderButton = screen.getByRole('button', { name: /comprar novamente/i });
-    fireEvent.click(reorderButton);
+    const reorderButton = screen.getByRole('button', { name: /buy again/i });
+    await act(async () => {
+      fireEvent.click(reorderButton);
+    });
 
     expect(navigateMock).toHaveBeenCalledWith('/cart');
   });
@@ -551,7 +560,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check for cancelled status in timeline terminal section
-    expect(screen.getByText(/pedido cancelado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Order cancelled/i)).toBeInTheDocument();
   });
 
   it('shows terminal status indicator in timeline for failed payment', async () => {
@@ -562,7 +571,7 @@ it('displays order header: ID, status badge, date, financial status', async () =
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check for refunded/failed payment status in timeline terminal section
-    expect(screen.getByText(/com pagamento falhou/i)).toBeInTheDocument();
+    expect(screen.getByText(/payment failed/i)).toBeInTheDocument();
   });
 
 it('shows vendor group status badge with correct variant', async () => {
@@ -571,8 +580,8 @@ it('shows vendor group status badge with correct variant', async () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     // Check vendor group headers exist with their vendor IDs
-    expect(screen.getByText(/Vendedor: VENDOR-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vendedor: VENDOR-2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Seller: VENDOR-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Seller: VENDOR-2/i)).toBeInTheDocument();
     
     // Check that status badges exist for both vendor groups (CONFIRMED and PENDING)
     // These appear in the vendor group cards
@@ -593,7 +602,7 @@ it('shows vendor group status badge with correct variant', async () => {
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-    expect(screen.getByText((content) => content.includes('Subtotal') && content.includes('1 vendedor'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Subtotal') && content.includes('seller'))).toBeInTheDocument();
   });
 
   it('shows retry button in error state and refetches on click', async () => {
@@ -603,9 +612,9 @@ it('shows vendor group status badge with correct variant', async () => {
 
     renderWithNav(<OrderDetailPage />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument());
 
-    const retryButton = screen.getByRole('button', { name: /tentar novamente/i });
+    const retryButton = screen.getByRole('button', { name: /try again/i });
     fireEvent.click(retryButton);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
@@ -618,9 +627,9 @@ it('shows vendor group status badge with correct variant', async () => {
     vi.mocked(orderApi.getById).mockRejectedValueOnce(notFoundError);
     renderWithNav(<OrderDetailPage />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /voltar para meus pedidos/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /back to my orders/i })).toBeInTheDocument());
 
-    const backButton = screen.getByRole('button', { name: /voltar para meus pedidos/i });
+    const backButton = screen.getByRole('button', { name: /back to my orders/i });
     fireEvent.click(backButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/orders');
