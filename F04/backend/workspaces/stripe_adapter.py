@@ -31,7 +31,7 @@ class StripeAdapter:
         """
         # Validate test mode - never call Stripe Live Mode
         api_key = settings.STRIPE_API_KEY
-        if not api_key.startswith("sk_test_"):
+        if not api_key.startswith("sk_test_") and not api_key.startswith("rk_test_"):
             raise StripeAdapterError(
                 "Stripe API key is not in test mode. "
                 "Live mode credentials are not allowed."

@@ -645,24 +645,35 @@ def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
                 from workspaces.stripe_adapter import StripeAdapter, StripeAdapterError
                 from workspaces.models import WorkspaceBilling
 
+                # Reconciliation: check if customer_id already exists
+                try:
+                    billing = WorkspaceBilling.objects.get(
+                        workspace_id=event.aggregate_id
+                    )
+                except WorkspaceBilling.DoesNotExist:
+                    # Billing record doesn't exist yet, skip
+                    continue
+
+                # If customer_id is already set, this event has already been processed
+                # (reconciliation after crash/recovery). Mark as dispatched and skip.
+                if billing.customer_id:
+                    event.dispatched_at = timezone.now()
+                    event.save(update_fields=["dispatched_at"])
+                    dispatched_count += 1
+                    continue
+
+                # Create Stripe Customer
                 try:
                     adapter = StripeAdapter()
                     customer = adapter.create_customer(
                         idempotency_key=f"workspace-{event.aggregate_id}-customer",
                         metadata=event.payload,
                     )
-                    # Update WorkspaceBilling.customer_id
-                    billing = WorkspaceBilling.objects.get(
-                        workspace_id=event.aggregate_id
-                    )
                     billing.customer_id = customer.id
                     billing.save(update_fields=["customer_id", "updated_at"])
                 except StripeAdapterError:
                     # Don't mark as dispatched - will be retried on next cycle
                     # Don't raise - just skip this event, it stays pending
-                    continue
-                except WorkspaceBilling.DoesNotExist:
-                    # Billing record doesn't exist yet, skip
                     continue
 
             # Mark event as dispatched only after fan-out records are durable

@@ -57,7 +57,12 @@ class Command(BaseCommand):
             },
         )
         if not owner.has_usable_password():
-            owner.set_password(os.environ.get("SEED_OWNER_PASSWORD", "dev-owner-password-12345"))
+            if "SEED_OWNER_PASSWORD" not in os.environ:
+                raise CommandError(
+                    "SEED_OWNER_PASSWORD environment variable is required "
+                    "for bootstrap_dev when no owner password exists."
+                )
+            owner.set_password(os.environ["SEED_OWNER_PASSWORD"])
             owner.save()
 
         # Step 3: Create deterministic workspaces (idempotent) and reconcile
