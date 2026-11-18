@@ -2714,17 +2714,16 @@ def workspace_usage(request, workspace_id):
     plan = BillingPlan.objects.filter(plan_id=billing.effective_plan, is_active=True).first()
     membership_count = Membership.objects.filter(workspace=workspace).count()
     project_count = Project.objects.filter(workspace=workspace).count()
-    resources = {}
-    if plan:
-        resources = {
-            "memberships": {"used": membership_count, "limit": plan.max_memberships},
-            "projects": {"used": project_count, "limit": plan.max_projects},
-        }
-    else:
-        resources = {
-            "memberships": {"used": membership_count, "limit": None},
-            "projects": {"used": project_count, "limit": None},
-        }
+    # Fall back to Free plan defaults when no BillingPlan record exists
+    # (e.g. before 0018_seed_billing_plans is applied). Defaults match the
+    # Free plan seeded in 0018_seed_billing_plans:
+    # max_memberships=5, max_projects=2.
+    max_memberships = plan.max_memberships if plan else 5
+    max_projects = plan.max_projects if plan else 2
+    resources = {
+        "memberships": {"used": membership_count, "limit": max_memberships},
+        "projects": {"used": project_count, "limit": max_projects},
+    }
     return Response(
         {
             "error": None,

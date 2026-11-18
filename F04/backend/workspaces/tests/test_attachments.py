@@ -8,6 +8,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from unittest.mock import patch
 from workspaces.models import Workspace, Membership, Project, Board, WorkflowStatus, Issue, Attachment
 
 User = get_user_model()
@@ -217,9 +218,6 @@ class AttachmentTestCase(TestCase):
 
     def test_upload_attachment_storage_failure_and_recovery(self):
         """Upload fails gracefully when storage is unwritable, retry succeeds."""
-        import os as os_module
-        import stat
-
         content = b"test attachment content"
 
         # First upload succeeds and creates the storage directory structure
@@ -230,26 +228,8 @@ class AttachmentTestCase(TestCase):
         )
         self.assertEqual(response1.status_code, 201)
 
-        # Build the storage path that views.py uses:
-        # views.py uses os.path.dirname(os.path.abspath(__file__)) where __file__ is views.py
-        # = backend/workspaces/views.py -> dirname = backend/workspaces -> .. = backend -> private_storage
-        storage_dir = os_module.path.join(
-            os_module.path.dirname(
-                os_module.path.dirname(
-                    os_module.path.dirname(os_module.path.abspath(__file__))
-                )
-            ),
-            "private_storage",
-        )
-        full_storage_path = os_module.path.join(
-            storage_dir, f"workspace_{self.ws.id}/issue_{self.issue.id}"
-        )
-        os_module.makedirs(full_storage_path, exist_ok=True)
-
-        # Make directory read-only to force storage failure
-        os_module.chmod(full_storage_path, stat.S_IRUSR | stat.S_IXUSR)
-
-        try:
+        # Simulate storage write failure
+        with patch("builtins.open", side_effect=OSError()):
             response2 = self.client.post(
                 f"/api/v1/issues/{self.issue.id}/attachments/",
                 {"file": SimpleUploadedFile("test2.png", content, content_type="image/png")},
@@ -262,10 +242,8 @@ class AttachmentTestCase(TestCase):
             att = Attachment.objects.filter(issue=self.issue, uploader=self.user).order_by("-id").first()
             self.assertIsNotNone(att)
             self.assertEqual(att.state, "failed")
-        finally:
-            os_module.chmod(full_storage_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
 
-        # Retry should succeed
+        # Retry should succeed (patch is no longer active)
         response3 = self.client.post(
             f"/api/v1/issues/{self.issue.id}/attachments/",
             {"file": SimpleUploadedFile("test3.png", content, content_type="image/png")},
@@ -336,27 +314,15 @@ class AttachmentTestCase(TestCase):
     def test_upload_attachment_directory_creation_failure(self):
         """Upload fails gracefully when storage directory cannot be created."""
         import os as os_module
-        import shutil
-        import stat
 
         content = b"directory failure test"
 
-        # Make the parent storage directory unwritable so makedirs fails
         storage_dir = os_module.path.join(
             os_module.path.dirname(os_module.path.abspath(__file__)), "..", "..", "private_storage"
         )
 
-        # Remove any existing workspace subdir so makedirs must create it
-        # (makedirs(exist_ok=True) on an existing dir is a no-op and won't fail)
-        ws_storage_dir = os_module.path.join(storage_dir, f"workspace_{self.ws.id}")
-        if os_module.path.exists(ws_storage_dir):
-            shutil.rmtree(ws_storage_dir)
-
-        # Save original permissions and make read-only
-        original_mode = stat.S_IMODE(os_module.stat(storage_dir).st_mode)
-        try:
-            os_module.chmod(storage_dir, stat.S_IRUSR | stat.S_IXUSR)  # read+execute only, no write
-
+        # Simulate directory creation failure (chmod is unreliable as root in Docker)
+        with patch.object(os_module, "makedirs", side_effect=OSError()):
             response = self.client.post(
                 f"/api/v1/issues/{self.issue.id}/attachments/",
                 {"file": SimpleUploadedFile("fail_dir.png", content, content_type="image/png")},
@@ -373,13 +339,10 @@ class AttachmentTestCase(TestCase):
             # Verify no internal paths exposed in error response
             self.assertNotIn("private_storage", str(response.data))
             self.assertNotIn("/home", str(response.data))
-        finally:
-            os_module.chmod(storage_dir, original_mode)
 
     def test_upload_attachment_file_write_failure(self):
         """Upload fails gracefully when file write fails after directory creation."""
         import os as os_module
-        import stat
 
         content = b"file write failure test"
 
@@ -391,22 +354,8 @@ class AttachmentTestCase(TestCase):
         )
         self.assertEqual(response1.status_code, 201)
 
-        # Build the storage path
-        storage_dir = os_module.path.join(
-            os_module.path.dirname(os_module.path.abspath(__file__)), "..", "..", "private_storage"
-        )
-        # object_key is read-only and not included in the serializer response,
-        # so read it from the database
-        att = Attachment.objects.filter(issue=self.issue, uploader=self.user).order_by("-id").first()
-        object_key = att.object_key
-        storage_path = os_module.path.join(storage_dir, object_key)
-        issue_storage_dir = os_module.path.dirname(storage_path)
-
-        # Make the issue-specific directory read-only to force write failure
-        original_mode = stat.S_IMODE(os_module.stat(issue_storage_dir).st_mode)
-        try:
-            os_module.chmod(issue_storage_dir, stat.S_IRUSR | stat.S_IXUSR)
-
+        # Simulate file write failure (chmod is unreliable as root in Docker)
+        with patch("builtins.open", side_effect=OSError()):
             response2 = self.client.post(
                 f"/api/v1/issues/{self.issue.id}/attachments/",
                 {"file": SimpleUploadedFile("fail_write.png", content, content_type="image/png")},
@@ -422,5 +371,3 @@ class AttachmentTestCase(TestCase):
 
             # Verify no internal paths exposed
             self.assertNotIn("private_storage", str(response2.data))
-        finally:
-            os_module.chmod(issue_storage_dir, original_mode)
