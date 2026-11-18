@@ -16,9 +16,14 @@ class StripeAdapter:
     """Thin wrapper over the Stripe Python SDK."""
 
     def __init__(self):
-        if not settings.STRIPE_API_KEY:
+        api_key = settings.STRIPE_API_KEY
+        if not api_key:
             raise StripeAdapterError("Stripe API key is not configured")
-        stripe.api_key = settings.STRIPE_API_KEY
+        if not api_key.startswith("sk_test_") and not api_key.startswith("rk_test_"):
+            raise StripeAdapterError(
+                "Stripe API key is not in test mode. Live mode credentials are not allowed."
+            )
+        stripe.api_key = api_key
         stripe.api_version = settings.STRIPE_API_VERSION
 
     def create_customer(self, idempotency_key, metadata=None):
@@ -45,6 +50,30 @@ class StripeAdapter:
             return customer.id
         except stripe.error.StripeError as exc:
             raise StripeAdapterError(f"Failed to create customer: {exc}") from exc
+
+    def _load_stripe_customer(self, workspace_id, workspace_name, billing_id):
+        """Load existing Stripe Customer or create a new one.
+
+        Uses idempotency_key for deduplication to avoid duplicate customers.
+        Never uses email-based lookup, which could match customers from
+        different tenants.
+        """
+        idempotency_key = f"workspace-{workspace_id}-customer"
+        metadata = {
+            "workspace_id": str(workspace_id),
+            "workspace_name": workspace_name,
+            "billing_id": str(billing_id),
+        }
+
+        try:
+            customer = self.create_customer(
+                idempotency_key=idempotency_key,
+                metadata=metadata,
+            )
+            return customer.id
+        except StripeAdapterError:
+            # Re-raise for the caller to handle
+            raise
 
     def create_checkout_session(
         self,

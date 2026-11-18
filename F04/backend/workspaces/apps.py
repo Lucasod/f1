@@ -9,7 +9,6 @@ class WorkspacesConfig(AppConfig):
 
     def ready(self):
         import sys as _sys
-        _sys.stderr.write("DEBUG apps.py ready() called\n")
         # Django 6.1 compatibility shim for django-multitenant.
         #
         # Two places leak `tenant_id` into Django core methods that do not
@@ -90,6 +89,9 @@ class WorkspacesConfig(AppConfig):
             )
 
         TenantModelMixin._do_update = _patched_tmt_do_update
+
+        # Bootstrap deterministic dev workspaces after Django is fully ready
+        self._bootstrap_seed_workspaces()
 
     def _is_bootstrap_skipped(self):
         """Return True when startup bootstrap must not run.

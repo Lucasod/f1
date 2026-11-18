@@ -19,7 +19,7 @@ User = get_user_model()
 
 # Synthetic test values only — never real credentials
 TEST_WEBHOOK_KEY = "test-webhook-key-12345"
-TEST_STRIPE_KEY = "test-stripe-key-12345"
+TEST_STRIPE_KEY = "sk_test_fake1234567890"
 TEST_PRICE_ID = "price_test_fake123"
 
 

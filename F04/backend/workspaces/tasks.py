@@ -648,10 +648,11 @@ def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
                 # Reconciliation: check if customer_id already exists
                 try:
                     billing = WorkspaceBilling.objects.get(
-                        workspace_id=event.aggregate_id
+                        workspace_id=int(event.aggregate_id)
                     )
-                except WorkspaceBilling.DoesNotExist:
-                    # Billing record doesn't exist yet, skip
+                except (WorkspaceBilling.DoesNotExist, ValueError):
+                    # Billing record doesn't exist yet, or aggregate_id is
+                    # not a valid integer — skip this event safely.
                     continue
 
                 # If customer_id is already set, this event has already been processed
@@ -665,11 +666,11 @@ def dispatch_outbox(self, _workspace_id=None, workspace_id=None):
                 # Create Stripe Customer
                 try:
                     adapter = StripeAdapter()
-                    customer = adapter.create_customer(
+                    customer_id = adapter.create_customer(
                         idempotency_key=f"workspace-{event.aggregate_id}-customer",
                         metadata=event.payload,
                     )
-                    billing.customer_id = customer.id
+                    billing.customer_id = customer_id
                     billing.save(update_fields=["customer_id", "updated_at"])
                 except StripeAdapterError:
                     # Don't mark as dispatched - will be retried on next cycle

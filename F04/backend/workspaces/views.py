@@ -305,12 +305,6 @@ def create_workspace(request):
                 }
             }, status=status.HTTP_409_CONFLICT)
 
-        # Membership quota check BEFORE workspace creation (CR-008)
-        from workspaces.billing_service import check_membership_quota
-        quota_ok, quota_error, quota_status = check_membership_quota_for_user(user)
-        if not quota_ok:
-            return Response(quota_error, status=quota_status)
-
         # Create the workspace
         workspace = Workspace.objects.create(name=name)
 
