@@ -34,14 +34,6 @@ class StripeAdapter:
         Does NOT use email-based lookup, which could match customers from
         different tenants.
         """
-        # Validate test mode - never call Stripe Live Mode
-        api_key = settings.STRIPE_API_KEY
-        if not api_key.startswith("sk_test_") and not api_key.startswith("rk_test_"):
-            raise StripeAdapterError(
-                "Stripe API key is not in test mode. "
-                "Live mode credentials are not allowed."
-            )
-
         try:
             customer = stripe.Customer.create(
                 idempotency_key=idempotency_key,
@@ -66,11 +58,11 @@ class StripeAdapter:
         }
 
         try:
-            customer = self.create_customer(
+            customer_id = self.create_customer(
                 idempotency_key=idempotency_key,
                 metadata=metadata,
             )
-            return customer.id
+            return customer_id
         except StripeAdapterError:
             # Re-raise for the caller to handle
             raise

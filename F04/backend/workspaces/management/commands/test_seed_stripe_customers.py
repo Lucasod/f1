@@ -6,7 +6,7 @@ StripeAdapter. Stripe is never called in these tests.
 
 import os
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.core.management import call_command
@@ -74,9 +74,7 @@ class SeedStripeCustomersCommandTestCase(TestCase):
         """With --sync-stripe and mocked StripeAdapter, creates customers."""
         self._make_billing(self.ws, customer_id=None)
 
-        mock_customer = MagicMock()
-        mock_customer.id = "cus_new_123"
-        mock_create_customer.return_value = mock_customer
+        mock_create_customer.return_value = "cus_new_123"
 
         out = StringIO()
         call_command(
@@ -104,9 +102,7 @@ class SeedStripeCustomersCommandTestCase(TestCase):
         ws_without = Workspace.objects.create(name="Without Customer")
         self._make_billing(ws_without, customer_id=None)
 
-        mock_customer = MagicMock()
-        mock_customer.id = "cus_new_456"
-        mock_create_customer.return_value = mock_customer
+        mock_create_customer.return_value = "cus_new_456"
 
         out = StringIO()
         call_command("seed_stripe_customers", sync_stripe=True, stdout=out)
@@ -143,9 +139,7 @@ class SeedStripeCustomersCommandTestCase(TestCase):
         self._make_billing(ws1, customer_id=None)
         self._make_billing(ws2, customer_id=None)
 
-        mock_customer = MagicMock()
-        mock_customer.id = "cus_filtered"
-        mock_create_customer.return_value = mock_customer
+        mock_create_customer.return_value = "cus_filtered"
 
         out = StringIO()
         call_command(
@@ -251,11 +245,7 @@ class SeedStripeCustomersCreateWorkspacesTestCase(TestCase):
     ):
         """--create-workspaces with --sync-stripe creates Stripe customers
         for the newly created workspaces."""
-        dev_mock = MagicMock()
-        dev_mock.id = "cus_dev_1"
-        prod_mock = MagicMock()
-        prod_mock.id = "cus_prod_1"
-        mock_create_customer.side_effect = [dev_mock, prod_mock]
+        mock_create_customer.side_effect = ["cus_dev_1", "cus_prod_1"]
 
         output = self._run_create_workspaces(sync_stripe=True)
 

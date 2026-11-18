@@ -82,16 +82,22 @@ class WorkspacesConfig(AppConfig):
                 for f, m, v in values
                 if f.name != "tenant_id" and f.attname != "tenant_id"
             ]
-            return _original_tmt_do_update(
+            # Use Model._do_update directly (Django 5.x/6.x signature accepts
+            # returning_fields) rather than TenantModelMixin._do_update which
+            # does not accept this parameter. Call _original_do_update
+            # (the original Model._do_update captured at line 45) without
+            # passing *args/**kwargs to avoid signature mismatch issues
+            # when the method is invoked through the patched TenantModelMixin
+            # entry point.
+            return _original_do_update(
                 self, base_qs, using, pk_val, values, update_fields,
                 forced_update, returning_fields,
-                *args, **kwargs,
             )
 
         TenantModelMixin._do_update = _patched_tmt_do_update
 
-        # Bootstrap deterministic dev workspaces after Django is fully ready
-        self._bootstrap_seed_workspaces()
+        # Bootstrap is handled by the bootstrap_dev management command,
+        # not by AppConfig.ready(). See bootstrap_dev command for details.
 
     def _is_bootstrap_skipped(self):
         """Return True when startup bootstrap must not run.
@@ -172,7 +178,7 @@ class WorkspacesConfig(AppConfig):
 
                     try:
                         adapter = StripeAdapter()
-                        customer = adapter.create_customer(
+                        customer_id = adapter.create_customer(
                             idempotency_key=(
                                 f"workspace-{workspace.id}-bootstrap-customer"
                             ),
@@ -184,7 +190,7 @@ class WorkspacesConfig(AppConfig):
                                 ),
                             },
                         )
-                        billing.customer_id = customer.id
+                        billing.customer_id = customer_id
                         billing.save(update_fields=["customer_id", "updated_at"])
                     except Exception:
                         # Stripe unavailable; customer reconciled later by

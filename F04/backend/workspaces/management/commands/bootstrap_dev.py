@@ -84,7 +84,7 @@ class Command(BaseCommand):
                 if stripe_configured and not options["no_sync_stripe"]:
                     try:
                         adapter = StripeAdapter()
-                        customer = adapter.create_customer(
+                        customer_id = adapter.create_customer(
                             idempotency_key=f"workspace-{workspace.id}-bootstrap-customer",
                             metadata={
                                 "workspace_id": str(workspace.id),
@@ -93,7 +93,7 @@ class Command(BaseCommand):
                             },
                         )
                         billing = WorkspaceBilling.objects.get(workspace=workspace)
-                        billing.customer_id = customer.id
+                        billing.customer_id = customer_id
                         billing.save(update_fields=["customer_id", "updated_at"])
                     except StripeAdapterError:
                         # Stripe unavailable; customer reconciled later by

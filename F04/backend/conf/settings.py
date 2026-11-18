@@ -105,40 +105,19 @@ REST_FRAMEWORK = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Database
-# Configured via environment variables; falls back to SQLite when no DB_*
-# variables are set, preserving existing local development behaviour.
-# Set DB_ENGINE=django.db.backends.postgresql to run against PostgreSQL.
+# Configured exclusively via environment variables; PostgreSQL is the only
+# supported database engine. Set DB_ENGINE=django.db.backends.postgresql.
 DATABASES = {
     "default": {
-        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.sqlite3"),
-        "NAME": os.getenv("DB_NAME", BASE_DIR / "db.sqlite3"),
-        "USER": os.getenv("DB_USER", ""),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", ""),
-        "PORT": os.getenv("DB_PORT", ""),
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.getenv("POSTGRES_DB", "f04"),
+        "USER": os.getenv("POSTGRES_USER", "f04"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
+        "HOST": os.getenv("POSTGRES_HOST", "localhost"),
+        "PORT": os.getenv("POSTGRES_PORT", "5432"),
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0") or 0),
     }
 }
-
-# SQLite-specific connection options (busy timeout + WAL journal mode).
-# PRAGMA/init_command are not supported by PostgreSQL, so these apply only
-# when the SQLite backend is in use.
-if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
-    DATABASES["default"]["OPTIONS"] = {
-        "timeout": 30,
-        "init_command": "PRAGMA journal_mode=WAL;",
-    }
-
-# Test database configuration. Django requires the TEST key for every backend.
-if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
-    DATABASES["default"]["TEST"] = {
-        "NAME": BASE_DIR / "test_db.sqlite3",
-    }
-else:
-    # Empty NAME makes Django use "test_<DB_NAME>" for the test database.
-    DATABASES["default"]["TEST"] = {
-        "NAME": "",
-    }
 
 # Static files
 STATIC_URL = "static/"

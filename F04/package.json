@@ -7,12 +7,15 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "start": "serve -s build -l 3000",
+    "build": "echo 'Build skipped - serve static from host'"
   },
   "keywords": [],
   "type": "commonjs",
   "dependencies": {
-    "@playwright/test": "^1.65.0"
+    "@playwright/test": "^1.65.0",
+    "serve": "^14.0.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

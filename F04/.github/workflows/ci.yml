@@ -40,11 +40,11 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: conf.settings
           PYTHONPATH: ../../backend:../../backend/workspaces/tests
-          DB_ENGINE: django.db.backends.sqlite3
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          SECRET_TEST_PASS: ${{ secrets.SECRET_TEST_PASS }}
-          WEBHOOK_SIGNING_SECRET: ${{ secrets.WEBHOOK_SIGNING_SECRET }}
-          DEBUG: "True"
+DB_ENGINE: django.db.backends.postgresql
+           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+           SECRET_TEST_PASS: ${{ secrets.SECRET_TEST_PASS }}
+           WEBHOOK_SIGNING_SECRET: ${{ secrets.WEBHOOK_SIGNING_SECRET }}
+           DEBUG: "True"
         run: python3 -m pytest workspaces/tests/ -v --tb=short
 
       - name: Start Django dev server for E2E
@@ -52,9 +52,9 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: conf.settings
           PYTHONPATH: ../../backend:../../backend/workspaces/tests
-          DB_ENGINE: django.db.backends.sqlite3
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          DEBUG: "True"
+DB_ENGINE: django.db.backends.postgresql
+           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+           DEBUG: "True"
         run: |
           python3 manage.py runserver 127.0.0.1:8000 > /tmp/django-server.log 2>&1 &
           DJANGO_PID=$!
@@ -77,6 +77,5 @@ jobs:
         run: npx playwright test
 
 # NOTE (CR-009): Concurrency tests (e.g. test_two_recovery_workers_one_delivery)
-# are skipped on SQLite via @unittest.skipIf(connection.vendor == 'sqlite').
-# CI runs backend tests with DB_ENGINE=django.db.backends.sqlite3, so those
-# concurrency tests are skipped here. They require PostgreSQL to run.
+# require PostgreSQL to run. CI now uses DB_ENGINE=django.db.backends.postgresql,
+# so these tests are executed against the PostgreSQL test database.

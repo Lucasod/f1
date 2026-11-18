@@ -21,3 +21,4 @@ app.conf.beat_schedule = {
         'kwargs': {},
     },
 }
+celery = app

@@ -2754,8 +2754,8 @@ def stripe_webhook(request):
         event = adapter.construct_webhook_event(request.body, sig_header)
     except StripeAdapterError:
         return Response(status=status.HTTP_400_BAD_REQUEST)
-    event_id = event.get("id", "")
-    event_type = event.get("type", "")
+    event_id = event.id
+    event_type = event.type
     # Idempotency: duplicate event
     if not record_stripe_event(event_id, event_type):
         return Response(status=status.HTTP_200_OK)  # already processed

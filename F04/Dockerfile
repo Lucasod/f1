@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies (no requirements.txt present; core deps only)
-RUN pip install --no-cache-dir Django django-multitenant psycopg2-binary playwright
+RUN pip install --no-cache-dir Django django-multitenant psycopg2-binary playwright redis
 
 # Install Chromium browser for Playwright E2E tests
 RUN playwright install chromium --with-deps
