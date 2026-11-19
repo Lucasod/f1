@@ -2443,7 +2443,7 @@ def billing_checkout(request, workspace_id):
             {"error": {"code": "validation_error", "message": "Only 'pro' plan is supported.", "fields": {"plan": ["Invalid plan."]}}},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
+    if not settings.STRIPE_CONFIGURED:
         return Response(
             {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
             status=status.HTTP_400_BAD_REQUEST,
@@ -2529,7 +2529,7 @@ def billing_portal(request, workspace_id):
             {"error": {"code": "permission_denied", "message": "Only workspace owners may access the billing portal."}},
             status=status.HTTP_403_FORBIDDEN,
         )
-    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
+    if not settings.STRIPE_CONFIGURED:
         return Response(
             {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
             status=status.HTTP_400_BAD_REQUEST,
@@ -2740,7 +2740,7 @@ def workspace_usage(request, workspace_id):
 @permission_classes([AllowAny])
 def stripe_webhook(request):
     """POST /api/v1/integrations/stripe/webhook/ — Stripe-signed webhook."""
-    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
+    if not settings.STRIPE_CONFIGURED:
         return Response(status=status.HTTP_503_SERVICE_UNAVAILABLE)
     # Bound request size to 1 MiB
     if len(request.body) > 1024 * 1024:
@@ -2759,7 +2759,8 @@ def stripe_webhook(request):
     # Extract provider_object_id (session ID for checkout.session.completed) and workspace_id from event data
     provider_object_id = ""
     workspace_id = None
-    data_object = event.Data.object if hasattr(event.Data, 'object') else None
+    data_obj = getattr(event, 'data', None) or getattr(event, 'Data', None)
+    data_object = data_obj.object if data_obj and hasattr(data_obj, 'object') else None
     if data_object:
         # For checkout.session.completed, the object is the session; provider_object_id should be the session ID
         # For customer.subscription.*, the object is the subscription; provider_object_id should be the subscription ID
