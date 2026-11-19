@@ -32,6 +32,9 @@ export class StripeCheckoutProvider implements CheckoutPaymentProvider {
       ...(this.paymentMethodConfiguration && {
         payment_method_configuration: this.paymentMethodConfiguration,
       }),
+      ...(!this.paymentMethodConfiguration && {
+        payment_method_types: ['pix'],
+      }),
       line_items: order.vendorGroups.flatMap(group => group.items.map(item => ({
         quantity: item.quantity,
         price_data: {

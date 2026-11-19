@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useCart } from '@/features/cart/useCart';
 import { useCheckoutPreview, useCheckoutState, useCheckoutAcceptance } from './useCheckout';
@@ -319,6 +320,8 @@ export function CheckoutPage() {
 
   const canSubmit = selectedAddressId && paymentMethod && !isSubmitting && !!preview && !confirmedQuote && !applyingCoupon && preview.purchasable !== false;
 
+  const queryClient = useQueryClient();
+
   // Handle checkout submit
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return; // Double-click prevention
@@ -339,6 +342,7 @@ export function CheckoutPage() {
         shippingAddressId: selectedAddressId!,
         couponCodes: couponCodes.length > 0 ? couponCodes : undefined,
       });
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
       window.open(response.checkoutUrl, '_self');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Finalize order failed';
@@ -347,7 +351,7 @@ export function CheckoutPage() {
       setIsSubmitting(false);
       submitLock.current = false;
     }
-  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes, confirmedQuote, applyingCoupon]);
+  }, [isSubmitting, validateForm, preview, selectedAddressId, couponCodes, confirmedQuote, applyingCoupon, queryClient]);
 
   // Loading state
   const isInitialLoading = authLoading || cartLoading || addressesLoading;

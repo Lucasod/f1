@@ -365,6 +365,76 @@ describe('Stripe webhook handler', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it('AC-2: transitions payment PENDING → AUTHORIZED → CAPTURED and order PENDING_PAYMENT → PAID on checkout.session.async_payment_succeeded, idempotent on duplicate delivery', async () => {
+      vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
+
+      const paymentRepo = new InMemoryPaymentRepository();
+      const orderRepo = new InMemoryOrderRepository();
+      const paymentService = new PaymentService(paymentRepo, orderRepo);
+
+      const order = Order.create({
+        personId: 'consumer-1',
+        vendorGroups: [
+          {
+            vendorId: 'vendor-1',
+            items: [{ productId: 'product-1', productName: 'Product 1', vendorId: 'vendor-1', quantity: 1, unitPrice: 100 }],
+            commissionPct: 10,
+          },
+        ],
+        shippingAddress: {
+          id: 'addr-1', street: 'Street', number: '1', neighborhood: 'Neigh', city: 'City', state: 'State', isPrimary: true,
+        },
+      });
+      await orderRepo.save(order);
+
+      const payment = Payment.create({ orderId: order.id, personId: 'consumer-1', amount: 100, provider: 'stripe' });
+      await paymentRepo.save(payment);
+
+      const event = {
+        type: 'checkout.session.async_payment_succeeded',
+        id: 'evt_test_ac2',
+        data: { object: {
+          metadata: { paymentId: payment.id },
+          payment_status: 'paid',
+          payment_intent: 'pi_test_ac2',
+          amount_total: 10000,
+          currency: 'brl',
+        } },
+      } as unknown as Stripe.Event;
+      const constructEvent = vi.fn().mockReturnValue(event);
+      const handler = createStripeWebhookHandler(
+        { webhooks: { constructEvent } } as never,
+        paymentService,
+        { removeItem: vi.fn().mockResolvedValue({} as any), removeItemQuantity: vi.fn().mockResolvedValue({} as any) } as any,
+        { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
+      );
+      const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+
+      // First delivery: payment PENDING → AUTHORIZED → CAPTURED, order PENDING_PAYMENT → PAID
+      await handler(req, res, vi.fn());
+
+      const updatedPayment = await paymentService.getPaymentById(payment.id);
+      expect(updatedPayment?.status).toBe(PaymentStatus.CAPTURED);
+      expect(updatedPayment?.eventId).toBe('evt_test_ac2');
+
+      const updatedOrder = await orderRepo.findById(order.id);
+      expect(updatedOrder?.status).toBe(OrderStatus.PAID);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ received: true });
+
+      // Duplicate delivery: idempotency — returns 200 without re-processing
+      const res2 = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+      await handler(req, res2, vi.fn());
+
+      expect(res2.status).toHaveBeenCalledWith(200);
+      expect(res2.json).toHaveBeenCalledWith({ received: true });
+
+      const stillCaptured = await paymentService.getPaymentById(payment.id);
+      expect(stillCaptured?.status).toBe(PaymentStatus.CAPTURED);
+    });
+
     it('AC-4: removes purchased quantities from cart, preserves non-purchased items', async () => {
       vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
 

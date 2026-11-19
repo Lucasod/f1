@@ -317,6 +317,9 @@ export class StripeService {
         ...(paymentMethodConfiguration && {
           payment_method_configuration: paymentMethodConfiguration,
         }),
+        ...(!paymentMethodConfiguration && {
+          payment_method_types: ['pix'],
+        }),
         line_items: order.vendorGroups.flatMap((group: any) =>
           group.items.map((item: any) => ({
             quantity: item.quantity,

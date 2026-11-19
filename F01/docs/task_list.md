@@ -643,3 +643,35 @@ This addendum supersedes conflicting current-status statements above without del
 **Arquivos alterados:** 2 arquivos (código/teste).
 
 **Próxima ação:** None (run completo).
+
+## Addendum Final: MP-F01-P5-011B — Vendor Fulfillment, Pix Assíncrono e Reconciliação do Carrinho (2026-11-19)
+
+| Tarefa | Status | Disposição |
+|--------|--------|------------|
+| Cycle 1 — Vendor Fulfillment isolamento | ✅ completed | findFulfillableOVG filtra pending/confirmed apenas |
+| Cycle 2a — Pix stripe.service.ts | ✅ completed | payment_method_types: ['pix'] fallback |
+| Cycle 2b — Pix stripe-checkout.provider.ts | ✅ completed | payment_method_types: ['pix'] fallback |
+| Cycle 2c — Pix opção CheckoutPage.tsx | ✅ completed | REMOVIDA (usuário solicitou — ambas levam ao mesmo destino) |
+| Cycle 2d — Teste async_payment_succeeded | ✅ completed | AC-2 já existia no stripe-webhook.handler.test.ts |
+| Cycle 3 — Cart cache invalidation | ✅ completed | queryClient.invalidateQueries após checkout |
+| Cycle 3 — useQueryClient hook fix | ✅ completed | Movido para nível do componente (CR-003) |
+| Cycle 3 — CartPage refetch on mount | ✅ completed | useEffect refetchCart no mount |
+| Cycle 3 — Test assertion atualizada | ✅ completed | toHaveLength(1) (Pix removido) |
+| Cart reconciliation — TransferService try/catch | ✅ completed | Webhook 200 mesmo quando transfer falha |
+| Pix Test Mode — Stripe CLI webhook forwarding | ✅ completed | stripe listen --forward-to iniciado; webhooks entregues |
+| Real Pix journey (Playwright) | ✅ completed | Ordem paid, carrinho reconciliado, webhook 200 |
+| CR-001 — Pix description em inglês | ✅ completed | Pix opção removida (usuário solicitou) |
+| CR-002 — Teste fallback Pix | ✅ completed | Novo teste em stripe.service.test.ts |
+| CR-003 — queryClient no dependency array | ✅ completed | queryClient adicionado ao useCallback deps |
+| Regressão completa | ✅ completed | Backend 1786/1786, Frontend 687/687, builds exit 0 |
+| Revisão independente | ✅ completed | Code reviewer: PASS, 0 findings |
+
+**Test results:** Backend 1786/1786 vitest aprovados. Frontend 687/687 vitest aprovados. Playwright Pix journey: 1 aprovado.
+
+**Run record:** `F01/docs/agent_runs/mp-f01-p5-011b-2026-11-19.md` (conclusão: COMPLETED; próxima ação: None).
+
+**Execução no log:** `F01/docs/mp_log.md` (entrada final MP-F01-P5-011B).
+
+**Arquivos alterados:** 7 arquivos (código/teste).
+
+**Próxima ação:** None (run completo).

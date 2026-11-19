@@ -3204,3 +3204,47 @@ Executar validação final do Marketplace FS-01 utilizando Playwright — Etapa 
 
 ### Conclusion
 **COMPLETED** — Todas as 12 gates da matriz de aceitação VERIFIED. Código verde (build + vitest + Playwright com credenciais). Revisão independente: PASS.
+
+## MP-F01-P5-011B: Vendor Fulfillment, Pix Assíncrono e Reconciliação do Carrinho
+
+**Date:** 2026-11-19  
+**Run:** mp-f01-p5-011b-2026-11-19 | **Branch:** feature/closing-initial-implementation | **Base commit:** dc7835a | **Reviewer verdict:** PASS
+
+### Objective
+Corrigir três problemas observados nas jornadas reais, executar Playwright e validar a persistência.
+
+### Root Causes Identified and Fixed
+
+1. **Webhooks não entregues:** Stripe CLI não estava rodando (`stripe listen --forward-to`), então eventos de pagamento nunca chegavam ao backend. Ordens ficavam `PENDING_PAYMENT`, carrinhos nunca reconciliados, Vendor Dashboard mostrava zeros. Corrigido iniciando `stripe listen --forward-to http://localhost:3000/api/v1/webhooks/stripe`.
+
+2. **TransferService falha bloqueava carrinho:** `createTransferWithDetails()` lançava exceção quando vendor não tinha Stripe connected account, fazendo o webhook retornar HTTP 500 **antes** da reconciliação do carrinho. Corrigido com try/catch em `payment.service.ts` — pagamento capturado é o core; transferência é side effect.
+
+### Results
+
+- **Cycle 1 — Vendor Fulfillment:** `findFulfillableOVG()` filtra por status pending/confirmed apenas, evitando selecionar OVG já delivered
+- **Cycle 2 — Pix Test Mode:** `payment_method_types: ['pix']` adicionado como fallback em stripe.service.ts e stripe-checkout.provider.ts; opção "Pix" **removida** do CheckoutPage.tsx (usuário solicitou — ambas levam ao mesmo destino)
+- **Cycle 3 — Cart Reconciliation:** `queryClient.invalidateQueries({ queryKey: ['cart'] })` após checkout; `useQueryClient()` movido de dentro do `useCallback` para nível do componente; `refetchCart()` no mount do CartPage.tsx; `toHaveLength(1)` para 1 opção de pagamento
+- **Cart reconciliation fix:** TransferService try/catch — webhook HTTP 200 mesmo quando transfer falha
+- **Real Pix journey (Playwright):** Ordem `pending_payment` → `paid`; carrinho 1 → 0 (reconciliado); pagamento `pending` → `captured`; webhook HTTP 500 → 200; sem duplicação
+- **CR-001/002/003 (Code Review):** Todos corrigidos e re-revisados com veredito PASS
+
+### Test results
+| Suite | PASS | FAIL | SKIP |
+|-------|------|------|------|
+| Backend vitest | 1786 | 0 | 0 |
+| Frontend vitest | 687 | 0 | 0 |
+| Playwright Pix journey | 1 | 0 | 0 |
+
+### Evidence table
+| File | Lines | Purpose |
+|------|-------|---------|
+| back/src/modules/order/payment.service.ts | Linhas 348-374 | TransferService try/catch (cart reconciliation fix) |
+| back/src/modules/stripe/stripe.service.ts | Linhas 320-322 | Pix fallback payment_method_types |
+| back/src/modules/stripe/stripe.service.test.ts | Novo teste | Pix fallback coverage (CR-002) |
+| back/src/modules/checkout/stripe-checkout.provider.ts | Linhas 35-37 | Pix fallback payment_method_types |
+| front/src/features/checkout/CheckoutPage.tsx | Linha 319, 324, 346, 355 | Pix opção removida, useQueryClient nível componente, cart invalidation, queryClient no deps |
+| front/src/features/cart/CartPage.tsx | Linhas 138-144 | refetchCart no mount |
+| front/src/features/checkout/CheckoutPage.test.tsx | Linha 710 | Assertion atualizada para 1 opção de pagamento |
+
+### Conclusion
+**COMPLETED** — Todas as tarefas executadas com êxito. Código 100% verde (builds + vitests). Revisão independente: PASS (0 findings após correções CR-001/002/003).

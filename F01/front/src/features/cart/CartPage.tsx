@@ -135,6 +135,14 @@ export function CartPage() {
     setProductsLoading(false);
   }, [cartData?.cart?.items]);
 
+  // Refetch cart on mount so the UI reflects server-side cart reconciliation
+  // performed by the checkout webhook (e.g. items removed after payment confirmation).
+  // React Query keeps cart data stale for up to 2 minutes, so without this the
+  // cart page can show purchased items long after the webhook has removed them.
+  useEffect(() => {
+    void refetchCart();
+  }, [refetchCart]);
+
   const reconcile = useCallback(async (uncertainWrite: boolean) => {
     try {
       await refetchCart({ throwOnError: true });

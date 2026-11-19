@@ -492,6 +492,44 @@ describe('StripeService', () => {
       );
     });
 
+    it('should send payment_method_types: [pix] when paymentMethodConfiguration is not set', async () => {
+      mockStripeInstance.checkout.sessions.create.mockResolvedValue({
+        id: 'cs_test_session123',
+        url: 'https://checkout.stripe.com/session/cs_test_session123',
+      });
+
+      const order = {
+        id: 'order_123',
+        vendorGroups: [
+          {
+            items: [
+              { productId: 'prod_1', productName: 'Product 1', quantity: 2, unitPrice: 50 },
+            ],
+          },
+        ],
+      };
+      const payment = { id: 'payment_123' };
+
+      const result = await service.createCheckoutSessionWithCustomer(
+        order,
+        payment,
+        'cus_customer123',
+        'https://app.example.com'
+      );
+
+      expect(result).toEqual({
+        id: 'cs_test_session123',
+        url: 'https://checkout.stripe.com/session/cs_test_session123',
+      });
+      expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: 'cus_customer123',
+          mode: 'payment',
+          payment_method_types: ['pix'],
+        })
+      );
+    });
+
     it('should throw StripeServiceError when URL is missing', async () => {
       mockStripeInstance.checkout.sessions.create.mockResolvedValue({
         id: 'cs_test_session123',

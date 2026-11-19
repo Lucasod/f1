@@ -344,18 +344,31 @@ export class PaymentService {
 
     await this.markCapturedOrderPaid(payment.orderId);
 
-    // FIND-A02-P0-002: Trigger transfer creation per OVG after order is PAID
+    // FIND-A02-P0-002: Trigger transfer creation per OVG after order is PAID.
+    // Transfer creation is a side effect; failures must not block the core
+    // payment flow or prevent cart reconciliation in the webhook handler.
     if (this.transferService) {
       const paidOrder = await this.orderRepo.findById(payment.orderId);
       if (paidOrder && paidOrder.status === OrderStatus.PAID) {
         for (const vg of paidOrder.vendorGroups) {
-          await this.transferService.createTransferWithDetails(
-            paidOrder.id,
-            vg.id,
-            vg.subtotal,
-            vg.commissionPct,
-            payment.providerTransactionId!,
-          );
+          try {
+            await this.transferService.createTransferWithDetails(
+              paidOrder.id,
+              vg.id,
+              vg.subtotal,
+              vg.commissionPct,
+              payment.providerTransactionId!,
+            );
+          } catch (err) {
+            // Transfer creation failed (e.g., vendor has no Stripe connected
+            // account, no real PaymentIntent in Stripe). Log and continue —
+            // the payment is already captured and the order is PAID. The webhook
+            // handler will still proceed to cart reconciliation.
+            console.error(
+              `Transfer creation failed for OVG ${vg.id} of order ${paidOrder.id}:`,
+              err instanceof Error ? err.message : err
+            );
+          }
         }
       }
     }
