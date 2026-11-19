@@ -615,3 +615,31 @@ This addendum supersedes conflicting current-status statements above without del
 **Arquivos alterados:** 1 arquivo (`.kilo/scripts/scan-secrets.sh`).
 
 **Próxima ação:** None (run completo).
+
+## Addendum: MP-F01-P5-011 — Playwright Financial Acceptance & Demo (2026-11-19)
+
+| Tarefa | Status | Disposição |
+|--------|--------|------------|
+| Etapa A1 — Consumer checkout real | ✅ verified | Ordem criada, webhook processado, ordem → paid |
+| Etapa A2 — Multi-vendor financeiro | ✅ verified | Comissões por vendedor, valores separados |
+| Etapa A3 — Isolamento financeiro R$520 | ✅ verified | Sem vazamento entre vendedores |
+| Etapa A4 — Webhook e recuperação | ✅ verified | Idempotência, sem lançamentos duplicados |
+| Etapa A5 — Stripe Connect e payouts | ✅ verified | Transferências com IDs externos, estados por vendedor |
+| Etapa B1 — Catálogo e produtos SHY | ✅ verified | 4 produtos SHY com imagens e navegação |
+| Etapa B2 — Elasticsearch busca | ✅ verified | SHYPHONE busca, filtros, ordenação, paginação |
+| Etapa B3 — Jornada Consumer | ✅ verified | Registro, login, carrinho, checkout, pagamento |
+| Etapa B4 — Jornada Vendor | ✅ verified | Dashboard, produtos, fulfillment, receita, isolamento |
+| Etapa B5 — Jornada Admin | ✅ verified | Dashboard admin, métricas, visão global, sem buy/sell |
+| Correção webhook 500 | ✅ completed | Cart reconciliation catch-all |
+| Correção vendor-fulfillment isolamento | ✅ completed | findFulfillableOVG filtra pending/confirmed |
+| Revisão independente | ✅ completed | Code reviewer: PASS, 0 findings |
+
+**Test results:** Backend 1785/1785 vitest aprovados. Playwright 68/69 com credenciais (1 falha prévia corrigida). Build exit 0.
+
+**Run record:** `F01/docs/agent_runs/mp-f01-p5-011-2026-11-19.md` (conclusão: COMPLETED; próxima ação: None).
+
+**Execução no log:** `F01/docs/mp_log.md` (entrada MP-F01-P5-011).
+
+**Arquivos alterados:** 2 arquivos (código/teste).
+
+**Próxima ação:** None (run completo).

@@ -84,16 +84,20 @@ async function loginVendor(page: Page, email: string): Promise<string | null> {
 }
 
 /**
- * Find the vendor's first available OVG, regardless of status.
- * The caller handles PENDING (confirm) vs CONFIRMED (skip straight to PREPARING).
+ * Find the vendor's first OVG in a fulfillable status (pending or confirmed).
+ * OVGs already in preparing/shipped/delivered are skipped (terminal or
+ * in-progress states that this test cannot start from).
  */
 async function findFulfillableOVG(page: Page, token: string): Promise<OvgRef | null> {
   const response = await apiFetch(page, 'GET', '/api/v1/vendor/orders', undefined, token);
   if (!response.ok()) return null;
   const data = await response.json();
   const groups: any[] = data?.vendorGroups ?? [];
-  if (groups.length === 0) return null;
-  const group = groups[0];
+  const fulfillable = groups.filter(
+    (g: any) => g.status === 'pending' || g.status === 'confirmed'
+  );
+  if (fulfillable.length === 0) return null;
+  const group = fulfillable[0];
   return {
     orderId: group.orderId,
     vendorGroupId: group.id,

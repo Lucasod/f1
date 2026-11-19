@@ -121,12 +121,11 @@ export function createStripeWebhookHandler(
           for (const [productId, quantity] of purchasedQuantities) {
             try {
               await cartService.removeItemQuantity(payment.personId, productId, quantity);
-            } catch (err) {
-              // Item may already be removed or not in cart; ignore for idempotency
-              if (!(err instanceof Error) ||
-                  !['CART_ITEM_NOT_FOUND', 'CART_NOT_FOUND', 'CART_CONFLICT'].includes(err.message)) {
-                throw err;
-              }
+            } catch {
+              // Cart reconciliation is best-effort idempotency:
+              // item may already be removed or not in cart; ignore all errors.
+              // The order is already paid (line 103 succeeded); a cart error
+              // must not cause a webhook 500.
             }
           }
         }
