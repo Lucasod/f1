@@ -315,7 +315,7 @@ This section defines the responsibility matrix for the three FIRD agents and the
 
 The Orchestra is the sole coordination point. Routing is unidirectional and scoped:
 
-- **Orchestra → Developer** (`task` tool, `code-developer`): implementation tasks. Payload follows the 9-element delegation format (§2 of `.kilo/fird/contratos-delegacao.md`): Run ID, Task ID, Scope, Base Reference, Changed Files, Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (filled by Reviewer).
+- **Orchestra → Developer** (`task` tool, `code-developer`): implementation tasks. The Developer ends with its report; the result returns through the existing `task` call, without the Developer invoking `task`. Payload follows the 9-element delegation format (§2 of `.kilo/fird/contratos-delegacao.md`): Run ID, Task ID, Scope, Base Reference, Changed Files, Acceptance Criteria, Relevant Decisions, Observed Test Results, Review Verdict Format (filled by Reviewer).
 - **Orchestra → Reviewer** (`task` tool, `code-reviewer`): independent review of completed implementation units. Payload follows the review request format (§4 of `.kilo/fird/contratos-delegacao.md`).
 - **Developer → (none):** the Developer does not delegate; it reports results to the Orchestra.
 - **Reviewer → (none):** the Reviewer reports findings/verdict to the Orchestra; it does not implement corrections.

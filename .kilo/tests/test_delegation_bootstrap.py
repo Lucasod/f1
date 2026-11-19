@@ -4,6 +4,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 class DelegationBootstrapTests(unittest.TestCase):
+    def test_delegation_return_and_origin_are_consistent(self):
+        developer = (ROOT / '.kilo/agents/code-developer.md').read_text()
+        orchestrator = (ROOT / '.kilo/agents/code-orchestrator.md').read_text()
+        contract = (ROOT / '.kilo/fird/contratos-delegacao.md').read_text()
+        self.assertIn('End with your report; the task result returns to Orchestra', developer)
+        self.assertNotIn('Return the result to Orchestra through task.', developer)
+        self.assertIn('user role alone does not prove direct origin', developer)
+        self.assertIn('INDETERMINADA', contract)
+        self.assertIn('The Developer ends with its report', orchestrator)
+
     def test_implementation_is_scoped_and_security_permissions_stay_protected(self):
         text = (ROOT / '.kilo/agents/code-developer.md').read_text()
         self.assertNotIn('Do not modify application code or security permissions.', text)
