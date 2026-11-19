@@ -206,6 +206,12 @@ observed_test_results (input): [...]   # opcional; resultados prévios que infor
 - O Developer não pode commitar, pushar, mergear, rebasear ou publicar.
 - O Developer não pode modificar `.kilo/` nem regras globais sem autorização explícita.
 
+### 3.2.1 PREPARAÇÃO DE DELEGAÇÃO SOMENTE LEITURA
+
+O Orchestra prepara os elementos de §2 a partir da missão autorizada e de evidências verificadas; não exige que o usuário forneça dados administrativos que possam ser obtidos com segurança. Em retomada, usa o `run_id` e registro existentes. Identifica branch e HEAD completos, estado preexistente, arquivos esperados dentro do escopo, critérios e decisões pertinentes; lista vazia de decisões é válida quando a inspeção não identificar nenhuma. Arquivos esperados são estimativas, não autorização para expandir caminhos. Não inventar valores nem misturar alterações preexistentes com as da tarefa.
+
+Quando não puder obter os dados diretamente, o Orchestra pode solicitar ao Developer via `task` um diagnóstico delimitado exclusivamente de leitura para preparar a delegação, mesmo sem os nove elementos completos ou run record prévio. A solicitação identifica a missão e os dados a levantar; permite somente inspeção necessária, respeitando permissões e aprovações, sem testes, escrita, alterações de serviços ou dados, leitura de segredos ou exposição de diffs potencialmente sensíveis. O Developer retorna evidências sanitizadas e limitações; o diagnóstico não autoriza implementação. O Orchestra usa o resultado para montar uma delegação separada e completa; registro ausente segue o bootstrap aplicável, também separado. Evidência necessária ou autorização que não puder ser estabelecida permanece `BLOCKED`.
+
 ### 3.3 Validação de entrada (Developer)
 
 Antes de implementar, o Developer DEVE:

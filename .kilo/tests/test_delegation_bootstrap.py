@@ -14,6 +14,16 @@ class DelegationBootstrapTests(unittest.TestCase):
         self.assertIn('INDETERMINADA', contract)
         self.assertIn('The Developer ends with its report', orchestrator)
 
+    def test_orchestrator_prepares_missing_delegation_details(self):
+        orchestrator = (ROOT / '.kilo/agents/code-orchestrator.md').read_text()
+        developer = (ROOT / '.kilo/agents/code-developer.md').read_text()
+        contract = (ROOT / '.kilo/fird/contratos-delegacao.md').read_text()
+        self.assertIn('READ-ONLY DELEGATION PREPARATION', orchestrator)
+        self.assertIn('READ-ONLY DELEGATION PREPARATION', developer)
+        self.assertIn('PREPARAÇÃO DE DELEGAÇÃO SOMENTE LEITURA', contract)
+        self.assertIn('does not authorize implementation', developer)
+        self.assertIn('do not invent', orchestrator)
+
     def test_implementation_is_scoped_and_security_permissions_stay_protected(self):
         text = (ROOT / '.kilo/agents/code-developer.md').read_text()
         self.assertNotIn('Do not modify application code or security permissions.', text)

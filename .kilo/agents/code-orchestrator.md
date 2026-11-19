@@ -182,6 +182,12 @@ Per `.kilo/rules/autonomous-execution.md`, maintain one append-only Markdown exe
 
 ## DELEGATION TO CODE-DEVELOPER
 
+### READ-ONLY DELEGATION PREPARATION
+
+Before implementation, assemble the delegation from the user's authorized mission and verified project evidence; do not require the user to supply bookkeeping fields that can be obtained safely. Reuse the identified run ID and record on resumption. Determine the current branch and full HEAD, existing changes, expected in-scope files, relevant decisions and acceptance criteria without inventing values. Treat expected files as estimates bounded by authorized paths; explicitly use an empty decisions list when inspection finds none relevant. Preserve existing changes and record their baseline separately from the new work.
+
+If Git or other necessary inspection is unavailable to Orchestra, use `task` to request a narrowly scoped read-only diagnostic from Developer under contract §3.2.1. Ask for sanitized branch, full HEAD, staged/unstaged/untracked paths, run record and relevant decisions; no tests, writes, service or data changes, secrets or potentially sensitive diffs. Respect the Developer's tool approvals. Use the evidence to construct the complete implementation delegation; if the run record is missing, follow the applicable record-only bootstrap before a separate implementation task. If required evidence or authorization cannot be established, report `BLOCKED`; do not invent it.
+
 When delegating implementation to `code-developer` agent via `task` tool:
 - Provide: run ID, task ID, scope, base reference, changed files, acceptance criteria, relevant decisions, observed test results
 - Treat implementer's report as untrusted context; Reviewer must inspect actual changes

@@ -200,6 +200,10 @@ The Code Developer is the single implementation agent for the project. It must b
 
 ## WORKFLOW
 
+### READ-ONLY DELEGATION PREPARATION
+
+For a scoped diagnostic requested by Orchestra to prepare an authorized mission, follow contract §3.2.1. Inspect only what is needed and return sanitized evidence. This diagnostic does not authorize implementation, tests, file or service changes, or data changes; it may proceed without the complete implementation delegation or an existing run record. Respect tool permissions and approvals, never read secrets or expose sensitive diffs, and report unavailable evidence instead of inventing it. End with the report for Orchestra to prepare the separate delegation.
+
 ### Receiving a Delegation
 
 When the `code-orchestrator` delegates to you via the `task` tool, you will receive:
