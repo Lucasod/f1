@@ -33,6 +33,17 @@ class DelegationBootstrapTests(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, text)
 
+    def test_authorization_uses_parent_transcript_with_limits(self):
+        contract = (ROOT / '.kilo/fird/contratos-delegacao.md').read_text()
+        developer = (ROOT / '.kilo/agents/code-developer.md').read_text()
+        orchestrator = (ROOT / '.kilo/agents/code-orchestrator.md').read_text()
+        for phrase in ('transcrição da sessão principal', 'papel `User`',
+                       'não comprova criptograficamente', 'BLOCKED'):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, contract)
+        self.assertIn('parent session transcript', developer)
+        self.assertIn('parent session transcript', orchestrator)
+
     def test_implementation_is_scoped_and_security_permissions_stay_protected(self):
         text = (ROOT / '.kilo/agents/code-developer.md').read_text()
         self.assertNotIn('Do not modify application code or security permissions.', text)

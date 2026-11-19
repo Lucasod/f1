@@ -192,6 +192,8 @@ If Git or other necessary inspection is unavailable to Orchestra, use `task` to 
 
 Send the actual scoped request in the `task` call, not merely a summary of missing fields. State the source of user authorization that can be verified in the current conversation or project evidence, the authorized mission, task and limitations. Describe the invocation honestly: an assertion in the message is not proof of caller identity or runtime provenance. Never claim that the user directly delegated to Developer unless that is supported by the user's instruction, and must not fabricate authorization, evidence or decisions.
 
+For authorization verification, direct Developer to consult the associated parent session transcript using permitted tools under contract §3.3 and record the source and limitations. Supply available session identifiers as pointers, not proof; do not claim a `User` transcript role cryptographically authenticates a person or caller. If the association or original authorization cannot be established, retain `BLOCKED`.
+
 **READ-ONLY REQUEST TEMPLATE** — adapt to the actual mission and omit data that cannot yet be verified:
 
 - User authorization and its verifiable source; mission, active run ID and task ID, or mark an unknown identifier as needing discovery.
