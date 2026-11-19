@@ -18,8 +18,8 @@ from workspaces.stripe_adapter import StripeAdapter, StripeAdapterError
 User = get_user_model()
 
 # Synthetic test values only — never real credentials
-TEST_WEBHOOK_KEY = "test-webhook-key-12345"
 TEST_STRIPE_KEY = "sk_test_fake1234567890"
+TEST_WEBHOOK_KEY = "test-webhook-key-12345"
 TEST_PRICE_ID = "price_test_fake123"
 
 
@@ -67,6 +67,7 @@ class StripeReadinessTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_checkout_fails_safely_without_stripe(self):
         """Checkout returns 400 when STRIPE is not configured."""
         response = self.client.post(
@@ -77,8 +78,9 @@ class StripeReadinessTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "validation_error")
-        self.assertIn("Stripe", response.data["error"]["message"])
+        self.assertIn("Stripe is not configured", response.data["error"]["message"])
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_portal_fails_safely_without_stripe(self):
         """Portal returns 400 when STRIPE is not configured."""
         response = self.client.post(
@@ -88,9 +90,12 @@ class StripeReadinessTestCase(TestCase):
             HTTP_Idempotency_Key="portal-no-stripe",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("Stripe is not configured", response.data["error"]["message"])
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_cancel_fails_safely_without_stripe(self):
-        """Cancel returns 400 when STRIPE is not configured."""
+        """Cancel returns 400 when no active Pro subscription (Free plan workspace)."""
         response = self.client.post(
             f"/api/v1/workspaces/{self.ws.id}/billing/cancel/",
             {"timing": "period_end"},
@@ -98,7 +103,10 @@ class StripeReadinessTestCase(TestCase):
             HTTP_Idempotency_Key="cancel-no-stripe",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("No active Pro subscription", response.data["error"]["message"])
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_no_fake_provider_success_without_stripe(self):
         """No checkout returns 201 without STRIPE configured."""
         response = self.client.post(
@@ -108,10 +116,12 @@ class StripeReadinessTestCase(TestCase):
             HTTP_Idempotency_Key="checkout-no-fake-success",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("Stripe is not configured", response.data["error"]["message"])
 
     # ── Stripe adapter contract ───────────────────────────────
 
-    @override_settings(TEST_STRIPE_KEY="")
+    @override_settings(STRIPE_API_KEY="")
     def test_stripe_adapter_raises_without_api_key(self):
         """StripeAdapter() raises StripeAdapterError when no API key."""
         with self.assertRaises(StripeAdapterError):
@@ -127,14 +137,13 @@ class StripeReadinessTestCase(TestCase):
     # ── Stripe webhook signature verification ─────────────────
 
     @override_settings(
-        STRIPE_CONFIGURED=True,
-        TEST_STRIPE_KEY=TEST_STRIPE_KEY,
-        TEST_WEBHOOK_KEY=TEST_WEBHOOK_KEY,
+        STRIPE_API_KEY=TEST_STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_KEY,
         STRIPE_PRO_PRICE_ID=TEST_PRICE_ID,
     )
     def test_stripe_webhook_not_configured_returns_503(self):
-        """Webhook returns 503 when STRIPE_CONFIGURED is False."""
-        with override_settings(STRIPE_CONFIGURED=False):
+        """Webhook returns 503 when individual Stripe settings are not configured."""
+        with override_settings(STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID=""):
             response = self.client.post(
                 "/api/v1/integrations/stripe/webhook/",
                 b'{"test": true}',
@@ -145,8 +154,8 @@ class StripeReadinessTestCase(TestCase):
 
     @override_settings(
         STRIPE_CONFIGURED=True,
-        TEST_STRIPE_KEY=TEST_STRIPE_KEY,
-        TEST_WEBHOOK_KEY=TEST_WEBHOOK_KEY,
+        STRIPE_API_KEY=TEST_STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_KEY,
         STRIPE_PRO_PRICE_ID=TEST_PRICE_ID,
     )
     def test_stripe_webhook_missing_signature_returns_400(self):
@@ -160,8 +169,8 @@ class StripeReadinessTestCase(TestCase):
 
     @override_settings(
         STRIPE_CONFIGURED=True,
-        TEST_STRIPE_KEY=TEST_STRIPE_KEY,
-        TEST_WEBHOOK_KEY=TEST_WEBHOOK_KEY,
+        STRIPE_API_KEY=TEST_STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_KEY,
         STRIPE_PRO_PRICE_ID=TEST_PRICE_ID,
     )
     def test_stripe_webhook_invalid_signature_returns_400(self):

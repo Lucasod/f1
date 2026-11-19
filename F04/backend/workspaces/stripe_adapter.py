@@ -156,3 +156,18 @@ class StripeAdapter:
             return event
         except (stripe.error.SignatureVerificationError, ValueError) as exc:
             raise StripeAdapterError(f"Invalid webhook signature: {exc}") from exc
+
+    def retrieve_checkout_session(self, session_id):
+        """Retrieve a Stripe Checkout Session."""
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            return {
+                "session_id": session.id,
+                "customer": session.customer,
+                "subscription": session.subscription,
+                "metadata": session.metadata,
+                "payment_status": session.payment_status,
+                "status": session.status,
+            }
+        except stripe.error.StripeError as exc:
+            raise StripeAdapterError(f"Failed to retrieve checkout session: {exc}") from exc

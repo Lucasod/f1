@@ -142,8 +142,22 @@ services:
     networks:
       - f04
 
+  stripe-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.stripe-cli
+    environment:
+      - STRIPE_API_KEY
+      - STRIPE_WEBHOOK_SECRET
+    networks:
+      - f04
+    command: ["stripe", "listen", "--forward-to", "http://backend:8000/api/v1/integrations/stripe/webhook/", "--events", "checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed"]
+    volumes:
+      - stripe-cli-auth-f04:/home/stripeuser/.stripe/
+
 volumes:
   postgres_data:
+  stripe-cli-auth-f04:
 
 networks:
   f04:

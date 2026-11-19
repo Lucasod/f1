@@ -48,7 +48,7 @@ async function deleteComment(request, commentId, csrfToken) {
 // count before a test creates a new workspace.
 async function deleteUserWorkspaces(username: string) {
   execSync(
-    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+    'DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
   );
 }
 
@@ -247,7 +247,7 @@ test.describe('Comments E2E', () => {
   test('4. Comment Authorization - verify non-members cannot create/delete', async ({ request }, testInfo) => {
     // Create Bob user via Django ORM (same pattern as e2e-02)
     execSync(
-      'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nUser = get_user_model()\nUser.objects.get_or_create(username="bob", defaults={"email": "bob@example.com", "password": "testpass123"})\nPYEOF'
+      'DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nUser = get_user_model()\nUser.objects.get_or_create(username="bob", defaults={"email": "bob@example.com", "password": "testpass123"})\nPYEOF'
     );
 
     const BOB_CREDENTIALS = { username: 'bob', password: process.env.SECRET_TEST_PASS || 'testpass123' };

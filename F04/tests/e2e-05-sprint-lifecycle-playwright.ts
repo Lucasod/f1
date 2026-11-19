@@ -97,10 +97,37 @@ async function createIssueToProject(request, csrfToken, projectId: number, title
 // the slot because create_workspace counts every owned workspace regardless
 // of deleted_at, so we hard-delete via the Django ORM to reset the ownership
 // count before a test creates a new workspace.
+// Includes retry with exponential backoff to handle concurrent deletion deadlocks.
 async function deleteUserWorkspaces(username: string) {
-  execSync(
-    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
-  );
+  const maxRetries = 5;
+  const baseDelayMs = 100;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      execSync(
+        'DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+      );
+      return; // Success - exit the function
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries - 1;
+      const isDeadlockError = error instanceof Error && (
+        error.message.includes('deadlock') ||
+        error.message.includes('could not serialize access') ||
+        error.message.includes('LOCK') ||
+        error.message.includes('Lock')
+      );
+
+      if (isDeadlockError && !isLastAttempt) {
+        // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue; // Retry
+      }
+
+      // Re-throw if not a deadlock error or last attempt
+      throw error;
+    }
+  }
 }
 
 // -- Test suite: Sprint Lifecycle E2E --

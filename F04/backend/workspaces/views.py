@@ -2443,7 +2443,7 @@ def billing_checkout(request, workspace_id):
             {"error": {"code": "validation_error", "message": "Only 'pro' plan is supported.", "fields": {"plan": ["Invalid plan."]}}},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if not settings.STRIPE_CONFIGURED:
+    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
         return Response(
             {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
             status=status.HTTP_400_BAD_REQUEST,
@@ -2529,12 +2529,12 @@ def billing_portal(request, workspace_id):
             {"error": {"code": "permission_denied", "message": "Only workspace owners may access the billing portal."}},
             status=status.HTTP_403_FORBIDDEN,
         )
-    billing = get_or_create_workspace_billing(workspace)
-    if not settings.STRIPE_CONFIGURED:
+    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
         return Response(
             {"error": {"code": "validation_error", "message": "Stripe is not configured.", "fields": {}}},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    billing = get_or_create_workspace_billing(workspace)
     if not billing.customer_id:
         return Response(
             {"error": {"code": "not_found", "message": "No Stripe customer found for this workspace.", "fields": {}}},
@@ -2740,7 +2740,7 @@ def workspace_usage(request, workspace_id):
 @permission_classes([AllowAny])
 def stripe_webhook(request):
     """POST /api/v1/integrations/stripe/webhook/ — Stripe-signed webhook."""
-    if not settings.STRIPE_CONFIGURED:
+    if not (settings.STRIPE_API_KEY and settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_PRO_PRICE_ID):
         return Response(status=status.HTTP_503_SERVICE_UNAVAILABLE)
     # Bound request size to 1 MiB
     if len(request.body) > 1024 * 1024:
@@ -2755,8 +2755,40 @@ def stripe_webhook(request):
         return Response(status=status.HTTP_400_BAD_REQUEST)
     event_id = event.id
     event_type = event.type
+    
+    # Extract provider_object_id (session ID for checkout.session.completed) and workspace_id from event data
+    provider_object_id = ""
+    workspace_id = None
+    data_object = event.Data.object if hasattr(event.Data, 'object') else None
+    if data_object:
+        # For checkout.session.completed, the object is the session; provider_object_id should be the session ID
+        # For customer.subscription.*, the object is the subscription; provider_object_id should be the subscription ID
+        session_id = getattr(data_object, 'id', None)
+        subscription_id = getattr(data_object, 'subscription', None)
+        if session_id:
+            provider_object_id = session_id
+        elif subscription_id:
+            provider_object_id = subscription_id
+        else:
+            provider_object_id = ''
+        
+        # Try to get workspace_id from metadata
+        metadata = getattr(data_object, 'metadata', None)
+        if metadata:
+            # StripeObject doesn't support .get(), convert to dict or use attribute access
+            try:
+                metadata_dict = metadata.to_dict() if hasattr(metadata, 'to_dict') else dict(metadata)
+            except (TypeError, ValueError):
+                metadata_dict = {}
+            workspace_id_str = metadata_dict.get('workspace_id')
+            if workspace_id_str:
+                try:
+                    workspace_id = int(workspace_id_str)
+                except (ValueError, TypeError):
+                    pass
+    
     # Idempotency: duplicate event
-    if not record_stripe_event(event_id, event_type):
+    if not record_stripe_event(event_id, event_type, provider_object_id, workspace_id):
         return Response(status=status.HTTP_200_OK)  # already processed
     # Queue processing after commit
     from workspaces.tasks import process_stripe_event

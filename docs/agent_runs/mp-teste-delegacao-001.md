@@ -36,3 +36,10 @@ O Developer verifica o registro e retorna evidências ao Orchestra; o Orchestra 
 # Conclusion
 
 `OPERATIONAL PAUSE` — conclusão provisória: registro inicial de teste em preparação; validação e revisão independente pendentes. Não representa conclusão da missão.
+
+## Adendo de status — MP-TESTE-DELEGACAO-001A (2026-11-19)
+
+- Baseline observado: branch `feature/closing-initial-implementation`, HEAD `58945441f33cfa1121fb82f2f5ca24be0a9dd991`.
+- Gates B, C e D não demonstrados; registro próprio `docs/agent_runs/mp-teste-delegacao-001a.md` ausente.
+- Revisão independente: `INCONCLUSIVE`. Execução: `BLOCKED`; a missão 001A não está concluída.
+- Próximos passos dependem de evidências verificáveis e capacidades permitidas. Este adendo não substitui o registro próprio nem altera o parecer independente.

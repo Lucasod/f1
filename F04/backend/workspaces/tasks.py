@@ -385,11 +385,21 @@ def _resolve_workspace_from_event(event_type, provider_object_id, inbox):
     """Resolve the workspace for a Stripe event.
 
     Strategy:
-    1. If event metadata contains workspace_id, use it (verified against customer mapping)
+    1. If inbox has resolved_workspace_id (set by webhook handler from metadata), use it
     2. If provider_object_id maps to a WorkspaceBilling, use that workspace
     3. Otherwise, cannot resolve
     """
-    # Try provider_object_id -> WorkspaceBilling.
+    # First, try resolved_workspace_id from webhook handler (set from event metadata)
+    if inbox.resolved_workspace_id:
+        try:
+            from workspaces.models import Workspace
+            return Workspace._base_manager.get(id=inbox.resolved_workspace_id)
+        except Workspace.DoesNotExist:
+            pass
+        except Exception:
+            pass
+    
+    # Fallback: Try provider_object_id -> WorkspaceBilling.
     # Use the unscoped base manager here: we are *discovering* which tenant the
     # event belongs to, so we cannot filter by a tenant we have not resolved yet.
     if provider_object_id:
@@ -505,13 +515,11 @@ def _apply_stripe_event(workspace, event_type, provider_object_id, inbox):
 
 
 def _retrieve_checkout_session(adapter, session_id):
-    """Retrieve checkout session data via Stripe adapter.
-
-    The adapter does not expose a checkout-session retrieval method, so this is a
-    placeholder that returns ``None``. The ``customer.subscription.created`` event
-    is responsible for finalizing the billing state.
-    """
-    return None
+    """Retrieve checkout session data via Stripe adapter."""
+    try:
+        return adapter.retrieve_checkout_session(session_id)
+    except StripeAdapterError:
+        return None
 
 
 @shared_task(base=TenantAwareTask, bind=True, max_retries=4, default_retry_delay=60, soft_time_limit=60, time_limit=90)

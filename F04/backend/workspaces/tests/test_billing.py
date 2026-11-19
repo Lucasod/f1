@@ -98,6 +98,7 @@ class BillingTestCase(TestCase):
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("Stripe", response.data["error"]["message"])
 
+    @override_settings(STRIPE_CONFIGURED=True)
     def test_checkout_duplicate_operation(self):
         """Checkout returns 409 when a checkout is already pending."""
         BillingOperation.objects.create(
@@ -106,8 +107,7 @@ class BillingTestCase(TestCase):
             idempotency_key="dup-checkout-key",
             state="pending",
         )
-        with override_settings(STRIPE_CONFIGURED=True):
-            response = self._checkout("dup-checkout-key")
+        response = self._checkout("dup-checkout-key")
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data["error"]["code"], "validation_error")
 

@@ -79,7 +79,7 @@ async function listWorkspaces(request, csrfToken) {
 // count before a test creates a new workspace.
 async function deleteUserWorkspaces(username: string) {
   execSync(
-    'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
+    'DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nfrom workspaces.models import Workspace\nUser = get_user_model()\nuser = User.objects.filter(username="' + username + '").first()\nif user:\n  for ws in Workspace.objects.filter(memberships__user=user, memberships__role="owner").distinct():\n    ws.delete()\nPYEOF'
   );
 }
 
@@ -157,7 +157,7 @@ test.describe('Workspace Isolation E2E', () => {
   test('Create Workspace B - POST /api/v1/workspaces/ with valid name (different user)', async ({ request }, testInfo) => {
     // Step 1: Create Bob user if not already existing via Django ORM
     execSync(
-      'PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nUser = get_user_model()\nUser.objects.get_or_create(username="bob", defaults={"email": "bob@example.com", "password": "testpass123"})\nPYEOF'
+      'DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"\nimport os\nimport django\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")\ndjango.setup()\nfrom django.contrib.auth import get_user_model\nUser = get_user_model()\nUser.objects.get_or_create(username="bob", defaults={"email": "bob@example.com", "password": "testpass123"})\nPYEOF'
     );
 
     // Step 2: Fetch CSRF token independently via GET /auth/csrf/
@@ -261,7 +261,7 @@ test.describe('Workspace Isolation E2E', () => {
 
     // Add Alice as a member of Workspace B via Django ORM (look up by unique name)
     execSync(`
-PYTHONPATH=backend:$PYTHONPATH python3 << "PYEOF"
+DB_ENGINE=django.db.backends.postgresql POSTGRES_DB=f04 POSTGRES_USER=f04 POSTGRES_PASSWORD=ww3Nn^kOp3zRc1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 DJANGO_SETTINGS_MODULE=conf.settings PYTHONPATH=backend python3 << "PYEOF"
 import os, django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")
 django.setup()

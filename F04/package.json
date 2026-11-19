@@ -14,7 +14,7 @@
   "keywords": [],
   "type": "commonjs",
   "dependencies": {
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "serve": "^14.0.0"
   },
   "devDependencies": {

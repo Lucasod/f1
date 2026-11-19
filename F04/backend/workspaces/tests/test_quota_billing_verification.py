@@ -5,7 +5,7 @@ import os
 import unittest
 from django.db import connection
 
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -16,6 +16,11 @@ from workspaces.models import (
 from workspaces.billing_service import check_membership_quota, check_project_quota
 
 User = get_user_model()
+
+# Synthetic test values only — never real credentials
+TEST_STRIPE_KEY = "sk_test_fake1234567890"
+TEST_WEBHOOK_KEY = "test-webhook-key-12345"
+TEST_PRICE_ID = "price_test_fake123"
 
 
 class QuotaVerificationTestCase(TestCase):
@@ -233,6 +238,7 @@ class StripeReadinessVerificationTestCase(TestCase):
         self.ws = Workspace.objects.create(name="Stripe Readiness Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_checkout_fails_safely_without_stripe(self):
         """Checkout returns 400 when STRIPE not configured."""
         resp = self.client.post(
@@ -245,6 +251,7 @@ class StripeReadinessVerificationTestCase(TestCase):
         self.assertEqual(resp.data["error"]["code"], "validation_error")
         self.assertIn("Stripe", resp.data["error"]["message"])
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_portal_fails_safely_without_stripe(self):
         """Portal returns 400 when STRIPE not configured."""
         resp = self.client.post(
@@ -255,6 +262,7 @@ class StripeReadinessVerificationTestCase(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    @override_settings(STRIPE_CONFIGURED=False, STRIPE_API_KEY="", STRIPE_WEBHOOK_SECRET="", STRIPE_PRO_PRICE_ID="")
     def test_webhook_not_configured_returns_503(self):
         """Webhook returns 503 when STRIPE not configured."""
         resp = self.client.post(
@@ -265,25 +273,33 @@ class StripeReadinessVerificationTestCase(TestCase):
         )
         self.assertEqual(resp.status_code, 503)
 
+    @override_settings(
+        STRIPE_CONFIGURED=True,
+        STRIPE_API_KEY=TEST_STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_KEY,
+        STRIPE_PRO_PRICE_ID=TEST_PRICE_ID,
+    )
     def test_webhook_missing_signature_returns_400(self):
         """Webhook returns 400 without Stripe-Signature header."""
-        from django.test import override_settings
-        with override_settings(STRIPE_CONFIGURED=True, TEST_STRIPE_KEY="test-stripe-key-12345", TEST_WEBHOOK_KEY="test-webhook-key-12345", STRIPE_PRO_PRICE_ID="price_test_fake"):
-            resp = self.client.post(
-                "/api/v1/integrations/stripe/webhook/",
-                b'{"test": true}',
-                content_type="application/json",
-            )
-            self.assertEqual(resp.status_code, 400)
+        resp = self.client.post(
+            "/api/v1/integrations/stripe/webhook/",
+            b'{"test": true}',
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
 
+    @override_settings(
+        STRIPE_CONFIGURED=True,
+        STRIPE_API_KEY=TEST_STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_KEY,
+        STRIPE_PRO_PRICE_ID=TEST_PRICE_ID,
+    )
     def test_webhook_invalid_signature_returns_400(self):
         """Webhook returns 400 with invalid signature."""
-        from django.test import override_settings
-        with override_settings(STRIPE_CONFIGURED=True, TEST_STRIPE_KEY="test-stripe-key-12345", TEST_WEBHOOK_KEY="test-webhook-key-12345", STRIPE_PRO_PRICE_ID="price_test_fake"):
-            resp = self.client.post(
-                "/api/v1/integrations/stripe/webhook/",
-                b'{"test": true}',
-                content_type="application/json",
-                HTTP_STRIPE_SIGNATURE="t=1234567890,v1=badsignature",
-            )
-            self.assertEqual(resp.status_code, 400)
+        resp = self.client.post(
+            "/api/v1/integrations/stripe/webhook/",
+            b'{"test": true}',
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE="t=1234567890,v1=badsignature",
+        )
+        self.assertEqual(resp.status_code, 400)

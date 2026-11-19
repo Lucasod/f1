@@ -10,7 +10,7 @@ class DelegationBootstrapTests(unittest.TestCase):
         contract = (ROOT / '.kilo/fird/contratos-delegacao.md').read_text()
         self.assertIn('End with your report; the task result returns to Orchestra', developer)
         self.assertNotIn('Return the result to Orchestra through task.', developer)
-        self.assertIn('user role alone does not prove direct origin', developer)
+        self.assertIn('user role alone does not prove direct origin', developer.lower())
         self.assertIn('INDETERMINADA', contract)
         self.assertIn('The Developer ends with its report', orchestrator)
 
@@ -33,16 +33,19 @@ class DelegationBootstrapTests(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, text)
 
-    def test_authorization_uses_parent_transcript_with_limits(self):
+    def test_write_requires_authenticated_current_invocation(self):
         contract = (ROOT / '.kilo/fird/contratos-delegacao.md').read_text()
         developer = (ROOT / '.kilo/agents/code-developer.md').read_text()
         orchestrator = (ROOT / '.kilo/agents/code-orchestrator.md').read_text()
-        for phrase in ('transcrição da sessão principal', 'papel `User`',
-                       'não comprova criptograficamente', 'BLOCKED'):
+        section = contract.split('### 3.3 ', 1)[1].split('### 3.4 ', 1)[0]
+        for phrase in ('INDETERMINADA', 'não autoriza escrita nem bootstrap',
+                       'vínculo autenticado da chamada atual', 'somente leitura'):
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase, contract)
-        self.assertIn('parent session transcript', developer)
-        self.assertIn('parent session transcript', orchestrator)
+                self.assertIn(phrase, section)
+        self.assertNotIn('essa ausência, por si só, não bloqueia', section)
+        self.assertIn('authenticated binding of the current invocation', developer)
+        self.assertIn('authenticated binding of the current invocation', orchestrator)
+        self.assertNotIn('Unavailable provenance metadata alone does not block', developer)
 
     def test_implementation_is_scoped_and_security_permissions_stay_protected(self):
         text = (ROOT / '.kilo/agents/code-developer.md').read_text()

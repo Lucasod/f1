@@ -124,7 +124,7 @@ A requisição de revisão (§4 do contrato) deve conter os mesmos 9 elementos d
 | `INCONCLUSIVE` | Evidência insuficiente. | Registrar evidência faltante; solicitar clarificação humana. Não auto-retry. |
 | `BLOCKED` | Decisão não resolvida, falha de permissão, operação destrutiva, gate humano. | Registrar blocker; aguardar direção humana. |
 
-**Regra:** `PASS` ⇔ lista de findings corretivos vazia. `PASS` não garante ausência de defeitos — apenas que nenhum problema foi identificado com a evidência disponível.
+**Regra:** `PASS` exige lista de findings corretivos vazia e evidência verificável independentemente suficiente para o escopo; lista vazia isoladamente não autoriza `PASS`. `PASS` não garante ausência de defeitos — apenas que nenhum problema foi identificado com a evidência disponível.
 
 ---
 

@@ -134,7 +134,7 @@ A requisição de revisão (contrato §4) deve conter os mesmos 9 elementos da d
 | `INCONCLUSIVE` | Evidência insuficiente. | Registrar evidência faltante; aguardar clarificação humana. Não auto-retry. |
 | `BLOCKED` | Decisão não resolvida, falha de permissão, operação destrutiva, gate humano. | Registrar blocker; aguardar direção humana. |
 
-**Regra:** `PASS` ⇔ lista de findings corretivos vazia. `PASS` não garante ausência de defeitos — apenas que nenhum problema foi identificado com a evidência disponível.
+**Regra:** `PASS` exige lista de findings corretivos vazia e evidência verificável independentemente suficiente para o escopo; lista vazia isoladamente não autoriza `PASS`. `PASS` não garante ausência de defeitos — apenas que nenhum problema foi identificado com a evidência disponível.
 
 ---
 
@@ -150,7 +150,7 @@ O Developer recebe delegação no formato §3 do contrato (`.kilo/fird/contratos
 - O Developer não pode commitar, pushar, mergear, rebasear ou publicar.
 - O Developer não pode modificar `.kilo/` nem regras globais sem autorização explícita.
 - O Developer não delega (task tool negado); reporta resultados ao Orchestra.
-- Tratar o relatório como evidência; o Reviewer inspeciona o diff real.
+- Tratar o relatório como contexto não confiável; o Reviewer verifica o diff real e as evidências necessárias por fonte independente.
 
 ### 5.2 Delegação Orchestra → Developer (referência)
 
