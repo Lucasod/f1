@@ -90,9 +90,35 @@ export class RedisCartRepository implements CartRepository {
       `,
       addItem: `
         local items_data = redis.call('HGET', KEYS[1], 'items')
+        if not items_data then
+          -- Cart doesn't exist yet, create it with this first item
+          local new_generation = ARGV[9]
+          if not new_generation or new_generation == '' then new_generation = tostring(math.random(1000000000, 9999999999)) end
+          local new_version = 1
+          redis.call('HSET', KEYS[1], 'items', cjson.encode({{
+            product_id = ARGV[1],
+            vendor_id = ARGV[2],
+            quantity = tonumber(ARGV[3]),
+            added_at = ARGV[4],
+            unit_price = tonumber(ARGV[7])
+          }}), 'updated_at', ARGV[5], 'version', new_version, 'generation', new_generation)
+          redis.call('EXPIRE', KEYS[1], ARGV[6])
+          return cjson.encode({
+            items = {{
+              product_id = ARGV[1],
+              vendor_id = ARGV[2],
+              quantity = tonumber(ARGV[3]),
+              added_at = ARGV[4],
+              unit_price = tonumber(ARGV[7])
+            }},
+            generation = new_generation,
+            updated_at = ARGV[5],
+            version = new_version
+          })
+        end
         local generation = redis.call('HGET', KEYS[1], 'generation')
         local version = tonumber(redis.call('HGET', KEYS[1], 'version'))
-        if not items_data or not generation or generation == '' or not version or generation ~= ARGV[9] then return 'CART_CONFLICT' end
+        if not generation or generation == '' or not version or generation ~= ARGV[9] then return 'CART_CONFLICT' end
         local items = {}
         if items_data then
           items = cjson.decode(items_data)
@@ -484,7 +510,7 @@ const items: CartItem[] = (storedItems as StoredCartItem[]).map((item) => ({
       snapshot?.generation || ''
     ) as string;
 
-    if (result === CartError.STOCK_INSUFFICIENT || result === CartError.CART_CONFLICT) {
+    if (result === CartError.STOCK_INSUFFICIENT) {
       throw new Error(result);
     }
 

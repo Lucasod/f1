@@ -148,6 +148,8 @@ export function createPayoutRoutes({ authService, payoutService, vendorRepo }: P
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
+          case PayoutError.PAYOUT_PROVIDER_UNAVAILABLE:
+            return res.status(503).json({ error: PayoutError.PAYOUT_PROVIDER_UNAVAILABLE, message: 'Payout provider unavailable' });
           case PayoutError.PAYOUT_NOT_FOUND:
             return res.status(404).json({ error: PayoutError.PAYOUT_NOT_FOUND, message: 'Payout not found' });
           case PayoutError.PAYOUT_NOT_PROCESSABLE:

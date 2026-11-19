@@ -4,7 +4,6 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { orderApi, Order, OrderVendorGroup, OrderItem, OrderStatus, Address } from '@/shared/api/order';
 import { vendorApi } from '@/shared/api/vendor';
-import { cartApi } from '@/shared/api/cart';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
 import React from 'react';

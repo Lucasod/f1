@@ -8,6 +8,7 @@ interface VendorDoc {
   slug: string;
   status: VendorStatus;
   commissionPct: number;
+  stripeAccountId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,7 @@ export class MongoVendorRepository implements VendorRepository {
           slug: vendor.slug,
           status: vendor.status,
           commissionPct: vendor.commissionPct,
+          ...(vendor.stripeAccountId ? { stripeAccountId: vendor.stripeAccountId } : {}),
           updatedAt: now
         },
         $setOnInsert: {
@@ -125,6 +127,7 @@ export class MongoVendorRepository implements VendorRepository {
           slug: vendor.slug,
           status: vendor.status,
           commissionPct: vendor.commissionPct,
+          ...(vendor.stripeAccountId ? { stripeAccountId: vendor.stripeAccountId } : {}),
           updatedAt: now
         }
       }
@@ -148,6 +151,7 @@ export class MongoVendorRepository implements VendorRepository {
       slug: doc.slug,
       status: doc.status,
       commissionPct: doc.commissionPct,
+      stripeAccountId: doc.stripeAccountId,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt
     });

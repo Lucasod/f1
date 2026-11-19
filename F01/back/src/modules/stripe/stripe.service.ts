@@ -43,7 +43,7 @@ export class StripeServiceError extends Error {
   }
 
   static isStripeServiceError(error: unknown): error is StripeServiceError {
-    return error && typeof error === 'object' && StripeServiceErrorBrand in error;
+    return !!error && typeof error === 'object' && StripeServiceErrorBrand in error;
   }
 }
 
@@ -65,7 +65,7 @@ function getStripeClient(): Stripe {
     );
   }
   return new Stripe(secretKey, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
   });
 }
 
@@ -222,6 +222,25 @@ export class StripeService {
         'createConnectAccount',
         (error as any).statusCode,
         (error as any).code
+      );
+    }
+  }
+
+  async createConnectOnboardingLink(accountId: string, returnUrl: string, refreshUrl: string): Promise<string> {
+    try {
+      const link = await this.stripe.accountLinks.create({
+        account: accountId,
+        return_url: returnUrl,
+        refresh_url: refreshUrl,
+        type: 'account_onboarding',
+      });
+      return link.url;
+    } catch (error) {
+      throw new StripeServiceError(
+        `Failed to create Connect onboarding link: ${error instanceof Error ? error.message : 'unknown'}`,
+        'createConnectOnboardingLink',
+        (error as any)?.statusCode,
+        (error as any)?.code,
       );
     }
   }

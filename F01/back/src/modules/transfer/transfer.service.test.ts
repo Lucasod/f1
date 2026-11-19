@@ -145,7 +145,7 @@ describe('Transfer Service', () => {
 
       expect(result.entity.amount).toBe(90);
       expect(result.entity.currency).toBe('brl');
-      expect(result.entity.status).toBe(TransferStatus.PROCESSING);
+      expect(result.entity.status).toBe(TransferStatus.COMPLETED);
       expect(result.entity.stripeTransferId).toBe('tr_stripe_123');
       expect(mockStripeTransfers.create).toHaveBeenCalledWith({
         amount: 9000,
@@ -154,6 +154,13 @@ describe('Transfer Service', () => {
         source_transaction: 'ch_stripe_456',
         transfer_group: 'order-1',
       }, { idempotencyKey: 'order-1:ovg-1:1' });
+    });
+
+    it('rejects a missing connected account before persisting or calling Stripe', async () => {
+      mockVendorRepo.findById.mockResolvedValue(null);
+      await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_stripe_456')).rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
+      expect(transferRepo.save).not.toHaveBeenCalled();
+      expect(mockStripeTransfers.create).not.toHaveBeenCalled();
     });
 
     it('is idempotent: returns existing completed transfer', async () => {

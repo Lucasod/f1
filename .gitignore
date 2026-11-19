@@ -39,3 +39,4 @@ F04/backend/private_storage/
 **/playwright-report/
 **/test-results/
 F01/front/json/
+F01/front/test-results.json/

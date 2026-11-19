@@ -21,6 +21,7 @@ describe('Payout Routes (T-1003)', () => {
   let vendorRepo: InMemoryVendorRepository;
   let authService: AuthService;
   let payoutService: PayoutService;
+  let payoutRepo: InMemoryPayoutRepository;
   let consumerToken: string;
   let vendorToken: string;
   let adminToken: string;
@@ -31,8 +32,9 @@ describe('Payout Routes (T-1003)', () => {
     personRepo = new InMemoryPersonRepository();
     vendorRepo = new InMemoryVendorRepository();
     authService = new AuthService(personRepo, 'test-secret-key', '24h', '30d');
+    payoutRepo = new InMemoryPayoutRepository();
     payoutService = new PayoutService(
-      new InMemoryPayoutRepository(),
+      payoutRepo,
       vendorRepo
     );
 
@@ -183,7 +185,7 @@ describe('Payout Routes (T-1003)', () => {
   });
 
   describe('approve/process/fail/cancel flow', () => {
-    it('full flow', async () => {
+    it('processes an approved payout to PROCESSING (not COMPLETED)', async () => {
       const cr = await request(app).post('/api/v1/payouts').set('Authorization', `Bearer ${vendorToken}`).send({ amount: 10 });
       const id = cr.body.payout.id;
       const approveRes = await request(app).patch(`/api/v1/payouts/${id}/approve`).set('Authorization', `Bearer ${adminToken}`);
@@ -191,7 +193,11 @@ describe('Payout Routes (T-1003)', () => {
       expect(approveRes.body.payout.status).toBe(PayoutStatus.APPROVED);
       const processRes = await request(app).post(`/api/v1/payouts/${id}/process`).set('Authorization', `Bearer ${adminToken}`);
       expect(processRes.status).toBe(200);
-      expect(processRes.body.payout.status).toBe(PayoutStatus.COMPLETED);
+      expect(processRes.body.payout.status).toBe(PayoutStatus.PROCESSING);
+      expect(processRes.body.payout.processedAt).toBeUndefined();
+      const persisted = await payoutRepo.findById(id);
+      expect(persisted!.status).toBe(PayoutStatus.PROCESSING);
+      expect(persisted!.processedAt).toBeUndefined();
     });
 
     it('approve by non-admin forbidden (route guard)', async () => {
@@ -230,7 +236,9 @@ describe('Payout Routes (T-1003)', () => {
       const cr = await request(app).post('/api/v1/payouts').set('Authorization', `Bearer ${vendorToken}`).send({ amount: 10 });
       const id = cr.body.payout.id;
       await request(app).patch(`/api/v1/payouts/${id}/approve`).set('Authorization', `Bearer ${adminToken}`);
-      await request(app).post(`/api/v1/payouts/${id}/process`).set('Authorization', `Bearer ${adminToken}`);
+      const processing = (await payoutRepo.findById(id))!;
+      processing.startProcessing();
+      await payoutRepo.update(processing);
       const res = await request(app).patch(`/api/v1/payouts/${id}/cancel`).set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(409);
       expect(res.body.error).toBe(PayoutError.PAYOUT_NOT_CANCELLABLE);

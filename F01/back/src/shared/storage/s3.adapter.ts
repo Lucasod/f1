@@ -240,7 +240,7 @@ export class S3StorageAdapter implements StorageAdapter {
 
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     const safeKey = this.sanitizeKey(key);
-    const result = this.client.getSignedUrl({ Bucket: this.bucket, Key: safeKey, Expires: expiresIn }, expiresIn);
+    const result = this.client.getSignedUrl({ Bucket: this.bucket, Key: safeKey }, expiresIn);
     if (typeof result === 'string') return result;
     return await result;
   }

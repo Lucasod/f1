@@ -8,15 +8,15 @@ import {
   FinancialMovement,
   MovementType,
 } from './financial.movement';
-import { Vendor, InMemoryVendorRepository } from '../vendor/vendor.domain';
-import { Order, OrderStatus, InMemoryOrderRepository } from '../order/order.domain';
+import { Vendor, VendorRepository } from '../vendor/vendor.domain';
+import { Order, OrderStatus, OrderRepository } from '../order/order.domain';
 import {
   Payment,
   PaymentStatus,
-  InMemoryPaymentRepository,
+  PaymentRepository,
 } from '../order/order.domain';
 import { Transfer, TransferStatus } from '../transfer/transfer.domain';
-import { Payout, PayoutStatus, InMemoryPayoutRepository } from '../payout/payout.domain';
+import { Payout, PayoutStatus, PayoutRepository } from '../payout/payout.domain';
 
 export interface FinancialHistoryEntry {
   id: string;
@@ -43,24 +43,24 @@ export interface FinancialDashboard {
 }
 
 export class VendorFinancialDashboardService {
-  private readonly vendorRepo: InMemoryVendorRepository;
-  private readonly orderRepo: InMemoryOrderRepository;
-  private readonly paymentRepo: InMemoryPaymentRepository;
+  private readonly vendorRepo: VendorRepository;
+  private readonly orderRepo: OrderRepository;
+  private readonly paymentRepo: PaymentRepository;
   private readonly movementRepo:
-    | import('./financial.movement').InMemoryFinancialMovementRepository
+    | import('./financial.movement').FinancialMovementRepository
     | undefined;
   private readonly allocationRepo: FinancialAllocationRepository;
-  private readonly payoutRepo: InMemoryPayoutRepository;
+  private readonly payoutRepo: PayoutRepository;
 
   constructor(
-    vendorRepo: InMemoryVendorRepository,
-    orderRepo: InMemoryOrderRepository,
-    paymentRepo: InMemoryPaymentRepository,
+    vendorRepo: VendorRepository,
+    orderRepo: OrderRepository,
+    paymentRepo: PaymentRepository,
     movementRepo:
-      | import('./financial.movement').InMemoryFinancialMovementRepository
+      | import('./financial.movement').FinancialMovementRepository
       | undefined,
     allocationRepo: FinancialAllocationRepository,
-    payoutRepo: InMemoryPayoutRepository
+    payoutRepo: PayoutRepository
   ) {
     this.vendorRepo = vendorRepo;
     this.orderRepo = orderRepo;
@@ -137,16 +137,22 @@ export class VendorFinancialDashboardService {
       const effectiveAt = move.data.effectiveAt;
       if (start && effectiveAt < start) continue;
       if (end && effectiveAt > end) continue;
+      // Only count COMPLETED transfers as received in Stripe.
+      // MovementType.VENDOR_TRANSFER is the movement type, not transfer status;
+      // the transfer completion status is carried in metadata.status.
+      if (move.data.metadata?.status !== 'completed') continue;
       receivedInStripe += move.data.amount;
     }
 
-    // --- Pending distribution: vendor net amounts for non-COMLETED transfers ---
-    // Non-COMLETED = transfers that are not COMPLETED (pending, processing, failed, reversed)
+    // --- Pending distribution: vendor net amounts for non-COMPLETED transfers ---
+    // Non-COMPLETED = transfers that are not COMPLETED (pending, processing, failed, reversed)
     let pendingDistribution = 0;
     for (const move of vendorTransferMovements) {
       const effectiveAt = move.data.effectiveAt;
       if (start && effectiveAt < start) continue;
       if (end && effectiveAt > end) continue;
+      // Only count non-COMPLETED transfers as pending distribution.
+      if (move.data.metadata?.status === 'completed') continue;
       pendingDistribution += move.data.amount;
     }
 
@@ -201,6 +207,8 @@ export class VendorFinancialDashboardService {
     // 1. Payments from vendor's orders
     const allOrderPayments: Payment[] = [];
     for (const order of theVendorOrders) {
+      const vendorIds = new Set(order.vendorGroups.map(group => group.vendorId));
+      if (vendorIds.size !== 1 || !vendorIds.has(vendorId)) continue;
       const payments = await this.paymentRepo.findByOrderId(order.id);
       allOrderPayments.push(...payments);
     }
@@ -271,8 +279,11 @@ export class VendorFinancialDashboardService {
     // 3. Transfers for this vendor's order groups
     const seenTransferIds = new Set<string>();
     for (const order of theVendorOrders) {
+      const orderVendorIds = new Set(order.vendorGroups.map(group => group.vendorId));
+      if (orderVendorIds.size !== 1 || !orderVendorIds.has(vendorId)) continue;
       const orderMovements = await this.movementRepo!.findByOrderId(order.id);
       for (const move of orderMovements) {
+        if (move.data.vendorId !== vendorId) continue;
         if (seenTransferIds.has(move.data.movementId)) continue;
         seenTransferIds.add(move.data.movementId);
 

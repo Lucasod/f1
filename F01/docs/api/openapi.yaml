@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: FS-01 Marketplace API
   version: 1.0.0
-  description: API specification for the FS-01 Marketplace
+  description: Partial API specification for the FS-01 Marketplace; consult current routes and tests for endpoints not yet documented.
 servers:
   - url: http://localhost:3000/api/v1
     description: Development server
@@ -3150,6 +3150,127 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /checkout/attempts:
+    post:
+      summary: Prepare a checkout attempt
+      description: Creates a proposal for the authenticated consumer; this does not itself confirm payment.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, shippingAddressId]
+              properties:
+                requestId: { type: string }
+                shippingAddressId: { type: string }
+                couponSelections:
+                  type: array
+                  items:
+                    type: object
+                    required: [vendorId, code]
+                    properties:
+                      vendorId: { type: string }
+                      code: { type: string }
+      responses:
+        '201': { description: Attempt prepared }
+        '400': { description: Invalid input }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}:
+    get:
+      summary: Read an owned checkout attempt
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Attempt returned }
+        '403': { description: Forbidden }
+        '404': { description: Attempt not found }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}/accept:
+    post:
+      summary: Accept a checkout attempt snapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, expectedHash]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                expectedHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { description: Attempt accepted }
+        '400': { description: Invalid input }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}/checkout:
+    post:
+      summary: Create checkout from an accepted attempt
+      description: Creates an order and payment under the current test gate; provider completion requires a verified webhook.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Order and payment created }
+        '400': { description: Invalid request }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Checkout unavailable }
+  /products:
+    get:
+      summary: List public products
+      security: []
+      responses:
+        '200': { description: Product listing }
+    post:
+      summary: Create a vendor product
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Product created }
+        '400': { description: Invalid product }
+        '401': { description: Authentication required }
+        '403': { description: Vendor role required }
+  /products/{productId}:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Get a public product
+      security: []
+      responses:
+        '200': { description: Product returned }
+        '404': { description: Product not found }
+    patch:
+      summary: Update a product
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Product updated }
+        '401': { description: Authentication required }
+        '403': { description: Not authorized }
+        '404': { description: Product not found }
+    delete:
+      summary: Inactivate a product
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Product inactivated }
+        '401': { description: Authentication required }
+        '403': { description: Not authorized }
+        '404': { description: Product not found }
   /checkout/preview:
     get:
       summary: Preview checkout totals
@@ -3523,11 +3644,18 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /payments/webhook:
+  /webhooks/stripe:
     post:
       summary: Stripe webhook handler
-      description: "Planned Stripe integration contract; the current runtime does not mount this endpoint or process provider webhooks."
+      description: "Receives Stripe events using the raw request body and validates the Stripe-Signature header. Recovery after partial processing remains incomplete."
       operationId: handleStripeWebhook
+      security: []
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:

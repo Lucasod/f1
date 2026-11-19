@@ -4,6 +4,7 @@ import { Person, PersonError, PersonRepository, PersonRole, ContactInfo, Address
 interface PersonDoc {
   _id: string;
   roles: PersonRole[];
+  stripeCustomerId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,6 +93,7 @@ export class MongoPersonRepository implements PersonRepository {
       {
         $set: {
           roles: person.roles,
+          ...(person.stripeCustomerId ? { stripeCustomerId: person.stripeCustomerId } : {}),
           updatedAt: now
         },
         $setOnInsert: {
@@ -265,6 +267,7 @@ export class MongoPersonRepository implements PersonRepository {
       contactInfos,
       addresses,
       roles: personDoc.roles,
+      stripeCustomerId: personDoc.stripeCustomerId,
       credential: credentialDoc?.hashedPassword || null,
       createdAt: personDoc.createdAt,
       updatedAt: personDoc.updatedAt

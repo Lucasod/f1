@@ -5,7 +5,7 @@ import { Order, OrderStatus, InMemoryOrderRepository } from '../order/order.doma
 import { Payment, PaymentStatus, InMemoryPaymentRepository } from '../order/order.domain';
 import { Payout, PayoutStatus, InMemoryPayoutRepository } from '../payout/payout.domain';
 import { FinancialAllocation, FinancialAllocationType, InMemoryFinancialAllocationRepository } from './financial.domain';
-import { InMemoryFinancialMovementRepository } from './financial.movement';
+import { FinancialMovementRecord, InMemoryFinancialMovementRepository, MovementType } from './financial.movement';
 
 describe('VendorFinancialDashboardService (FIND-A02-P1-001: currency BRL)', () => {
   let vendorRepo: InMemoryVendorRepository;
@@ -92,4 +92,36 @@ describe('VendorFinancialDashboardService (FIND-A02-P1-001: currency BRL)', () =
       expect(entry.currency).toBe('BRL');
     }
   });
+  it('does not expose another vendor or unassigned movements from a shared order', async () => {
+    const now = new Date();
+    for (const vendorId of ['vendor-1', 'vendor-2', undefined]) {
+      await movementRepo.save(FinancialMovementRecord.create({
+        movementType: MovementType.VENDOR_TRANSFER,
+        amount: vendorId === 'vendor-1' ? 30 : 900,
+        currency: 'brl', relatedEntityType: 'transfer',
+        relatedEntityId: `transfer-${vendorId}`, orderId: order.id, vendorId,
+        effectiveAt: now, recordedAt: now,
+      }));
+    }
+    const dashboard = await service.getVendorDashboard('vendor-1');
+    const transfers = dashboard.history.filter(entry => entry.relatedEntityType === 'transfer');
+    expect(transfers.map(entry => entry.relatedEntityId)).toEqual(['transfer-vendor-1']);
+  });
+
+  it('does not expose the full payment amount of a multi-vendor order', async () => {
+    const sharedOrder = Order.create({
+      personId: 'buyer',
+      vendorGroups: [
+        { vendorId: 'vendor-1', commissionPct: 10, items: [{ productId: 'p1', productName: 'A', vendorId: 'vendor-1', quantity: 1, unitPrice: 20 }] },
+        { vendorId: 'vendor-2', commissionPct: 10, items: [{ productId: 'p2', productName: 'B', vendorId: 'vendor-2', quantity: 1, unitPrice: 500 }] },
+      ],
+      shippingAddress: { id: 'a', street: 'Street', number: '1', neighborhood: 'N', city: 'City', state: 'SP', isPrimary: true },
+    });
+    await orderRepo.save(sharedOrder);
+    const sharedPayment = Payment.create({ orderId: sharedOrder.id, personId: 'buyer', amount: 520 });
+    await paymentRepo.save(sharedPayment);
+    const dashboard = await service.getVendorDashboard('vendor-1');
+    expect(dashboard.history.some(entry => entry.id === sharedPayment.id)).toBe(false);
+  });
+
 });

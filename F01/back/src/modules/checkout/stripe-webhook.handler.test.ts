@@ -139,6 +139,7 @@ describe('Stripe webhook handler', () => {
   it('returns 200 on duplicate webhook delivery without re-processing', async () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
     const event = {
+      id: 'evt_test_duplicate_webhook',
       type: 'checkout.session.completed',
       data: { object: {
         metadata: { paymentId: 'payment-1' },
@@ -150,12 +151,10 @@ describe('Stripe webhook handler', () => {
     } as unknown as Stripe.Event;
     const constructEvent = vi.fn().mockReturnValue(event);
     const mockPayment = { id: 'payment-1', personId: 'consumer-1', status: 'pending', orderId: 'order-1', amount: 10000, provider: 'stripe' };
-    const isPaymentFinalized = vi.fn();
-    isPaymentFinalized.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized, orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
+      { completeCheckoutPayment, getPaymentById: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ ...mockPayment, eventId: 'evt_test_duplicate_webhook' }), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any,
       { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
     );

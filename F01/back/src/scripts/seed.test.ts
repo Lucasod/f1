@@ -120,6 +120,7 @@ describe('Seed Integration', () => {
         SEED_VENDOR_BOOK_WORLD_PASSWORD: vendorBookWorldPassword,
         SEED_CONSUMER_PASSWORD: consumerPassword,
         SEED_ADMIN_PASSWORD: adminPassword,
+        TEST_USER_PASSWORD: process.env.TEST_USER_PASSWORD,
       })).not.toThrow();
     });
 
@@ -382,7 +383,7 @@ describe('Seed Integration', () => {
 
       // Verify specific product-category associations from seed data
       // Tech Store products
-      const techStoreProducts = products.filter(p => p.name.includes('iPhone') || p.name.includes('MacBook') || p.name.includes('iPad') || p.name.includes('AirPods'));
+      const techStoreProducts = products.filter(p => p.name.includes('SHYPHONE') || p.name.includes('SHYBOOK') || p.name.includes('SHYPAD') || p.name.includes('SHYRPODS'));
       expect(techStoreProducts.length).toBe(4);
 
       // Fashion Hub products

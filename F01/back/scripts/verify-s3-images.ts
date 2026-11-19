@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   console.log(`  Local:   ${LOCAL_BASE}`);
   console.log('');
 
-  const s3 = new AwsS3Client(REGION);
+  const s3 = new AwsS3Client(REGION, BUCKET);
   const raw = new S3Client({ region: REGION });
 
   const results: VerifyResult[] = [];

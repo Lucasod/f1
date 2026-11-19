@@ -215,7 +215,7 @@ async function main(): Promise<void> {
     throw new Error('S3 configuration incomplete: AWS_S3_BUCKET and AWS_REGION are required');
   }
 
-  const client = new AwsS3Client(region);
+  const client = new AwsS3Client(region, bucket);
 
   const scriptDir = resolve(__dirname);
   const localBase = resolve(scriptDir, '../../storage/uploads/products'); // F01/storage/uploads/products

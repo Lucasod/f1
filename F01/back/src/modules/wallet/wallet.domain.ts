@@ -268,6 +268,9 @@ export class InMemoryWalletTransactionRepository implements WalletTransactionRep
   private readonly referenceIndex = new Map<string, string>();
 
   async save(tx: WalletTransaction): Promise<WalletTransaction> {
+    if (this.referenceIndex.has(tx.referenceId)) {
+      throw new Error(WalletError.DUPLICATE_REFERENCE);
+    }
     this.txs.set(tx.id, tx);
     if (!this.walletIndex.has(tx.walletId)) this.walletIndex.set(tx.walletId, new Set());
     this.walletIndex.get(tx.walletId)!.add(tx.id);

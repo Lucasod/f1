@@ -10,6 +10,7 @@ import {
   InMemoryOrderRepository,
   InMemoryPaymentRepository,
   Order,
+  OrderVendorGroup,
   OrderVendorGroupStatus,
 } from './order.domain';
 import { OrderService } from './order.service';
@@ -262,5 +263,41 @@ describe('Order vendor group status update', () => {
       .patch(`/api/v1/orders/${orderId}/vendor-groups/${vendorGroupId}/status`)
       .send({ status: OrderVendorGroupStatus.CONFIRMED })
       .expect(401);
+  });
+
+  it('normalizes persisted uppercase status and allows PENDING -> CONFIRMED transition', () => {
+    // Simulates data persisted with uppercase status ("PENDING"), as found in
+    // MongoDB for order-ts-1795032892374. Before the fix,
+    // `VALID_VENDOR_GROUP_TRANSITIONS[this.status]` resolved to `undefined` and
+    // `updateStatus` threw `TypeError: Cannot read properties of undefined
+    // (reading 'includes')`, which surfaced as a 500 from the confirm endpoint.
+    const vendorGroup = OrderVendorGroup.reconstruct({
+      id: 'vg-ts-1795032892374',
+      orderId: 'order-ts-1795032892374',
+      vendorId: 'vendor-00cjp4oa',
+      status: 'PENDING', // uppercase, as persisted in MongoDB
+      items: [{
+        id: 'item-1795032892374-0',
+        productId: 'prod-1000000000010-000010',
+        productName: 'iPhone 15 Pro',
+        vendorId: 'vendor-00cjp4oa',
+        quantity: 1,
+        unitPrice: 9999,
+        totalPrice: 9999,
+      }],
+      subtotal: 9999,
+      commissionPct: 10,
+      commissionAmount: 999.9,
+      vendorNet: 8999.1,
+      createdAt: new Date('2026-11-18T20:14:52.374Z'),
+      updatedAt: new Date('2026-11-18T20:14:52.374Z'),
+    });
+
+    expect(vendorGroup.status).toBe(OrderVendorGroupStatus.PENDING);
+
+    // Previously threw: TypeError: Cannot read properties of undefined (reading 'includes')
+    vendorGroup.updateStatus(OrderVendorGroupStatus.CONFIRMED);
+
+    expect(vendorGroup.status).toBe(OrderVendorGroupStatus.CONFIRMED);
   });
 });

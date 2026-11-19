@@ -203,10 +203,10 @@ financialService = new FinancialService(financialRepo);
     financialRepo,
     payoutRepo
   );
-  paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo);
   if (transferRepo) {
     transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '', orderRepo, movementRepo, eventRepo);
   }
+  paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo, undefined, undefined, transferService);
 payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService, movementRepo, eventRepo);
 }
 
@@ -328,6 +328,11 @@ eventRepo = new MongoFinancialEventRepository(db);
 
       // Initialize services with MongoDB repositories
       initializeServices();
+      // Belt-and-suspenders wiring: transferService is injected via constructor
+      // inside initializeServices(); set the property explicitly as documented.
+      // `transferService` is private readonly on PaymentService, so use a type
+      // assertion to assign it here (compile-time only; runtime assignment works).
+      (paymentService as any).transferService = transferService;
       console.log('✅ MongoDB repositories initialized');
 
       // Register routes after services are initialized

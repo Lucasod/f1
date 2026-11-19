@@ -147,7 +147,7 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
             return res.status(400).json({ error: OrderError.VENDOR_ID_REQUIRED, message: 'Vendor ID is required' });
           case OrderError.PERSON_ID_REQUIRED:
             return res.status(400).json({ error: OrderError.PERSON_ID_REQUIRED, message: 'Person ID is required' });
-        }
+          }
       }
       next(error);
     }

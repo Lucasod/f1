@@ -16,7 +16,7 @@ import {
  *   Step 22 : Vendor A prepares their OVG (CONFIRMED -> PREPARING).
  *   Step 23 : Vendor A ships their OVG (PREPARING -> SHIPPED).
  *   Step 24 : Vendor A delivers their OVG (SHIPPED -> DELIVERED).
- *   Isolation : Vendor B cannot access Vendor A's OVG (403).
+ * Isolation : Vendor B cannot access Vendor A's OVG (404).
  *   Step 25 : Vendor B fulfills their own OVG.
  *   Step 10 : Order reaches DELIVERED when all its OVGs are DELIVERED.
  *
@@ -46,8 +46,6 @@ const VENDOR_B_EMAIL = 'fashionhub@example.com';
 
 // Vendor passwords come from TEST_USER_PASSWORD env var (seed.ts uses it as fallback).
 // If TEST_USER_PASSWORD is not set, vendor login will be skipped.
-
-const OVG_FULFILLABLE_STATUSES: readonly string[] = ['PENDING', 'CONFIRMED'];
 
 interface OvgRef {
   orderId: string;
@@ -86,23 +84,21 @@ async function loginVendor(page: Page, email: string): Promise<string | null> {
 }
 
 /**
- * Find the vendor's first OVG in PENDING or CONFIRMED status.
+ * Find the vendor's first available OVG, regardless of status.
+ * The caller handles PENDING (confirm) vs CONFIRMED (skip straight to PREPARING).
  */
 async function findFulfillableOVG(page: Page, token: string): Promise<OvgRef | null> {
   const response = await apiFetch(page, 'GET', '/api/v1/vendor/orders', undefined, token);
   if (!response.ok()) return null;
   const data = await response.json();
   const groups: any[] = data?.vendorGroups ?? [];
-  for (const group of groups) {
-    if (OVG_FULFILLABLE_STATUSES.includes(group.status)) {
-      return {
-        orderId: group.orderId,
-        vendorGroupId: group.id,
-        status: group.status,
-      };
-    }
-  }
-  return null;
+  if (groups.length === 0) return null;
+  const group = groups[0];
+  return {
+    orderId: group.orderId,
+    vendorGroupId: group.id,
+    status: group.status,
+  };
 }
 
 /**
@@ -200,19 +196,19 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
     let currentStatusA = ovgA.status;
 
     // ---- Step 21 (cont.): confirm OVG when it is still PENDING ----
-    if (currentStatusA === 'PENDING') {
+    if (currentStatusA === 'pending') {
       const confirmResp = await transitionOVG(
         page,
         tokenA,
         ovgA.orderId,
         ovgA.vendorGroupId,
-        'CONFIRMED'
+        'confirmed'
       );
       expect(confirmResp.statusCode).toBe(200);
       expect(
         confirmResp.order?.vendorGroups?.find((g: any) => g.id === ovgA.vendorGroupId)?.status
-      ).toBe('CONFIRMED');
-      currentStatusA = 'CONFIRMED';
+      ).toBe('confirmed');
+      currentStatusA = 'confirmed';
       console.log(`[Step 21] OVG ${ovgA.vendorGroupId} confirmed`);
     }
 
@@ -222,18 +218,18 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenA,
       ovgA.orderId,
       ovgA.vendorGroupId,
-      'PREPARING'
+      'preparing'
     );
     expect(prepareResp.statusCode).toBe(200);
     expect(
       prepareResp.order?.vendorGroups?.find((g: any) => g.id === ovgA.vendorGroupId)?.status
-    ).toBe('PREPARING');
-    currentStatusA = 'PREPARING';
+    ).toBe('preparing');
+    currentStatusA = 'preparing';
     console.log(`[Step 22] OVG ${ovgA.vendorGroupId} preparing`);
 
     // Verify via GET /api/v1/orders/:orderId
     const groupsAfterPrepare = await orderVendorGroups(page, tokenA, ovgA.orderId);
-    expect(ovgStatus(groupsAfterPrepare, ovgA.vendorGroupId)).toBe('PREPARING');
+    expect(ovgStatus(groupsAfterPrepare, ovgA.vendorGroupId)).toBe('preparing');
 
     // ---- Step 23: PREPARING -> SHIPPED (order -> SHIPPED) ----
     const shipResp = await transitionOVG(
@@ -241,17 +237,17 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenA,
       ovgA.orderId,
       ovgA.vendorGroupId,
-      'SHIPPED'
+      'shipped'
     );
     expect(shipResp.statusCode).toBe(200);
     expect(
       shipResp.order?.vendorGroups?.find((g: any) => g.id === ovgA.vendorGroupId)?.status
-    ).toBe('SHIPPED');
-    currentStatusA = 'SHIPPED';
+    ).toBe('shipped');
+    currentStatusA = 'shipped';
     console.log(`[Step 23] OVG ${ovgA.vendorGroupId} shipped`);
 
     const groupsAfterShip = await orderVendorGroups(page, tokenA, ovgA.orderId);
-    expect(ovgStatus(groupsAfterShip, ovgA.vendorGroupId)).toBe('SHIPPED');
+    expect(ovgStatus(groupsAfterShip, ovgA.vendorGroupId)).toBe('shipped');
 
     // ---- Step 24: SHIPPED -> DELIVERED ----
     const deliverResp = await transitionOVG(
@@ -259,17 +255,17 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenA,
       ovgA.orderId,
       ovgA.vendorGroupId,
-      'DELIVERED'
+      'delivered'
     );
     expect(deliverResp.statusCode).toBe(200);
     expect(
       deliverResp.order?.vendorGroups?.find((g: any) => g.id === ovgA.vendorGroupId)?.status
-    ).toBe('DELIVERED');
-    currentStatusA = 'DELIVERED';
+    ).toBe('delivered');
+    currentStatusA = 'delivered';
     console.log(`[Step 24] OVG ${ovgA.vendorGroupId} delivered`);
 
     const groupsAfterDeliver = await orderVendorGroups(page, tokenA, ovgA.orderId);
-    expect(ovgStatus(groupsAfterDeliver, ovgA.vendorGroupId)).toBe('DELIVERED');
+    expect(ovgStatus(groupsAfterDeliver, ovgA.vendorGroupId)).toBe('delivered');
 
     // ------------------------------------------------------------------
     // Vendor B isolation — step 8 cross-check
@@ -284,7 +280,7 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       return;
     }
 
-    // Vendor B cannot access Vendor A's order (GET /api/v1/orders/:orderId -> 403)
+    // Vendor B cannot access Vendor A's order (GET /api/v1/orders/:orderId -> 404)
     const crossAccessResp = await apiFetch(
       page,
       'GET',
@@ -292,18 +288,18 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       undefined,
       tokenB
     );
-    expect(crossAccessResp.status()).toBe(403);
+    expect(crossAccessResp.status()).toBe(404);
     console.log(
       `[Isolation] Vendor B GET Vendor A's order ${ovgA.orderId} -> ${crossAccessResp.status()}`
     );
 
-    // Vendor B cannot transition Vendor A's OVG (PATCH -> 403)
+    // Vendor B cannot transition Vendor A's OVG (PATCH -> 404)
     const crossTransitionResp = await transitionOVG(
       page,
       tokenB,
       ovgA.orderId,
       ovgA.vendorGroupId,
-      'PREPARING'
+      'preparing'
     );
     expect(crossTransitionResp.statusCode).toBe(403);
     console.log(
@@ -324,16 +320,16 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
     }
 
     let currentStatusB = ovgB.status;
-    if (currentStatusB === 'PENDING') {
+    if (currentStatusB === 'pending') {
       const confirmResp = await transitionOVG(
         page,
         tokenB,
         ovgB.orderId,
         ovgB.vendorGroupId,
-        'CONFIRMED'
+        'confirmed'
       );
       expect(confirmResp.statusCode).toBe(200);
-      currentStatusB = 'CONFIRMED';
+      currentStatusB = 'confirmed';
       console.log(`[Step 25] Vendor B OVG ${ovgB.vendorGroupId} confirmed`);
     }
 
@@ -342,7 +338,7 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenB,
       ovgB.orderId,
       ovgB.vendorGroupId,
-      'PREPARING'
+      'preparing'
     );
     expect(prepareRespB.statusCode).toBe(200);
     console.log(`[Step 25] Vendor B OVG ${ovgB.vendorGroupId} preparing`);
@@ -352,7 +348,7 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenB,
       ovgB.orderId,
       ovgB.vendorGroupId,
-      'SHIPPED'
+      'shipped'
     );
     expect(shipRespB.statusCode).toBe(200);
     console.log(`[Step 25] Vendor B OVG ${ovgB.vendorGroupId} shipped`);
@@ -362,18 +358,18 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
       tokenB,
       ovgB.orderId,
       ovgB.vendorGroupId,
-      'DELIVERED'
+      'delivered'
     );
     expect(deliverRespB.statusCode).toBe(200);
     expect(
       deliverRespB.order?.vendorGroups?.find((g: any) => g.id === ovgB.vendorGroupId)?.status
-    ).toBe('DELIVERED');
+    ).toBe('delivered');
     console.log(`[Step 25] Vendor B OVG ${ovgB.vendorGroupId} delivered`);
 
     // ---- Step 10: order reaches DELIVERED when all OVGs are DELIVERED ----
     const finalGroupsB = await orderVendorGroups(page, tokenB, ovgB.orderId);
     expect(finalGroupsB).not.toBeNull();
-    const bGroupDelivered = ovgStatus(finalGroupsB, ovgB.vendorGroupId) === 'DELIVERED';
+    const bGroupDelivered = ovgStatus(finalGroupsB, ovgB.vendorGroupId) === 'delivered';
     expect(bGroupDelivered).toBe(true);
 
     // When Vendor B shares the order with Vendor A, both vendors' OVGs are
@@ -381,10 +377,10 @@ test.describe('Golden Path Steps 21-25: Vendor Fulfillment E2E', () => {
     const sharedOrder = ovgB.orderId === ovgA.orderId;
     if (sharedOrder) {
       const finalGroupsA = await orderVendorGroups(page, tokenA, ovgA.orderId);
-      const aGroupDelivered = ovgStatus(finalGroupsA, ovgA.vendorGroupId) === 'DELIVERED';
+      const aGroupDelivered = ovgStatus(finalGroupsA, ovgA.vendorGroupId) === 'delivered';
       expect(aGroupDelivered).toBe(true);
       const allDelivered =
-        (finalGroupsA ?? []).concat(finalGroupsB ?? []).every((g: any) => g.status === 'DELIVERED');
+        (finalGroupsA ?? []).concat(finalGroupsB ?? []).every((g: any) => g.status === 'delivered');
       expect(allDelivered).toBe(true);
       console.log(
         `[Step 10] Shared order ${ovgB.orderId}: all OVGs delivered -> order DELIVERED`

@@ -85,6 +85,11 @@ export class TransferService {
       }
     }
 
+    const vendorId = await this.resolveVendorId(orderId, orderVendorGroupId);
+    const vendor = vendorId && this.vendorRepo ? await this.vendorRepo.findById(vendorId) : null;
+    const destinationAccountId = vendor?.stripeAccountId?.trim();
+    if (!destinationAccountId) throw new Error('TRANSFER_DESTINATION_UNAVAILABLE');
+
     // Calculate vendor net amount: ovgTotal × (1 - commission_pct/100)
     const vendorNet = ovgTotal * (1 - commissionPct / 100);
     const transferAmount = Math.round(vendorNet * 100) / 100; // 2 decimal precision
@@ -104,14 +109,6 @@ export class TransferService {
     // source_transaction = charge_id for synchronous payments
     // transfer_group = order_id for correlation
     // destination = vendor's Stripe connected account ID for attribution
-    const vendorId = await this.resolveVendorId(orderId, orderVendorGroupId);
-    let destinationAccountId = '';
-    if (vendorId && this.vendorRepo) {
-      const vendor = await this.vendorRepo.findById(vendorId);
-      if (vendor && vendor.stripeAccountId) {
-        destinationAccountId = vendor.stripeAccountId;
-      }
-    }
     const stripeTransfer = await this.stripe.transfers.create({
       amount: Math.round(transferAmount * 100), // Stripe expects amount in cents
       currency: 'brl',
@@ -125,7 +122,7 @@ export class TransferService {
     // Update the entity with Stripe transfer ID and provider transaction ID
     transferEntity.stripeTransferId = stripeTransfer.id;
     transferEntity.providerTransactionId = chargeId;
-    transferEntity.status = TransferStatus.PROCESSING;
+    transferEntity.status = TransferStatus.COMPLETED;
 
     // Persist updated entity
     await this.transferRepo.save(transferEntity);
@@ -133,7 +130,7 @@ export class TransferService {
     await this.recordTransferLedger(
       transferEntity,
       MovementType.VENDOR_TRANSFER,
-      EventType.TRANSFER_INITIATED
+      EventType.TRANSFER_COMPLETED
     );
 
     return { transfer: stripeTransfer, entity: transferEntity };

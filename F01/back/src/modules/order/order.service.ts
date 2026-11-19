@@ -204,6 +204,8 @@ export class OrderService {
       }
       const hasVendorGroup = order.vendorGroups.some(vg => vg.vendorId === vendorId);
       if (!hasVendorGroup) {
+        // Order exists but the vendor has no vendor group in it: hide it as 404
+        // to preserve the resource-hiding policy.
         return null;
       }
     } else if (role === 'admin') {

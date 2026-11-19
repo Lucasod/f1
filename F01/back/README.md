@@ -44,7 +44,7 @@ src/
 | Framework | Express 4.21 |
 | Database | MongoDB 6.9 (native driver) |
 | Cache | Redis 7 (ioredis) |
-| Search | Elasticsearch planned; search adapter is not yet connected |
+| Search | Elasticsearch search and synchronization adapters; availability depends on configuration |
 | Auth | JWT (jsonwebtoken), bcryptjs |
 | Validation | Module-level validation; Zod is not used by all routes |
 | Security | Helmet, CORS |
@@ -65,9 +65,9 @@ npm run test:coverage # Run tests with coverage report
 npm run seed         # Seed MongoDB with development demo data
 ```
 
-`npm run seed` connects to MongoDB using `MONGO_URI` and `MONGO_DB_NAME`; it does not use in-memory repositories. In development, startup seeds categories, vendors, and products only when the catalog is empty, while ensuring the demo accounts exist even when products are already present. The Consumer account is created with a development delivery address. Existing profile data and passwords are preserved when the accounts are reconciled.
+`npm run seed` connects to MongoDB using `MONGO_URI` and `MONGO_DB_NAME`; it does not use in-memory repositories. In development, startup seeds categories, vendors, and products only when the catalog is empty, while ensuring the demo accounts exist even when products are already present. The Consumer account is created with a development delivery address. Existing demo profiles are reused; the seed can refresh their credentials.
 
-Demo account credentials for newly created development accounts are `consumer@example.com` / ` process.env.TEST_USER_PASSWORD!` and `admin@example.com` / ` process.env.TEST_USER_PASSWORD!. Passwords are stored as bcrypt hashes. The admin is created only through the trusted seed path; public registration must not grant the ADMIN role.
+Demo account credentials for development use `consumer@example.com` and `admin@example.com`; the password is supplied via the test or seed environment. Passwords are stored as bcrypt hashes. The admin is created only through the trusted seed path; public registration must not grant the ADMIN role.
 
 When seeding in production with `SEED_FORCE=true`, set deployment-managed passwords for every seeded account:
 `SEED_VENDOR_TECH_STORE_PASSWORD`, `SEED_VENDOR_FASHION_HUB_PASSWORD`,
@@ -78,12 +78,9 @@ The seed validates all required secrets before writing data and fails rather tha
 
 ## Local Development Integrations
 
-- Product and review images use the local `StorageAdapter`; image API paths and object-key conventions are compatible with a future storage adapter. No AWS/S3 request is made.
-- Checkout returns a placeholder client secret for local flow testing. It does not authorize or capture a real payment. No Stripe SDK, Connect account, webhook, transfer, or provider refund is configured.
-- The runtime uses MongoDB repositories for people, vendors, categories, products, and reviews. Orders and payments are in-memory and reset on process restart.
-- Elasticsearch is planned but is not connected.
+The MongoDB startup path wires persistent repositories for orders, payments and other domains. A development fallback uses in-memory repositories. Elasticsearch synchronization and Stripe Checkout/webhook paths exist, but provider availability and financial recovery must be verified independently. Storage uses S3 when configured and local files otherwise. Connect transfers, payout confirmation and wallet atomicity remain incomplete; see the current run record.
 
-These are temporary development boundaries. Configure and validate the actual providers when the project reaches their integration requirement; do not treat local behavior as provider integration completion.
+The public registration route rejects the ADMIN role. Demo accounts are managed by the development seed; existing demo credentials can be refreshed by that seed.
 
 ## Environment Variables
 
@@ -96,7 +93,7 @@ Defined in `src/config/index.ts`. All have development defaults; **required in p
 | `MONGO_URI` | `mongodb://localhost:27017/fs01_marketplace` | MongoDB connection string |
 | `MONGO_DB_NAME` | `fs01_marketplace` | Database name |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
-| `ELASTICSEARCH_URL` | `http://localhost:9200` | Reserved for future Elasticsearch integration |
+| `ELASTICSEARCH_URL` | `http://localhost:9200` | Elasticsearch endpoint used by search and synchronization |
 | `JWT_SECRET` | `dev-secret-change-in-production` | JWT signing secret |
 | `JWT_EXPIRES_IN` | `24h` | Access token TTL |
 | `CORS_ORIGIN` | (empty) | Comma-separated allowed origins |
@@ -137,11 +134,11 @@ Base path: `/api/v1`
 ### Auth (`/auth`)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/register` | No | Register new person (consumer/vendor/admin) |
+| `POST` | `/register` | No | Register a consumer or vendor; public admin registration is forbidden |
 | `POST` | `/login` | No | Login, returns access + refresh tokens |
 | `POST` | `/refresh` | No | Refresh access token using refresh token |
 
-**Register body:** `{ name, taxIdType: "CPF"|"CNPJ", taxIdValue, email, password, role: "CONSUMER"|"VENDOR"|"ADMIN" }`
+**Register body:** `{ name, taxIdType: "CPF"|"CNPJ", taxIdValue, email, password, role: "CONSUMER"|"VENDOR" }`
 
 **Login body:** `{ email, password }`
 

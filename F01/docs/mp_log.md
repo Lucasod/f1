@@ -3012,3 +3012,160 @@ No secret values read, printed, or stored. References use masked notation only (
 
 ### Git State
 No commits made. No secret values read.
+
+---
+
+## MP-F01-P5-006 — Execução direta Work (2026-11-18)
+
+**Status:** in_progress; sem FULL PASS. **Run:** [orch-mp-f01-p5-006-2026-11-18](agent_runs/orch-mp-f01-p5-006-2026-11-18.md).
+
+Work executou diretamente, preservando modificações preexistentes. FIND-03 recebeu filtro e teste de movimentos por vendedor; FIND-02 recebeu correção parcial de retry anterior à captura; FIND-04 impede conclusão local de payout sem provedor. FIND-01, FIND-05, recuperação pós-captura, revisão independente e aceitação seguem pendentes. Payout permanece indisponível para processamento. Consulte o run record para testes, limites, estado Stripe e próximos passos. Nenhum commit, push, seed, exclusão de banco ou operação financeira externa foi executado por Work.
+
+
+## MP-F01-P5-008 — Auditoria independente Work
+
+**Data:** 2026-11-18. **Parecer:** NOT READY. Auditoria não destrutiva do estado F01 atual, com revisão financeira independente, testes isolados e consultas de leitura. Detalhes e limitações: [run record](agent_runs/gpt-mp-f01-p5-008-2026-11-18.md). A auditoria P5-007 não foi localizada e não foi pré-requisito.
+
+---
+
+## MP-F01-P5-009: Conclusão da Implementação Inicial do Marketplace — FS-01
+
+**Date:** 2026-11-19
+**Objective:** Concluir a implementação inicial do Marketplace corrigindo FIND-01 (wire do Stripe Connect), FIND-04 (processPayout do payout), a divergência de R$ 79,90, e os findings CR-001/CR-002/CR-003 do code reviewer; validar suíte completa de testes e build; obter veredito PASS do code reviewer.
+**Scope:** Alterações apenas nos seis arquivos de código/teste listados abaixo; atualização de `F01/docs/agent_runs/orch-mp-f01-p5-009-2026-11-19.md`, `F01/docs/mp_log.md` e `F01/docs/task_list.md`. Nenhum deploy, commit, push ou operação financeira externa.
+
+### Results
+
+**Tasks completed:**
+- **FIND-01 — Stripe Connect wiring:** `back/src/index.ts` injeta `TransferService` no `PaymentService`; destino Connect e identificação da charge corrigidos. (Origem: `orch-mp-f01-p5-006-2026-11-18.md` findings log, linha 30.)
+- **FIND-04 — Payout processPayout:** `back/src/modules/payout/payout.service.ts` processa payout somente com confirmação do provedor; rota responde indisponibilidade e preserva `APPROVED` sem provedor. (Origem: `orch-mp-f01-p5-006-2026-11-18.md` findings log, linha 33.)
+- **R$ 79,90 divergência:** Reconciliação de pagamento, pedido e grupo de vendor com subtotal 79,90; comissão ~7,99 e líquido ~71,91 verificados contra metadados do Stripe Test Mode (pedido `1795033475290-ypdrrexfw`, pagamento `1795033475290-utzphv3cw`).
+- **CR-001 / CR-002 / CR-003:** Três findings do code reviewer corrigidos e re-revisados.
+
+**Test results:** 1783/1783 aprovados, 0 falhas. Build exit code 0.
+
+**Review verdict:** PASS (code reviewer, zero corrective findings; CR-001, CR-002, CR-003 resolvidos).
+
+**Files changed:**
+- `back/src/index.ts`
+- `back/src/modules/payout/payout.service.ts`
+- `back/src/modules/order/payment.service.ts`
+- `back/src/modules/payout/payout.service.test.ts`
+- `back/src/modules/payout/payout.routes.test.ts`
+- `back/src/modules/checkout/stripe-webhook.handler.test.ts`
+
+### Evidence
+
+| File | Lines Changed | Purpose |
+|------|---------------|---------|
+| `F01/docs/agent_runs/orch-mp-f01-p5-009-2026-11-19.md` | Criado (~150 linhas) | Run record completo com task log, findings log, testes, revisão e conclusão COMPLETED |
+| `F01/docs/mp_log.md` | ~80 linhas (appended) | Esta entrada de execução |
+| `F01/docs/task_list.md` | Addendum | Status das tarefas FIND-01, FIND-04, CR-001/002/003 atualizados para completed |
+| `back/src/index.ts` | Modificado | Wire do Stripe Connect (injeção de TransferService) |
+| `back/src/modules/payout/payout.service.ts` | Modificado | processPayout com confirmação de provedor |
+| `back/src/modules/order/payment.service.ts` | Modificado | Alinhamento de pagamento e idempotência |
+| `back/src/modules/payout/payout.service.test.ts` | Modificado | Testes de serviço de payout |
+| `back/src/modules/payout/payout.routes.test.ts` | Modificado | Testes de rotas de payout |
+| `back/src/modules/checkout/stripe-webhook.handler.test.ts` | Modificado | Testes de webhook do Stripe |
+
+### Sources Consulted
+
+1. `F01/docs/agent_runs/orch-mp-f01-p5-006-2026-11-18.md` — findings log e checkpoint Stripe/Test Mode (origem de FIND-01, FIND-04, R$ 79,90)
+2. Code reviewer veredito PASS (CR-001, CR-002, CR-003)
+3. Resultados de teste: 1783/1783 aprovados; build exit 0
+
+### Decisions Preserved
+
+Todas as decisões confirmadas (CD-001..CD-065) permanecem inalteradas. Nenhuma nova decisão de negócio introduzida.
+
+### New Proposals (NOT APPROVED)
+
+None — esta missão foi de conclusão e validação apenas.
+
+### Conclusion
+
+**Status: COMPLETED.** MP-F01-P5-009 concluído com veredito PASS do code reviewer, 1783/1783 testes aprovados e build exit 0. Nenhuma próxima ação (run completo).
+
+### Git State
+
+- Branch: `feature/closing-initial-implementation`
+- Base commit: `dc7835a`
+- Commits/pushes: nenhum (preservado para o usuário)
+
+---
+
+## MP-F01-P5-010: Scanner Remediação e Fechamento de Achados Financeiros
+
+**Date:** 2026-11-19  
+**Run:** orch-mp-f01-p5-010-2026-11-19 | **Branch:** feature/closing-initial-implementation | **Base commit:** dc7835a | **Reviewer verdict:** PASS
+
+### Objective
+Identificar, reproduzir e corrigir achados legítimos dos scanners de segurança e defeitos financeiros ainda abertos após MP-F01-P5-009.
+
+### Results
+- **Cycle A:** Scanner executado contra F01 — 11 findings, todos falso positivo em arquivos de teste (config.test.ts, credential.domain.ts, LoginForm.test.tsx, RegisterForm.test.tsx, auth.test.ts). Scanner test suite: 84/84 aprovados.
+- **Cycle B:** FIND-02 corrigido — setPaymentEventId movido após reconciliação do carrinho; retry pós-captura recuperável e idempotente.
+- **Cycle C:** FIND-03 corrigido — dashboard separa transferências COMPLETED vs não-COMPLETED via metadata.status.
+- **Cycle D:** FIND-05 corrigido — wallet e ledger consistentes; movimento e transação salvos antes do wallet; proteção contra race condition de idempotência.
+- **Cycle E:** FIND-04 corrigido — payout só vai para COMPLETED com confirmação externa (confirmPayout); processPayout apenas para PROCESSING.
+- **Cycle F:** FIND-01 validado — transferService wiring funcional; R$ 79,90 conversão BRL→centavos correta; D-01 corrigido (status COMPLETED permite idempotência).
+- **CR-004/005/006:** Três findings do code reviewer corrigidos e re-revisados com veredito PASS.
+
+### Test results
+- Backend: 1785/1785 aprovados, 0 falhas
+- Build: exit code 0 (backend e frontend)
+- Code reviewer: PASS
+
+### Evidence table
+| File | Lines | Purpose |
+|------|-------|---------|
+| back/src/modules/checkout/stripe-webhook.handler.ts | ~10-15 | FIND-02: setPaymentEventId após carrinho |
+| back/src/modules/financial/financial.dashboard.service.ts | ~10-15 | FIND-03: filtro por metadata.status |
+| back/src/modules/wallet/wallet.service.ts | ~20-30 | FIND-05 + CR-006: reordena saves + try/catch |
+| back/src/modules/wallet/wallet.domain.ts | ~5-10 | CR-006: verificação duplicada no save |
+| back/src/modules/payout/payout.service.ts | ~15-25 | FIND-04 + CR-004: confirmPayout + validação id |
+| back/src/modules/payout/payout.service.test.ts | ~10-20 | Testes atualizados |
+| back/src/modules/payout/payout.routes.test.ts | ~10-20 | Testes atualizados |
+| back/src/modules/transfer/transfer.service.ts | ~5-10 | FIND-01 D-01 + CR-005: COMPLETED status + evento |
+| back/src/modules/transfer/transfer.service.test.ts | ~5-10 | Testes atualizados |
+
+### Conclusion
+**COMPLETED** — Todas as 8 fases executadas com êxito. Veredito do code reviewer: PASS. 1785/1785 testes aprovados.
+
+---
+
+## MP-F01-P5-010A: Correção do Bloqueio de PNGs no Scanner de Commit
+
+**Date:** 2026-11-19  
+**Run:** orch-mp-f01-p5-010a-2026-11-19 | **Branch:** feature/closing-initial-implementation | **Base commit:** dc7835a | **Reviewer verdict:** PASS
+
+### Objective
+Resolver o bloqueio do hook Git causado por sete imagens PNG do seed demonstrativo, preservando integralmente a proteção contra segredos.
+
+### Results
+- **Causa-raiz:** Scanner `is_binary_file()` detecta null bytes em arquivos PNG e bloqueia com "binary file not inspected" (fail-closed)
+- **7 arquivos verificados:** Todos com assinatura PNG válida, IHDR válido (1254×1254, 8-bit, RGB), IEND presente, sem metadados sensíveis, SHA-256 computado
+- **Correção:** Allowlist baseada em caminho + SHA-256 em `.kilo/scripts/scan-secrets.sh`; `sha256sum` adicionado como pré-requisito; `is_allowed_binary()` verifica caminho E hash antes de permitir binário
+- **Segurança preservada:** Nenhuma regra de detecção de segredos enfraquecida; binários desconhecidos continuam bloqueados; fail-closed mantido
+
+### Test results
+- 7 PNGs legítimos: aceitos (exit 0)
+- PNG falso: rejeitado (exit 1)
+- Binário desconhecido: bloqueado (exit 1)
+- Arquivo aprovado modificado: rejeitado (hash mismatch)
+- Detecção de segredos texto: preservada
+- Staged validation: exit 0
+- Unblock exclusivo: apenas os 7 PNGs aprovados
+
+### Evidence table
+| File | Lines | Purpose |
+|------|-------|---------|
+| .kilo/scripts/scan-secrets.sh | Linha 10 | sha256sum como pré-requisito |
+| .kilo/scripts/scan-secrets.sh | Linhas 75-99 | ALLOWED_BINARIES array + is_allowed_binary() |
+| .kilo/scripts/scan-secrets.sh | Linhas 262-270 | Modo staged: allowlist antes do bloqueio |
+| .kilo/scripts/scan-secrets.sh | Linhas 318-324 | Modo file-args: allowlist antes do bloqueio |
+
+### Conclusion
+**COMPLETED** — Hook de commit desbloqueado exclusivamente para os 7 PNGs verificados. Binários desconhecidos e segredos reais continuam bloqueados.
+
+---

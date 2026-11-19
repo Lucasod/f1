@@ -83,10 +83,7 @@ export class MongoTransferRepository {
       return null;
     }
 
-    return Transfer.reconstruct({
-      ...transferDoc,
-      updatedAt: transferDoc.updatedAt
-    } as any);
+    return this.mapTransfer(transferDoc);
   }
 
   async findByOrderId(orderId: string): Promise<Transfer[]> {
@@ -95,10 +92,7 @@ export class MongoTransferRepository {
       .sort({ createdAt: -1 })
       .toArray();
 
-    return transfers.map(doc => Transfer.reconstruct({
-      ...doc,
-      updatedAt: doc.updatedAt
-    } as any));
+    return transfers.map(doc => this.mapTransfer(doc));
   }
 
   async findByOrderVendorGroupId(orderVendorGroupId: string): Promise<Transfer[]> {
@@ -107,10 +101,7 @@ export class MongoTransferRepository {
       .sort({ createdAt: -1 })
       .toArray();
 
-    return transfers.map(doc => Transfer.reconstruct({
-      ...doc,
-      updatedAt: doc.updatedAt
-    } as any));
+    return transfers.map(doc => this.mapTransfer(doc));
   }
 
   async findByProviderTransactionId(providerTransactionId: string): Promise<Transfer | null> {
@@ -120,10 +111,7 @@ export class MongoTransferRepository {
       return null;
     }
 
-    return Transfer.reconstruct({
-      ...transferDoc,
-      updatedAt: transferDoc.updatedAt
-    } as any);
+    return this.mapTransfer(transferDoc);
   }
 
   async findById(transferId: string): Promise<Transfer | null> {
@@ -133,10 +121,7 @@ export class MongoTransferRepository {
       return null;
     }
 
-    return Transfer.reconstruct({
-      ...transferDoc,
-      updatedAt: transferDoc.updatedAt
-    } as any);
+    return this.mapTransfer(transferDoc);
   }
 
   async update(id: string, updateData: Partial<TransferData>): Promise<Transfer | null> {
@@ -161,10 +146,11 @@ export class MongoTransferRepository {
       return null;
     }
 
-    return Transfer.reconstruct({
-      ...transfer,
-      updatedAt: transfer.updatedAt
-    } as any);
+    return this.mapTransfer(transfer);
+  }
+
+  private mapTransfer(doc: TransferDoc): Transfer {
+    return Transfer.reconstruct({ ...doc, id: doc._id });
   }
 
   clear(): void {

@@ -96,19 +96,25 @@ export class PaymentService {
    * Records a financial movement and event for a payment state transition.
    * Both are best-effort: if a repository is not wired, the recording is skipped
    * without failing the payment flow.
+   * 
+   * @param amount Custom amount to record. If undefined, uses payment.amount.
+   *             When recording for each vendor group of a multi-vendor order,
+   *             pass the vendor's subtotal (vg.subtotal) so each vendor only
+   *             sees their portion of the payment.
    */
   private async recordPaymentLedger(
     payment: Payment,
     vendorId: string | undefined,
     movementType: MovementType,
     eventType: EventType,
+    amount?: number
   ): Promise<void> {
     const now = new Date();
 
     if (this.movementRepo) {
       const movement = FinancialMovementRecord.create({
         movementType,
-        amount: payment.amount,
+        amount: amount ?? payment.amount,
         currency: 'brl',
         relatedEntityType: 'payment',
         relatedEntityId: payment.id,
@@ -240,12 +246,14 @@ export class PaymentService {
     await this.paymentRepo.update(payment);
 
     // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    // Pass each vendor's subtotal so they only see their portion of the payment
     for (const vg of order.vendorGroups) {
       await this.recordPaymentLedger(
         payment,
         vg.vendorId,
         MovementType.CONSUMER_PAYMENT,
-        EventType.PAYMENT_AUTHORIZED
+        EventType.PAYMENT_AUTHORIZED,
+        vg.subtotal
       );
     }
 
@@ -273,7 +281,8 @@ export class PaymentService {
     if (!existing) {
       throw new Error(PaymentError.PAYMENT_NOT_FOUND);
     }
-    if (!Number.isInteger(amountTotal) || Math.round(existing.amount * 100) !== amountTotal) {
+    const existingAmountInCents = Math.round(existing.amount * 100);
+    if (!Number.isInteger(amountTotal) || existingAmountInCents !== amountTotal) {
       throw new Error(PaymentError.PAYMENT_AMOUNT_MISMATCH);
     }
     // Idempotency guard: if payment already in final state, return immediately
@@ -322,12 +331,14 @@ export class PaymentService {
     await this.paymentRepo.update(payment);
 
     // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    // Pass each vendor's subtotal so they only see their portion of the payment
     for (const vg of order.vendorGroups) {
       await this.recordPaymentLedger(
         payment,
         vg.vendorId,
         MovementType.CONSUMER_PAYMENT,
-        EventType.PAYMENT_CAPTURED
+        EventType.PAYMENT_CAPTURED,
+        vg.subtotal
       );
     }
 
@@ -529,13 +540,15 @@ export class PaymentService {
 
     const order = await this.orderRepo.findById(payment.orderId);
     // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    // Pass each vendor's subtotal so they only see their portion of the payment
     if (order) {
       for (const vg of order.vendorGroups) {
         await this.recordPaymentLedger(
           payment,
           vg.vendorId,
           MovementType.CONSUMER_PAYMENT,
-          EventType.PAYMENT_FAILED
+          EventType.PAYMENT_FAILED,
+          vg.subtotal
         );
       }
     }
@@ -617,12 +630,14 @@ export class PaymentService {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
     // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
+    // Pass each vendor's subtotal so they only see their portion of the payment
     for (const vg of order.vendorGroups) {
       await this.recordPaymentLedger(
         payment,
         vg.vendorId,
         MovementType.REFUND,
-        EventType.PAYMENT_REFUNDED
+        EventType.PAYMENT_REFUNDED,
+        vg.subtotal
       );
     }
     order.refund(true);

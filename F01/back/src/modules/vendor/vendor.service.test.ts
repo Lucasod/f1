@@ -28,6 +28,7 @@ describe('Vendor Service', () => {
         capabilities: { transfers: 'active' },
         requirements: { currently_due: [], eventually_due: [], past_due: [] }
       }),
+      createConnectOnboardingLink: vi.fn().mockResolvedValue('https://connect.stripe.com/existing'),
       createConnectLoginLink: vi.fn().mockResolvedValue('https://dashboard.stripe.com/login/acct_test123')
     } as unknown as StripeService;
 
@@ -397,6 +398,17 @@ describe('Vendor Service', () => {
       });
       expect(mockStripeService.getConnectAccountStatus).toHaveBeenCalledWith('acct_existing123');
       expect(mockStripeService.createConnectLoginLink).toHaveBeenCalledWith('acct_existing123');
+    });
+
+    it('resumes incomplete onboarding on the existing account without creating another', async () => {
+      const vendor = (await vendorRepo.findById(vendorId))!;
+      vendor.setStripeAccountId('acct_existing123');
+      await vendorRepo.update(vendor);
+      vi.mocked(mockStripeService.getConnectAccountStatus).mockResolvedValue({ accountId: 'acct_existing123', chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, capabilities: null, requirements: null });
+      const result = await vendorService.initiateConnectOnboarding(vendorId, 'https://app.example.com/return', 'https://app.example.com/refresh');
+      expect(result).toEqual({ accountId: 'acct_existing123', onboardingUrl: 'https://connect.stripe.com/existing' });
+      expect(mockStripeService.createConnectAccount).not.toHaveBeenCalled();
+      expect(mockStripeService.createConnectOnboardingLink).toHaveBeenCalledWith('acct_existing123', 'https://app.example.com/return', 'https://app.example.com/refresh');
     });
 
     it('should throw VENDOR_NOT_FOUND for non-existent vendor', async () => {

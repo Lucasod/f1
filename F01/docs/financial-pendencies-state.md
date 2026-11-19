@@ -20,10 +20,10 @@ The transfer logic is conditional on `vendor.stripeAccountId`:
 ### Data Requirements
 
 - This condition requires human setup to ensure vendor Stripe accounts are properly configured before payouts
-- The empty destination is not a bug per se, but a code path that depends on prior data setup
+- An empty destination is an unsafe failure path: the current service can persist a pending transfer and attempt a provider request without a valid destination. Static inspection alone does not prove the provider response.
 - No automatic fallback exists; each case must be evaluated for whether the vendor should have a connected account
 
-**Status:** Awaiting human configuration — code logic is correct; data setup requires manual intervention.
+**Status (2026-11-18):** Partially mitigated — new transfer attempts reject a missing destination before persistence or provider calls. Recovery of previously pending records, provider failures and Connect setup remain open; see the current run record.
 
 ---
 

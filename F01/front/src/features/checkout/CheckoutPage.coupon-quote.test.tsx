@@ -25,7 +25,6 @@ const { createCouponRoutes } = backendModules['../../../../back/src/modules/coup
 const { CheckoutService } = backendModules['../../../../back/src/modules/checkout/checkout.service.ts'] as any;
 const { createCheckoutRoutes } = backendModules['../../../../back/src/modules/checkout/checkout.routes.ts'] as any;
 const { MongoCheckoutAttemptRepository } = backendModules['../../../../back/src/modules/checkout/checkout-attempt.mongo.repository.ts'] as any;
-const { StripeService } = backendModules['../../../../back/src/modules/stripe/stripe.service.ts'] as any;
 
 // Resolve existing backend test dependencies, without adding frontend packages.
 const requireBackend = createRequire(new URL('../../../../back/package.json', import.meta.url).pathname.replace(/^\/@fs/, ''));
@@ -70,7 +69,7 @@ async function mount(catalogPrice = 20) {
     const mockStripeService = {
       getOrCreateCustomer: vi.fn().mockResolvedValue({ customerId: 'cus_test123', isNew: true }),
       createCheckoutSessionWithCustomer: vi.fn().mockResolvedValue({ id: 'cs_test_session', url: 'https://checkout.stripe.test/session' })
-    } as unknown as StripeService;
+    };
 
     const checkout = new CheckoutService(
       finance, finance,
@@ -212,7 +211,6 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
 
 it('confirms an actual quote, disables purchase, shows net without double subtraction and restores plain checkout on removal', async () => {
     const s = await mount(); await apply();
-    const sidebar = screen.getByTestId('checkout-sidebar-summary');
     const summaryCards = screen.getAllByTestId('checkout-step-summary');
     const mainSummaryCard = summaryCards.find(el => el.tagName === 'DIV') || summaryCards[1];
     // When preview?.purchasable === false, submit button is disabled

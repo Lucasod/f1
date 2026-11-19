@@ -7,7 +7,7 @@
 set -u
 
 # Prerequisite tools: fail closed if unavailable.
-for tool in grep sed tr wc; do
+for tool in grep sed tr wc sha256sum; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     printf 'ERROR: required tool not available: %s. Scan cannot run; commit blocked.\n' "$tool" >&2
     exit 2
@@ -69,6 +69,32 @@ is_markdown_file() {
   case "$base" in
     *.[Mm][Dd]|*.[Mm][Dd][Xx]|*.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]) return 0 ;;
   esac
+  return 1
+}
+
+# Hash-based allowlist for verified binaries (MP-31G extension).
+# Each entry: "relative_path:sha256hash". Only the exact verified file passes.
+# Paths are relative to the repository root (as reported by git).
+ALLOWED_BINARIES=()
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/book.png:e9ea598b0fea5a189de7222946f98422299ea7af7ebe00b6526cdb51b931b8ea")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/headphones.png:97b4a57063b8f2a3962126c0b6c8b57502ee745d2bdbee2b7cdda6b0463899e5")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/shybook.png:9fb2dbd8b1c4cd99e31d2f5e852dcd154ae1fa44cfdc0dbfb69c680fd0f4e34a")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/shypad.png:f450d59bff8782f98c11358d83f4efa4bfe31138106d236f40d55a2fed57609d")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/shyphone.png:f866b8dfad6744d8b237a69961b3cf59d4d77e171d3a831e69db5fbc03ab7c8b")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/shyrpods.png:4987759f22c2c83b0493239c2b3d35c6dffdc0180275689c13fbdd1d4b74dfe2")
+ALLOWED_BINARIES+=("F01/back/fixtures/demo-images/tote.png:1f0ca1229b51cc907b5f7f21a8931d820b0d7c280dede5b912fd92416cb2c76a")
+
+# Check whether a binary file matches an allowlist entry by (relative path, SHA-256).
+# Returns 0 (allowed) if a matching entry is found, 1 otherwise.
+is_allowed_binary() {
+  local f="$1" hash="$2" entry apath ahash
+  for entry in "${ALLOWED_BINARIES[@]}"; do
+    apath="${entry%%:*}"
+    ahash="${entry#*:}"
+    if [ "$apath" = "$f" ] && [ "$ahash" = "$hash" ]; then
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -233,6 +259,15 @@ if [ "$mode" = "staged" ] && [ ${#file_args[@]} -eq 0 ]; then
     is_binary_file "$staged_content"
     binary_status=$?
     if [ "$binary_status" -eq 0 ]; then
+      # Hash-based allowlist for verified binaries: allow only exact matches.
+      file_hash=$(LC_ALL=C sha256sum "$staged_content" 2>/dev/null)
+      file_hash="${file_hash%% *}"
+      if [ -n "$file_hash" ] && is_allowed_binary "$staged_name" "$file_hash"; then
+        # Verified allowlisted binary: allow without content scan.
+        cleanup_temp || exit 2
+        trap - EXIT
+        continue
+      fi
       cleanup_temp || exit 2
       trap - EXIT
       find_counter=$((find_counter + 1))
@@ -280,6 +315,13 @@ else
     is_binary_file "$f"
     binary_status=$?
     if [ "$binary_status" -eq 0 ]; then
+      # Hash-based allowlist for verified binaries: allow only exact matches.
+      file_hash=$(LC_ALL=C sha256sum "$f" 2>/dev/null)
+      file_hash="${file_hash%% *}"
+      if [ -n "$file_hash" ] && is_allowed_binary "$f" "$file_hash"; then
+        # Verified allowlisted binary: allow without content scan.
+        continue
+      fi
       find_counter=$((find_counter + 1))
       printf 'BLOCKED: [FIND-%d] [Binary file] binary file not inspected: %s\n' "$find_counter" "$f" >&2
       found=1

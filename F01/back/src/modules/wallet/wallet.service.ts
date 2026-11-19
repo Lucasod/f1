@@ -59,7 +59,6 @@ export class WalletService {
 
     const wallet = await this.getOrCreateWallet(ownerId);
     wallet.credit(amount);
-    await this.walletRepo.update(wallet);
 
     const tx = WalletTransaction.create({
       walletId: wallet.id,
@@ -71,6 +70,7 @@ export class WalletService {
       orderId,
     });
     await this.txRepo.save(tx);
+    await this.walletRepo.update(wallet);
     return tx;
   }
 
@@ -88,7 +88,6 @@ export class WalletService {
 
     const wallet = await this.getOrCreateWallet(ownerId);
     wallet.debit(amount);
-    await this.walletRepo.update(wallet);
 
     const tx = WalletTransaction.create({
       walletId: wallet.id,
@@ -100,6 +99,7 @@ export class WalletService {
       orderId,
     });
     await this.txRepo.save(tx);
+    await this.walletRepo.update(wallet);
     return tx;
   }
 
@@ -125,7 +125,6 @@ export class WalletService {
 
     const wallet = await this.getOrCreateWallet(ownerId);
     wallet.credit(amount);
-    await this.walletRepo.save(wallet);
 
     const now = new Date();
     const movement = FinancialMovementRecord.create({
@@ -153,7 +152,16 @@ export class WalletService {
       reason,
       orderId,
     });
-    await this.txRepo.save(tx);
+    try {
+      await this.txRepo.save(tx);
+    } catch (err) {
+      if (err instanceof Error && err.message === WalletError.DUPLICATE_REFERENCE) {
+        const existing = await this.txRepo.findByReferenceId(referenceId);
+        if (existing) return existing;
+      }
+      throw err;
+    }
+    await this.walletRepo.save(wallet);
     return tx;
   }
 
@@ -178,7 +186,6 @@ export class WalletService {
 
     const wallet = await this.getOrCreateWallet(ownerId);
     wallet.debit(amount);
-    await this.walletRepo.save(wallet);
 
     const now = new Date();
     const movement = FinancialMovementRecord.create({
@@ -206,7 +213,16 @@ export class WalletService {
       reason,
       orderId,
     });
-    await this.txRepo.save(tx);
+    try {
+      await this.txRepo.save(tx);
+    } catch (err) {
+      if (err instanceof Error && err.message === WalletError.DUPLICATE_REFERENCE) {
+        const existing = await this.txRepo.findByReferenceId(referenceId);
+        if (existing) return existing;
+      }
+      throw err;
+    }
+    await this.walletRepo.save(wallet);
     return tx;
   }
 

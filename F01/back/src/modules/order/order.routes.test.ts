@@ -643,6 +643,23 @@ describe('Dual-role authorization regression', () => {
       .expect(403);
   });
 
+  it('vendor cannot access another vendor\'s order via GET /orders/:orderId → 404', async () => {
+    // vendorToken owns vendorId2; otherOrderId belongs to otherVendor (vendorId = otherVendorId)
+    // The order exists but the vendor has no vendor group in it → must be 404 (resource hiding), not 403
+    await request(app)
+      .get(`/api/v1/orders/${otherOrderId}`)
+      .set('Authorization', `Bearer ${vendorToken}`)
+      .expect(404);
+  });
+
+  it('vendor accessing a non-existent order via GET /orders/:orderId → 404', async () => {
+    // Order does not exist at all → must remain 404 (prevents order enumeration)
+    await request(app)
+      .get('/api/v1/orders/non-existent-order-id')
+      .set('Authorization', `Bearer ${vendorToken}`)
+      .expect(404);
+  });
+
   it('buyer (consumer) cannot perform vendor fulfillment actions (update vendor group status)', async () => {
     // Consumer tries to update vendor group status - should be forbidden (requires VENDOR role)
     const vendorGroupId = (await orderRepository.findById(orderId))!.vendorGroups[0].id;

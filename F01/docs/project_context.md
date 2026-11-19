@@ -4,7 +4,7 @@
 
 **Project:** FS-01 — Multi-Vendor E-Commerce Marketplace  
 **Period:** 19/10/2026 to 19/11/2026 (estimated 14 days effort)  
-**Current Stage:** P4 implementation is authorized through `MAX_AUTHORIZED_PHASE = 4`; P5 remains blocked pending separate explicit human authorization. Authentication and vendor onboarding are implemented. The current execution status is tracked in `F01/docs/task_list.md` and the latest run record.
+**Current Stage:** The user explicitly authorized the scoped P5 mission MP-F01-P5-006; this does not establish a blanket authorization for unrelated deployment or other P5 work. Earlier phase-limit statements are historical. Current mission status is tracked in `F01/docs/task_list.md` and its run record.
 
 ## Planned Technologies
 
@@ -18,9 +18,7 @@
 | Payments | Stripe Connect (Separate Charges and Transfers; test-mode integration still pending) |
 | Image Storage | AWS S3 |
 
-**Temporary local-development boundary:** Product and review images currently use a local storage adapter, and checkout returns a payment placeholder. These allow local development without provider accounts. They do not replace the target S3/Stripe Connect integrations and do not count as their completion. Implement and validate the real provider integrations when required by the authorized task and configured environment.
-
-**AWS account:** Validated by the user in region us-east-2 (Ohio). Recorded as a human-confirmed fact (CD-075). This does not imply S3 integration is operational — S3StorageAdapter exists with tests but is not wired into production (T-703b). Local storage adapter remains the dev fallback.
+**Integration boundary:** Local and S3 image adapters and Stripe Checkout/webhook code exist; runtime configuration selects the available path. Provider access and financial completeness must be evidenced independently. For the current mission, see the [run record](agent_runs/orch-mp-f01-p5-006-2026-11-18.md).
 
 ## Official Deliverables
 

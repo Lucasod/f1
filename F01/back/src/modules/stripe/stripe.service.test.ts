@@ -357,6 +357,13 @@ describe('StripeService', () => {
     });
   });
 
+  it('creates an onboarding link for an existing account without creating an account', async () => {
+    mockStripeInstance.accountLinks.create.mockResolvedValue({ url: 'https://connect.stripe.com/existing' });
+    await expect(service.createConnectOnboardingLink('acct_existing', 'https://app.example.com/return', 'https://app.example.com/refresh')).resolves.toBe('https://connect.stripe.com/existing');
+    expect(mockStripeInstance.accounts.create).not.toHaveBeenCalled();
+    expect(mockStripeInstance.accountLinks.create).toHaveBeenCalledWith({ account: 'acct_existing', return_url: 'https://app.example.com/return', refresh_url: 'https://app.example.com/refresh', type: 'account_onboarding' });
+  });
+
   describe('getConnectAccountStatus', () => {
     it('should return account status with capabilities', async () => {
       mockStripeInstance.accounts.retrieve.mockResolvedValue({

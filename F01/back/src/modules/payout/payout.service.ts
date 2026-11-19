@@ -134,10 +134,26 @@ export class PayoutService {
     if (payout.status !== PayoutStatus.APPROVED) {
       throw new Error(PayoutError.PAYOUT_NOT_PROCESSABLE);
     }
+    // Advance to PROCESSING only — COMPLETED requires external provider confirmation
     payout.startProcessing();
-    payout.complete();
-    const updated = await this.payoutRepo.update(payout);
+    const updated = await this.payoutRepo.save(payout);
     await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_PROCESSING);
+    return updated;
+  }
+
+  async confirmPayout(id: string, providerConfirmationId: string): Promise<Payout> {
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throw new Error(PayoutError.PAYOUT_NOT_FOUND);
+    }
+    const payout = await this.payoutRepo.findById(id.trim());
+    if (!payout) {
+      throw new Error(PayoutError.PAYOUT_NOT_FOUND);
+    }
+    if (payout.status !== PayoutStatus.PROCESSING) {
+      throw new Error(PayoutError.PAYOUT_NOT_PROCESSABLE);
+    }
+    payout.complete();
+    const updated = await this.payoutRepo.save(payout);
     await this.recordPayoutLedger(updated, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_COMPLETED);
     return updated;
   }
@@ -216,7 +232,7 @@ export class PayoutService {
         vendorId: payout.vendorId,
         effectiveAt: now,
         recordedAt: now,
-        idempotencyKey: `payout:${payout.id}:${movementType}`,
+        idempotencyKey: `payout:${payout.id}:${movementType}:${eventType}`,
       });
       await this.movementRepo.save(movement);
     }

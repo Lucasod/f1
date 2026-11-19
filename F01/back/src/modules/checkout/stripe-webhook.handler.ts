@@ -87,14 +87,6 @@ export function createStripeWebhookHandler(
         processedEventIds.add(stripeEventId);
         return res.status(200).json({ received: true });
       }
-      // First time seeing this event for this payment - mark in-memory
-      processedEventIds.add(stripeEventId);
-    }
-
-    // Idempotency check: if payment already in final state, skip re-processing
-    // This protects against duplicate webhook deliveries
-    if (await paymentService.isPaymentFinalized(paymentId)) {
-      return res.status(200).json({ received: true });
     }
 
     try {
@@ -109,16 +101,6 @@ export function createStripeWebhookHandler(
           return res.status(400).json({ error: 'STRIPE_PAYMENT_INTENT_MISSING' });
         }
         const payment = await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
-        // Persist the Stripe event ID on the payment for webhook event correlation / retry/recovery
-        // Best-effort: update the payment's eventId field if not already set
-        try {
-          const existingEventId = await paymentService.getPaymentEventId(paymentId);
-          if (existingEventId !== event.id && event.id) {
-            await paymentService.setPaymentEventId(paymentId, event.id);
-          }
-        } catch {
-          /* Best-effort; do not fail the webhook delivery if saving fails. */
-        }
         // Remove only the items effectively purchased from the cart,
         // preserving non-purchased items. The webhook event correlation check
         // above (lines 76-96) provides idempotency against duplicate deliveries.
@@ -148,6 +130,16 @@ export function createStripeWebhookHandler(
             }
           }
         }
+        // Persist the Stripe event ID on the payment for webhook event correlation / retry/recovery
+        // Best-effort: update the payment's eventId field if not already set
+        try {
+          const existingEventId = await paymentService.getPaymentEventId(paymentId);
+          if (existingEventId !== event.id && event.id) {
+            await paymentService.setPaymentEventId(paymentId, event.id);
+          }
+        } catch {
+          /* Best-effort; do not fail the webhook delivery if saving fails. */
+        }
         // After successful payment capture, create the transfer for each vendor group
         // Note: transfer creation is triggered separately; this is just the payment confirmation
       } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
@@ -161,6 +153,7 @@ export function createStripeWebhookHandler(
         }
       }
 
+      if (stripeEventId) processedEventIds.add(stripeEventId);
       return res.status(200).json({ received: true });
     } catch {
       return res.status(500).json({ error: 'STRIPE_WEBHOOK_PROCESSING_FAILED' });

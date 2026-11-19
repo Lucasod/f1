@@ -143,12 +143,33 @@ describe('Payout Service (T-1003)', () => {
   });
 
   describe('processPayout', () => {
-    it('processes approved payout to completed', async () => {
+    it('processes an approved payout to PROCESSING (not COMPLETED)', async () => {
       const p = await service.createPayout('vendor-1', vendorPerson.id!, 100);
       await service.approvePayout(p.id, adminPerson.id!);
       const processed = await service.processPayout(p.id);
-      expect(processed.status).toBe(PayoutStatus.COMPLETED);
-      expect(processed.processedAt).toBeInstanceOf(Date);
+      expect(processed.status).toBe(PayoutStatus.PROCESSING);
+      expect(processed.processedAt).toBeUndefined();
+      const persisted = await payoutRepo.findById(p.id);
+      expect(persisted!.status).toBe(PayoutStatus.PROCESSING);
+      expect(persisted!.processedAt).toBeUndefined();
+    });
+
+    it('confirms a processing payout to COMPLETED via confirmPayout', async () => {
+      const p = await service.createPayout('vendor-1', vendorPerson.id!, 100);
+      await service.approvePayout(p.id, adminPerson.id!);
+      await service.processPayout(p.id);
+      const confirmed = await service.confirmPayout(p.id, 'prov-conf-123');
+      expect(confirmed.status).toBe(PayoutStatus.COMPLETED);
+      expect(confirmed.processedAt).not.toBeUndefined();
+      const persisted = await payoutRepo.findById(p.id);
+      expect(persisted!.status).toBe(PayoutStatus.COMPLETED);
+      expect(persisted!.processedAt).toBeDefined();
+    });
+
+    it('confirmPayout throws PAYOUT_NOT_PROCESSABLE if not processing', async () => {
+      const p = await service.createPayout('vendor-1', vendorPerson.id!, 100);
+      await service.approvePayout(p.id, adminPerson.id!);
+      await expect(service.confirmPayout(p.id, 'prov-conf-123')).rejects.toThrow(PayoutError.PAYOUT_NOT_PROCESSABLE);
     });
 
     it('throws PAYOUT_NOT_PROCESSABLE if not approved', async () => {
@@ -202,7 +223,9 @@ describe('Payout Service (T-1003)', () => {
     it('throws CANCELLABLE for wrong status', async () => {
       const p = await service.createPayout('vendor-1', vendorPerson.id!, 100);
       await service.approvePayout(p.id, adminPerson.id!);
-      await service.processPayout(p.id);
+      const processing = (await payoutRepo.findById(p.id))!;
+      processing.startProcessing();
+      await payoutRepo.update(processing);
       await expect(service.cancelPayout(p.id, adminPerson.id!, true)).rejects.toThrow(PayoutError.PAYOUT_NOT_CANCELLABLE);
     });
 

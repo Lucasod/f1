@@ -29,7 +29,7 @@ export interface UpdateVendorInput {
 export class VendorService {
   private readonly vendorRepo: VendorRepository;
   private readonly personRepo: PersonRepository;
-  private readonly stripeService: StripeService;
+  private readonly stripeService?: StripeService;
   // In-flight onboarding promises per vendorId to prevent duplicate account creation (CR-001)
   private readonly onboardingLocks = new Map<string, Promise<ConnectOnboardingResult>>();
 
@@ -158,6 +158,9 @@ export class VendorService {
     returnUrl: string,
     refreshUrl: string
   ): Promise<ConnectOnboardingResult> {
+    if (!this.stripeService) {
+      throw new Error(VendorError.STRIPE_CONNECT_ONBOARDING_FAILED);
+    }
     const vendor = await this.vendorRepo.findById(vendorId);
     if (!vendor) {
       throw new Error(VendorError.VENDOR_NOT_FOUND);
@@ -211,18 +214,8 @@ export class VendorService {
       await this.vendorRepo.update(vendor);
       return result;
     } else {
-      // Create new onboarding link for existing account
-      const accountLink = await this.stripeService.createConnectAccount(
-        vendor.personId,
-        email,
-        'individual',
-        returnUrl,
-        refreshUrl
-      );
-      // Note: createConnectAccount creates a new account, so we need a different method
-      // For now, we'll use a login link for existing accounts
-      const loginUrl = await this.stripeService.createConnectLoginLink(accountId);
-      return { accountId, onboardingUrl: loginUrl };
+      const onboardingUrl = await this.stripeService.createConnectOnboardingLink(accountId, returnUrl, refreshUrl);
+      return { accountId, onboardingUrl };
     }
   }
 }

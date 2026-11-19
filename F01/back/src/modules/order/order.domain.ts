@@ -210,6 +210,26 @@ const VALID_VENDOR_GROUP_TRANSITIONS: Record<OrderVendorGroupStatus, OrderVendor
   [OrderVendorGroupStatus.RETURNED]: []
 };
 
+/**
+ * Normalizes a persisted vendor-group status value to its canonical enum value.
+ * Stored data may use a different letter case than the domain enum (e.g. "PENDING"
+ * vs "pending"). Normalizing on reconstruction keeps the domain model consistent
+ * and prevents transition lookups such as
+ * `VALID_VENDOR_GROUP_TRANSITIONS[this.status]` from resolving to `undefined`.
+ */
+function normalizeVendorGroupStatus(status: unknown): OrderVendorGroupStatus {
+  if (typeof status !== 'string' || status.trim().length === 0) {
+    throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+  }
+  const canonical = Object.values(OrderVendorGroupStatus).find(
+    s => s.toLowerCase() === status.toLowerCase()
+  );
+  if (!canonical) {
+    throw new Error(OrderError.INVALID_STATUS_TRANSITION);
+  }
+  return canonical;
+}
+
 export class OrderItem {
   public readonly id: string;
   public readonly productId: string;
@@ -482,7 +502,10 @@ export class OrderVendorGroup {
   }
 
   static reconstruct(data: OrderVendorGroupData): OrderVendorGroup {
-    return new OrderVendorGroup(data);
+    return new OrderVendorGroup({
+      ...data,
+      status: normalizeVendorGroupStatus(data.status),
+    });
   }
 
   addItem(itemData: Omit<OrderItemData, 'id' | 'totalPrice'>): void {

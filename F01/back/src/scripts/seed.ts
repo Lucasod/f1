@@ -25,8 +25,9 @@ export function validateSeedEnvironment(environment: NodeJS.ProcessEnv = process
       ...VENDORS.map(vendor => getVendorSeedPasswordVariable(vendor.slug)),
       ...ACCOUNTS.map(account => `SEED_${account.role}_PASSWORD`),
     ];
+    const hasTestUserPassword = Boolean(environment.TEST_USER_PASSWORD?.trim());
     const missingPasswords = requiredPasswordVariables.filter(
-      name => !environment[name]?.trim(),
+      name => !environment[name]?.trim() && !hasTestUserPassword,
     );
     if (missingPasswords.length > 0) {
       throw new Error(
@@ -116,6 +117,7 @@ interface ProductSeedData {
   price: number;
   quantity: number;
   images: string[];
+  imageFilename?: string;
 }
 
 const CATEGORIES: CategorySeedData[] = [
@@ -184,9 +186,10 @@ const PRODUCTS: ProductSeedData[] = [
     id: generateDeterministicHashId('prod'),
     vendorSlug: 'tech-store',
     categorySlug: 'smartphones',
-    name: 'iPhone 15 Pro',
+    name: 'SHYPHONE 15 Pro',
     seedIdentity: 'fs01:product:tech-iphone-15-pro',
-    description: 'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system.',
+    imageFilename: 'main-shyphone.png',
+    description: 'SHYPHONE 15 Pro: smartphone de demonstração com acabamento metálico e câmera tripla.',
     price: 9999.00,
     quantity: 50,
     images: ['seed/products/tech-iphone-15-pro/main.webp'],
@@ -195,9 +198,10 @@ const PRODUCTS: ProductSeedData[] = [
     id: generateDeterministicHashId('prod'),
     vendorSlug: 'tech-store',
     categorySlug: 'laptops',
-    name: 'MacBook Pro 16',
+    name: 'SHYBOOK Pro 16',
     seedIdentity: 'fs01:product:tech-macbook-pro-16',
-    description: 'Powerful laptop with M3 Max chip, 16-inch Liquid Retina XDR display.',
+    imageFilename: 'main-shybook.png',
+    description: 'SHYBOOK Pro 16: notebook de demonstração com tela ampla e acabamento metálico.',
     price: 24999.00,
     quantity: 30,
     images: ['seed/products/tech-macbook-pro-16/main.webp'],
@@ -206,9 +210,10 @@ const PRODUCTS: ProductSeedData[] = [
     id: generateDeterministicHashId('prod'),
     vendorSlug: 'tech-store',
     categorySlug: 'electronics',
-    name: 'iPad Pro',
+    name: 'SHYPAD Pro',
     seedIdentity: 'fs01:product:tech-ipad-pro',
-    description: 'iPad Pro with M2 chip, 12.9-inch Liquid Retina XDR display.',
+    imageFilename: 'main-shypad.png',
+    description: 'SHYPAD Pro: tablet de demonstração com tela ampla.',
     price: 8999.00,
     quantity: 40,
     images: ['seed/products/tech-ipad-pro/main.webp'],
@@ -217,9 +222,10 @@ const PRODUCTS: ProductSeedData[] = [
     id: generateDeterministicHashId('prod'),
     vendorSlug: 'tech-store',
     categorySlug: 'electronics',
-    name: 'AirPods Pro',
+    name: 'SHYRPODS Pro',
     seedIdentity: 'fs01:product:tech-airpods-pro',
-    description: 'Active noise cancelling wireless earbuds with transparency mode.',
+    imageFilename: 'main-shyrpods.png',
+    description: 'SHYRPODS Pro: fones sem fio de demonstração com estojo.',
     price: 2499.00,
     quantity: 100,
     images: ['seed/products/tech-airpods-pro/main.webp'],
@@ -690,7 +696,7 @@ async function seedProducts(productRepo: ProductRepository, categoryMap: Map<str
       description: prodData.description,
       price: prodData.price,
       quantity: prodData.quantity,
-      images: prodData.images,
+      images: [`products/${vendorId}/${prodData.id}/${prodData.imageFilename ?? 'main.webp'}`],
       seedIdentity: prodData.seedIdentity,
       status: ProductStatus.ACTIVE,
     });

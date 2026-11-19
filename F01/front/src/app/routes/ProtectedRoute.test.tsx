@@ -1,6 +1,6 @@
 vi.mock('@/app/providers/authStore', () => {
   let state = {
-    user: null,
+    user: null as { roles: string[] } | null,
     accessToken: null,
     refreshToken: null,
     isAuthenticated: false,
@@ -18,7 +18,7 @@ vi.mock('@/app/providers/authStore', () => {
     refreshUserProfile: async () => undefined,
     mergeGuestCartOnLogin: async () => undefined,
   };
-  const useAuthStore = (() => state) as unknown as ReturnType<typeof import('@/app/providers/authStore').useAuthStore>;
+  const useAuthStore = () => state;
   useAuthStore.setState = (partial: Record<string, unknown>) => {
     state = { ...state, ...partial };
   };

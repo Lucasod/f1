@@ -212,6 +212,29 @@ export class MongoProductRepository implements ProductRepository {
     return mappedProducts;
   }
 
+  async rebrandSeedProduct(change: { productId: string; vendorId: string; seedIdentity: string; oldName: string; oldDescription: string; oldImage: string; newName: string; newDescription: string; newImage: string }): Promise<boolean> {
+    const expectedPrefix = `products/${change.vendorId}/${change.productId}/`;
+    if (!change.newImage.startsWith(expectedPrefix) || !/^[a-zA-Z0-9_-]+\.(?:png|webp|jpg|jpeg)$/.test(change.newImage.slice(expectedPrefix.length))) throw new Error('SEED_IMAGE_FILENAME_INVALID');
+    const result = await this.productsCollection.updateOne(
+      { _id: change.productId, vendorId: change.vendorId, seedIdentity: change.seedIdentity, name: change.oldName, description: change.oldDescription, images: [change.oldImage], ...writableSearchRevision() },
+      { $inc: { searchRevision: 1 }, $set: { name: change.newName, description: change.newDescription, images: [change.newImage], updatedAt: new Date(), ...pendingSearchIntent() } },
+    );
+    return result.matchedCount === 1;
+  }
+
+  async repairSeedImage(productId: string, vendorId: string, seedIdentity: string, oldKey: string, imageFilename = 'main.webp'): Promise<boolean> {
+    if (!/^[a-zA-Z0-9_-]+\.(?:png|webp|jpg|jpeg)$/.test(imageFilename)) throw new Error('SEED_IMAGE_FILENAME_INVALID');
+    const result = await this.productsCollection.updateOne(
+      { _id: productId, vendorId, seedIdentity, images: [oldKey], ...writableSearchRevision() },
+      { $inc: { searchRevision: 1 }, $set: {
+        images: [`products/${vendorId}/${productId}/${imageFilename}`],
+        updatedAt: new Date(),
+        ...pendingSearchIntent(),
+      } },
+    );
+    return result.matchedCount === 1;
+  }
+
   async update(product: Product): Promise<Product> {
     const productId = product.id;
     const now = new Date();

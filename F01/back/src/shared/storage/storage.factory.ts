@@ -10,7 +10,7 @@ export function createStorageAdapter(): StorageAdapter {
     throw new Error('Incomplete S3 configuration: bucket and region are both required');
   }
   if (bucket && region) {
-    const client = new AwsS3Client(region);
+    const client = new AwsS3Client(region, bucket);
     return new S3StorageAdapter({
       bucket,
       region,

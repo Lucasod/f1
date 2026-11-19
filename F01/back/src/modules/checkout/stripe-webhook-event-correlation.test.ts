@@ -112,4 +112,29 @@ describe('Stripe webhook event correlation', () => {
     // completeCheckoutPayment should have been called once for this new event
     expect(completeCheckoutPayment).toHaveBeenCalledTimes(1);
   });
+  it('retries the same event after payment processing fails', async () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test');
+    const event = { id: 'evt_retry', type: 'checkout.session.completed', data: { object: {
+      metadata: { paymentId: 'payment-retry' }, payment_status: 'paid',
+      payment_intent: 'pi_test', amount_total: 1000, currency: 'brl',
+    } } };
+    const completeCheckoutPayment = vi.fn().mockRejectedValueOnce(new Error('temporary'))
+      .mockResolvedValue({ personId: 'person-1' });
+    const handler = createStripeWebhookHandler(
+      { webhooks: { constructEvent: vi.fn().mockReturnValue(event) } } as never,
+      { getPaymentById: vi.fn().mockResolvedValue({}), isPaymentFinalized: vi.fn().mockResolvedValue(false),
+        completeCheckoutPayment, getPaymentEventId: vi.fn().mockResolvedValue(null),
+        setPaymentEventId: vi.fn(), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as never,
+      {} as never, {} as never,
+    );
+    const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig' } } as unknown as Request;
+    const response = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() });
+    const first = response(); const second = response();
+    await handler(req, first as unknown as Response, vi.fn());
+    await handler(req, second as unknown as Response, vi.fn());
+    expect(first.status).toHaveBeenCalledWith(500);
+    expect(second.status).toHaveBeenCalledWith(200);
+    expect(completeCheckoutPayment).toHaveBeenCalledTimes(2);
+  });
+
 });

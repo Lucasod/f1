@@ -147,8 +147,9 @@ Routes defined in `src/App.tsx` with nested `ProtectedRoute` wrappers:
 | `/login` | Public | Login page |
 | `/register` | Public | Registration page |
 | `/dashboard` | Authenticated | User dashboard |
-| `/products` | Authenticated | Product listing |
-| `/vendor/*` | VENDOR / ADMIN | Vendor management |
+| `/products` and `/products/:productId` | Public | Product catalog and details |
+| `/vendor/onboard` | CONSUMER | Vendor onboarding |
+| `/vendor/dashboard`, `/vendor/products/*`, `/vendor/orders`, `/vendor/payouts` | VENDOR | Vendor management |
 | `/admin/*` | ADMIN | Admin panel |
 
 **ProtectedRoute** (`src/app/routes/ProtectedRoute.tsx`):
@@ -156,7 +157,7 @@ Routes defined in `src/App.tsx` with nested `ProtectedRoute` wrappers:
 - Supports `allowedRoles` prop for role-based access
 - Shows loading spinner while `isLoading`
 - Shows "Access Denied" for insufficient permissions
-- Admin role bypasses all role checks
+- Allowed roles are checked explicitly; ADMIN does not bypass a role restriction automatically
 
 ## Testing Approach
 
