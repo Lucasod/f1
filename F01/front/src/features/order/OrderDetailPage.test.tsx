@@ -200,6 +200,14 @@ describe('OrderDetailPage', () => {
     setMockAuthRole('CONSUMER');
   });
 
+  it('makes each wide items table keyboard accessible on small screens', async () => {
+    renderWithNav(<OrderDetailPage />);
+    await screen.findByText('Produto Teste 1');
+    const regions = screen.getAllByRole('region', { name: 'Order items' });
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toHaveAttribute('tabindex', '0');
+  });
+
   it('shows loading state initially', async () => {
     // Create a deferred promise that we can control
     let resolvePromise: (value: { order: Order }) => void;
@@ -222,11 +230,16 @@ describe('OrderDetailPage', () => {
   it('renders a vendor-scoped response without global status or an invented shipping amount', async () => {
     setMockAuthRole('VENDOR', 'vendor-person-1');
     const { status: _status, financialStatus: _financialStatus, ...vendorOrder } = mockOrder;
-    vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...vendorOrder, vendorGroups: [mockVendorGroup1], totalAmount: mockVendorGroup1.subtotal } as Order });
+    vi.mocked(orderApi.getById).mockResolvedValue({ order: { ...vendorOrder, paymentStatus: 'paid', saleParties: { seller: 'Test Store', buyer: 'Demo Buyer' }, vendorGroups: [mockVendorGroup1], totalAmount: mockVendorGroup1.subtotal } as Order });
     renderWithNav(<OrderDetailPage />);
     expect(await screen.findByText('Produto Teste 1')).toBeInTheDocument();
     expect(screen.queryByText('Order Status')).not.toBeInTheDocument();
     expect(screen.queryByText('Shipping')).not.toBeInTheDocument();
+    expect(screen.getByText('Payment Status')).toBeInTheDocument();
+    expect(screen.getByText('Payment confirmed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sales Order Details' })).toBeInTheDocument();
+    expect(screen.getByText('Test Store')).toBeInTheDocument();
+    expect(screen.getByText('Demo Buyer')).toBeInTheDocument();
   });
 
   it('shows vendor profile error and refetches on retry', async () => {
@@ -365,14 +378,14 @@ it('displays order header: ID, status badge, date, financial status', async () =
     expect(screen.getByText(/Produto Teste 1/i)).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('SKU:') && content.includes('PROD-1'))).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument(); // quantity
-    expect(screen.getByText(/\$29\.99/i)).toBeInTheDocument(); // unit price
-    const totalPrice1 = screen.getAllByText(/\$59\.98/i);
+    expect(screen.getByText(/R\$\s*29,99/i)).toBeInTheDocument(); // unit price
+    const totalPrice1 = screen.getAllByText(/R\$\s*59,98/i);
     expect(totalPrice1.length).toBeGreaterThanOrEqual(1);
 
     expect(screen.getByText(/Produto Teste 2/i)).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('SKU:') && content.includes('PROD-2'))).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument(); // quantity
-    const unitPrice2 = screen.getAllByText(/\$49\.99/i);
+    const unitPrice2 = screen.getAllByText(/R\$\s*49,99/i);
     expect(unitPrice2.length).toBeGreaterThanOrEqual(1);
 
     // Check vendor group financial summary
@@ -393,17 +406,17 @@ it('displays order header: ID, status badge, date, financial status', async () =
     
     // Subtotal: 59.98 + 49.99 = 109.97
     expect(screen.getByText((content) => content.includes('Subtotal') && content.includes('2 sellers'))).toBeInTheDocument();
-    expect(screen.getByText(/\$109\.97/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*109,97/i)).toBeInTheDocument();
     
     // Shipping: 119.97 - 109.97 = 10.00
     expect(screen.getByText(/shipping/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$10\.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*10,00/i)).toBeInTheDocument();
     
 // Total - in the order totals card (not table headers)
     const totalsCard = screen.getByText(/order totals/i).closest('div[class*="rounded-xl"]');
     expect(totalsCard).not.toBeNull();
-    expect(totalsCard!.textContent).toMatch(/119\.97/);
-    expect(screen.getByText(/\$119\.97/i)).toBeInTheDocument();
+    expect(totalsCard!.textContent).toMatch(/119,97/);
+    expect(screen.getByText(/R\$\s*119,97/i)).toBeInTheDocument();
   });
 
   it('displays timeline tracker with correct step highlighting for paid status', async () => {

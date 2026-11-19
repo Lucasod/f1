@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { vendorApi, Vendor, VendorApiException } from '@/shared/api/vendor';
 import { productApi, Product } from '@/shared/api/product';
@@ -145,6 +145,7 @@ export function VendorDashboard() {
   const [financialData, setFinancialData] = useState<FinancialDashboard | null>(null);
   const [financialLoading, setFinancialLoading] = useState(false);
   const [financialError, setFinancialError] = useState<string | null>(null);
+  const financialRequest = useRef(0);
 
   // Vendor order groups for orders-by-status chart
   const [vendorOrderGroups, setVendorOrderGroups] = useState<OrderVendorGroup[]>([]);
@@ -200,16 +201,18 @@ export function VendorDashboard() {
     if (!state.vendor) return;
 
     const { start, end } = getPeriodDates(period);
+    const requestId = ++financialRequest.current;
     setFinancialLoading(true);
     setFinancialError(null);
+    setFinancialData(null);
 
     try {
       const data = await financialApi.getVendorDashboard(start, end);
-      setFinancialData(data);
+      if (financialRequest.current === requestId) setFinancialData(data);
     } catch (error) {
-      setFinancialError(error instanceof Error ? error.message : 'Failed to load financial data');
+      if (financialRequest.current === requestId) setFinancialError(error instanceof Error ? error.message : 'Failed to load financial data');
     } finally {
-      setFinancialLoading(false);
+      if (financialRequest.current === requestId) setFinancialLoading(false);
     }
   }, [state.vendor, period]);
 
@@ -233,6 +236,7 @@ export function VendorDashboard() {
 
   useEffect(() => {
     loadFinancialData();
+    return () => { financialRequest.current += 1; };
   }, [loadFinancialData]);
 
   const getStatusVariant = (status: Product['status']): 'success' | 'warning' | 'error' | 'neutral' => {
@@ -335,10 +339,8 @@ export function VendorDashboard() {
   const outOfStockProducts = state.products.filter(p => p.status === 'out_of_stock').length;
   const inactiveProducts = state.products.filter(p => p.status === 'inactive').length;
 
-  const grossSales = financialData?.grossSales ?? 0;
-  const netExpected = financialData?.netExpectedAmount ?? 0;
-  const receivedInStripe = financialData?.receivedInStripe ?? 0;
-  const pendingDistribution = financialData?.pendingDistribution ?? 0;
+  const financialValue = (value: number | undefined) =>
+    value === undefined ? (financialError ? 'Unavailable' : 'Loading...') : formatCurrency(value);
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
@@ -375,11 +377,12 @@ export function VendorDashboard() {
         <MetricCard title="Active" value={activeProducts} variant="success" />
         <MetricCard title="Out of Stock" value={outOfStockProducts} variant="warning" />
         <MetricCard title="Inactive" value={inactiveProducts} variant="neutral" />
-        <MetricCard title="Gross Sales" value={formatCurrency(grossSales)} variant="success" />
-        <MetricCard title="Net Expected" value={formatCurrency(netExpected)} variant="default" />
-        <MetricCard title="Received" value={formatCurrency(receivedInStripe)} variant="default" />
-        <MetricCard title="Pending Distribution" value={formatCurrency(pendingDistribution)} variant="warning" />
+        <MetricCard title="Gross Sales" value={financialValue(financialData?.grossSales)} variant="success" />
+        <MetricCard title="Net Expected" value={financialValue(financialData?.netExpectedAmount)} variant="default" />
+        <MetricCard title="Received" value={financialValue(financialData?.receivedInStripe ?? undefined)} variant="default" />
+        <MetricCard title="Pending Distribution" value={financialValue(financialData?.pendingDistribution ?? undefined)} variant="warning" />
       </div>
+      <p className="text-sm text-gray-600 mb-6">Distribution totals are unavailable until transfer reconciliation is verified.</p>
 
       {/* Sales over time chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

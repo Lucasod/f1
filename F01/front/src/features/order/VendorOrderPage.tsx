@@ -19,10 +19,10 @@ import { Select } from '@/components/ui/Input';
 const DEFAULT_PAGE_SIZE = 10;
 
 /**
- * Format currency in USD (US Dollar)
+ * Format currency in BRL (pt-BR locale)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(value);
@@ -391,7 +391,7 @@ export function VendorOrderPage() {
         financialStatus={financialStatus}
         onUpdateStatus={handleUpdateStatus}
         isUpdating={updateVendorGroupStatusMutation.isPending}
-        onViewDetails={(orderId) => navigate(`/orders/${orderId}`)}
+        onViewDetails={(orderId) => navigate(`/orders/${orderId}?as=vendor`)}
       />
     );
   })}

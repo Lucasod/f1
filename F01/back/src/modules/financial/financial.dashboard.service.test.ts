@@ -92,6 +92,24 @@ describe('VendorFinancialDashboardService (FIND-A02-P1-001: currency BRL)', () =
       expect(entry.currency).toBe('BRL');
     }
   });
+  it('uses the capture date for the selected period and the order group net', async () => {
+    const beforeCapture = new Date(payment.capturedAt!.getTime() - 1000);
+    const afterCapture = new Date(payment.capturedAt!.getTime() + 1000);
+    vendor.commissionPct = 50;
+    expect((await service.getVendorDashboard('vendor-1', beforeCapture, afterCapture)).netExpectedAmount).toBe(90);
+    const outsidePeriod = await service.getVendorDashboard('vendor-1', afterCapture, new Date(afterCapture.getTime() + 1000));
+    expect(outsidePeriod.grossSales).toBe(0);
+    expect(outsidePeriod.netExpectedAmount).toBe(0);
+  });
+  it('does not count unpaid or duplicated captures in vendor sales history', async () => {
+    const unpaid = Payment.create({ orderId: order.id, personId: 'person-1', amount: 100 });
+    await paymentRepo.save(unpaid);
+    const allocation = FinancialAllocation.create({ orderId: order.id, vendorId: 'vendor-1', type: FinancialAllocationType.CAPTURE, gross: 100, fees: 10, net: 90, referenceId: payment.id });
+    await allocationRepo.save(allocation);
+    const dashboard = await service.getVendorDashboard('vendor-1');
+    const sales = dashboard.history.filter(entry => entry.movementType === MovementType.CONSUMER_PAYMENT);
+    expect(sales.map(entry => entry.amount)).toEqual([100]);
+  });
   it('does not expose another vendor or unassigned movements from a shared order', async () => {
     const now = new Date();
     for (const vendorId of ['vendor-1', 'vendor-2', undefined]) {
@@ -119,9 +137,19 @@ describe('VendorFinancialDashboardService (FIND-A02-P1-001: currency BRL)', () =
     });
     await orderRepo.save(sharedOrder);
     const sharedPayment = Payment.create({ orderId: sharedOrder.id, personId: 'buyer', amount: 520 });
+    sharedPayment.authorize('simulated-reference');
+    sharedPayment.capture();
     await paymentRepo.save(sharedPayment);
     const dashboard = await service.getVendorDashboard('vendor-1');
-    expect(dashboard.history.some(entry => entry.id === sharedPayment.id)).toBe(false);
+    expect(dashboard.history.find(entry => entry.id === sharedPayment.id)?.amount).toBe(20);
+  });
+
+  it('does not count ledger authorization and capture movements as additional sales', async () => {
+    for (const id of ['authorization', 'capture']) {
+      await movementRepo.save(FinancialMovementRecord.create({ movementType: MovementType.CONSUMER_PAYMENT, amount: 100, currency: 'BRL', relatedEntityType: 'payment', relatedEntityId: payment.id, orderId: order.id, vendorId: 'vendor-1', effectiveAt: new Date(), recordedAt: new Date() }));
+    }
+    const dashboard = await service.getVendorDashboard('vendor-1');
+    expect(dashboard.history.filter(entry => entry.movementType === MovementType.CONSUMER_PAYMENT).map(entry => entry.amount)).toEqual([100]);
   });
 
 });

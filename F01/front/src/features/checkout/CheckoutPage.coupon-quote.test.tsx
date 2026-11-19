@@ -154,7 +154,7 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
     // Find the "Review server proposal" heading and check its parent container for the proposal total
     const reviewHeading = screen.getByRole('heading', { name: 'Review server proposal' });
     const acceptanceSection = reviewHeading.closest('div');
-    expect(acceptanceSection?.textContent).toContain('27.00');
+    expect(acceptanceSection?.textContent).toContain('27,00');
     expect(s.post.mock.calls.filter(([url]) => url.endsWith('/accept'))).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Accept quote' })); await screen.findByText('Quote accepted');
     expect(s.finance.save).not.toHaveBeenCalled();
@@ -190,18 +190,18 @@ describe('persisted quote UI via real client and in-process HTTP', () => {
     const sidebar = screen.getByTestId('checkout-sidebar-summary');
     const summaryCards = screen.getAllByTestId('checkout-step-summary');
     const mainSummaryCard = summaryCards.find(el => el.tagName === 'DIV') || summaryCards[1];
-    // Sidebar shows cart price (20.00) before coupon
-    expect(sidebar.textContent).toContain('20.00');
+    // Sidebar shows cart price (20,00) before coupon
+    expect(sidebar.textContent).toContain('20,00');
     await apply();
     // Error message only appears when submit is attempted; verify button is disabled instead
     expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
     // Main summary shows discounted catalog price (27.00 for 30, 9.00 for 10) after coupon
-    const expectedQuoteTotal = catalogPrice === 30 ? '27.00' : '9.00';
+    const expectedQuoteTotal = catalogPrice === 30 ? '27,00' : '9,00';
     expect(mainSummaryCard.textContent).toContain(expectedQuoteTotal);
     fireEvent.click(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' }));
     await waitFor(() => expect(screen.getByTestId('checkout-submit-button')).toBeEnabled());
-    // Sidebar still shows cart price (20.00) after removal
-    expect(sidebar.textContent).toContain('20.00');
+    // Sidebar still shows cart price (20,00) after removal
+    expect(sidebar.textContent).toContain('20,00');
     // Main summary no longer shows discounted price
     expect(mainSummaryCard.textContent).not.toContain(expectedQuoteTotal);
     expect(s.post).not.toHaveBeenCalled();
@@ -216,8 +216,8 @@ it('confirms an actual quote, disables purchase, shows net without double subtra
     // When preview?.purchasable === false, submit button is disabled
     expect(screen.getByTestId('checkout-submit-button')).toBeDisabled();
     // Main summary shows discounted total (18.00) not double-subtracted (16.00)
-    expect(mainSummaryCard.textContent).toContain('18.00');
-    expect(mainSummaryCard.textContent).not.toContain('16.00');
+    expect(mainSummaryCard.textContent).toContain('18,00');
+    expect(mainSummaryCard.textContent).not.toContain('16,00');
     // Remove coupon to restore plain checkout
     expect(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove coupon SAVE from Store' }));

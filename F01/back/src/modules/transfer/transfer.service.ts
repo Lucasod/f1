@@ -89,6 +89,8 @@ export class TransferService {
     const vendor = vendorId && this.vendorRepo ? await this.vendorRepo.findById(vendorId) : null;
     const destinationAccountId = vendor?.stripeAccountId?.trim();
     if (!destinationAccountId) throw new Error('TRANSFER_DESTINATION_UNAVAILABLE');
+    const account = await this.stripe.accounts.retrieve(destinationAccountId);
+    if (account.capabilities?.transfers !== 'active') throw new Error('TRANSFER_CAPABILITY_INACTIVE');
 
     // Calculate vendor net amount: ovgTotal × (1 - commission_pct/100)
     const vendorNet = ovgTotal * (1 - commissionPct / 100);
@@ -109,15 +111,28 @@ export class TransferService {
     // source_transaction = charge_id for synchronous payments
     // transfer_group = order_id for correlation
     // destination = vendor's Stripe connected account ID for attribution
-    const stripeTransfer = await this.stripe.transfers.create({
-      amount: Math.round(transferAmount * 100), // Stripe expects amount in cents
-      currency: 'brl',
-      destination: destinationAccountId,
-      source_transaction: chargeId,
-      transfer_group: orderId,
-    }, {
-      idempotencyKey: idempotencyKey,
-    });
+    let stripeTransfer: Stripe.Transfer;
+    try {
+      stripeTransfer = await this.stripe.transfers.create({
+        amount: Math.round(transferAmount * 100), // Stripe expects amount in cents
+        currency: 'brl',
+        destination: destinationAccountId,
+        source_transaction: chargeId,
+        transfer_group: orderId,
+      }, {
+        idempotencyKey: idempotencyKey,
+      });
+    } catch (err) {
+      // Transfer creation failed — mark entity as FAILED and record ledger
+      transferEntity.fail();
+      await this.transferRepo.save(transferEntity);
+      await this.recordTransferLedger(
+        transferEntity,
+        MovementType.VENDOR_TRANSFER,
+        EventType.TRANSFER_FAILED
+      );
+      throw err;
+    }
 
     // Update the entity with Stripe transfer ID and provider transaction ID
     transferEntity.stripeTransferId = stripeTransfer.id;

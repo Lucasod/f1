@@ -18,8 +18,8 @@ export interface FinancialDashboard {
   grossSales: number;
   grossSalesLabel: string;
   netExpectedAmount: number;
-  receivedInStripe: number;
-  pendingDistribution: number;
+  receivedInStripe: number | null;
+  pendingDistribution: number | null;
   bankPayout: number;
   history: FinancialHistoryEntry[];
 }

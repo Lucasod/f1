@@ -23,10 +23,10 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Badge } from '@/components/ui/Badge';
 
 /**
- * Format currency in USD (US Dollar)
+ * Format currency in BRL (pt-BR locale)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(value);

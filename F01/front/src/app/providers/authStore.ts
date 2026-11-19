@@ -23,7 +23,7 @@ interface AuthState {
   error: string | null;
   
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (input: {
     name: string;
     taxIdType: 'CPF' | 'CNPJ';
@@ -107,6 +107,7 @@ export const useAuthStore = create<AuthState>()(
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
           await get().mergeGuestCartOnLogin();
           if (epoch !== authEpoch) throw new Error('AUTH_OPERATION_SUPERSEDED');
+          return user;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'LOGIN_FAILED';
           if (epoch === authEpoch) {

@@ -41,6 +41,15 @@ export enum FinancialStatus {
 
 export const VALID_FINANCIAL_STATUSES: FinancialStatus[] = Object.values(FinancialStatus);
 
+export function orderPaymentStatus(status: OrderStatus, financialStatus: FinancialStatus): 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'partially_refunded' {
+  if (financialStatus === FinancialStatus.FULLY_REFUNDED) return 'refunded';
+  if (financialStatus === FinancialStatus.PARTIALLY_REFUNDED) return 'partially_refunded';
+  if (financialStatus === FinancialStatus.PAID) return 'paid';
+  if (status === OrderStatus.FAILED_PAYMENT) return 'failed';
+  if (status === OrderStatus.CANCELLED) return 'cancelled';
+  return 'pending';
+}
+
 export enum DisputeType {
   REFUND = 'refund',
   DAMAGE = 'damage',
@@ -1150,6 +1159,7 @@ export interface PaymentRepository {
   findById(id: string): Promise<Payment | null>;
   findByOrderId(orderId: string): Promise<Payment[]>;
   findByPersonId(personId: string): Promise<Payment[]>;
+  findByStatus(status: PaymentStatus): Promise<Payment[]>;
   update(payment: Payment): Promise<Payment>;
   delete(id: string): Promise<void>;
   insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment>;
@@ -1227,6 +1237,16 @@ export class InMemoryPaymentRepository implements PaymentRepository {
       if (payment) payments.push(payment);
     }
     return payments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async findByStatus(status: PaymentStatus): Promise<Payment[]> {
+    const payments: Payment[] = [];
+    for (const payment of this.payments.values()) {
+      if (payment.status === status) {
+        payments.push(payment);
+      }
+    }
+    return payments.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 
   async update(payment: Payment): Promise<Payment> {

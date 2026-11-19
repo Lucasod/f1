@@ -61,6 +61,8 @@ export interface Order {
   shippingAddress: Address;
   totalAmount: number;
   financialStatus?: string;
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'partially_refunded';
+  saleParties?: { seller: string; buyer: string };
   createdAt: string;
   updatedAt: string;
   comment?: string;
@@ -164,8 +166,11 @@ export const orderApi = {
   /**
    * Get order details by ID
    */
-  async getById(orderId: string): Promise<{ order: Order }> {
-    const response = await apiClient.get(`/api/v1/orders/${orderId}`);
+  async getById(orderId: string, viewContext?: 'consumer' | 'vendor'): Promise<{ order: Order }> {
+    const url = viewContext
+      ? `/api/v1/orders/${orderId}?as=${encodeURIComponent(viewContext)}`
+      : `/api/v1/orders/${orderId}`;
+    const response = await apiClient.get(url);
     return handleResponse<{ order: Order }>(response);
   },
 

@@ -5,7 +5,7 @@ import { PersonRepository } from '../person/person.domain';
 import { VendorRepository } from '../vendor/vendor.domain';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../auth/auth.middleware';
 import { PersonRole } from '../person/person.domain';
-import { Order, OrderVendorGroup, OrderStatus, OrderVendorGroupStatus, OrderError, DisputeStatus, DisputeResolution, Dispute } from './order.domain';
+import { Order, OrderVendorGroup, OrderStatus, OrderVendorGroupStatus, OrderError, DisputeStatus, DisputeResolution, Dispute, orderPaymentStatus } from './order.domain';
 
 export interface OrderRoutesConfig {
   authService: AuthService;
@@ -106,8 +106,16 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
         return res.status(400).json({ error: 'ORDER_ID_REQUIRED', message: 'Order ID is required' });
       }
 
+      const viewContext = (req.query.as as 'consumer' | 'vendor' | undefined);
+
+      // Validate viewContext parameter — reject invalid values to prevent authorization bypass
+      if (viewContext !== undefined && viewContext !== 'consumer' && viewContext !== 'vendor') {
+        return res.status(400).json({ error: 'INVALID_VIEW_CONTEXT', message: 'Invalid view context parameter' });
+      }
+
       let order: Order | null = null;
       let responseVendorId: string | undefined;
+      let sellerName: string | undefined;
       const isAdmin = req.user.roles.includes(PersonRole.ADMIN);
       const isConsumer = req.user.roles.includes(PersonRole.CONSUMER);
       const isVendor = req.user.roles.includes(PersonRole.VENDOR);
@@ -115,18 +123,18 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       if (isAdmin) {
         order = await orderService.getOrderById(orderId, personId, 'admin');
       } else {
-        if (isConsumer) {
-          order = await orderService.getOrderById(orderId, personId, 'consumer');
+        if (viewContext !== 'vendor' && isConsumer) {
+          order = await orderService.getOrderById(orderId, personId, 'consumer', undefined, viewContext);
         }
 
-        if (!order && isVendor) {
+        if (!order && viewContext !== 'consumer' && isVendor) {
           const vendor = await vendorRepo.findByPersonId(personId);
           if (!vendor && !isConsumer) {
             return res.status(404).json({ error: OrderError.VENDOR_NOT_FOUND, message: 'Vendor profile not found' });
           }
           if (vendor) {
-            order = await orderService.getOrderById(orderId, personId, 'vendor', vendor.id);
-            if (order) responseVendorId = vendor.id;
+            order = await orderService.getOrderById(orderId, personId, 'vendor', vendor.id, viewContext);
+            if (order) { responseVendorId = vendor.id; sellerName = vendor.storeName; }
           }
         }
       }
@@ -137,7 +145,8 @@ export function createOrderRoutes({ authService, orderService, personRepo, vendo
       }
 
       if (responseVendorId !== undefined) {
-        return res.json({ order: vendorOrderToResponse(order, responseVendorId) });
+        const buyer = await personRepo.findById(order.personId);
+        return res.json({ order: { ...vendorOrderToResponse(order, responseVendorId), paymentStatus: orderPaymentStatus(order.status, order.financialStatus), saleParties: { seller: sellerName || 'Store', buyer: buyer?.name || 'Customer' } } });
       }
       return res.json({ order: orderToResponse(order) });
     } catch (error) {

@@ -22,6 +22,7 @@ import {
 import Stripe from 'stripe';
 
 // Define mocks before vi.mock (which is hoisted)
+const mockStripeAccounts = { retrieve: vi.fn() };
 const mockStripeTransfers = {
   create: vi.fn(),
   retrieve: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('stripe', () => {
   return {
     default: vi.fn().mockImplementation(function () {
       this.transfers = mockStripeTransfers;
+      this.accounts = mockStripeAccounts;
     }),
   };
 });
@@ -53,6 +55,7 @@ describe('Transfer Service', () => {
     vi.clearAllMocks();
     mockStripeTransfers.create.mockReset();
     mockStripeTransfers.retrieve.mockReset();
+    mockStripeAccounts.retrieve.mockReset().mockResolvedValue({ capabilities: { transfers: "active" } });
 
     // Set up order with vendor group for transfer tests
     const testOrder = Order.reconstruct({
@@ -118,6 +121,13 @@ describe('Transfer Service', () => {
   });
 
   describe('createTransferWithDetails', () => {
+    it('rejects an account without active transfer capability', async () => {
+      mockVendorRepo.findById.mockResolvedValue({ stripeAccountId: 'acct_inactive' });
+      mockStripeAccounts.retrieve.mockResolvedValue({ capabilities: { transfers: 'inactive' } });
+      await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_1')).rejects.toThrow('TRANSFER_CAPABILITY_INACTIVE');
+      expect(mockStripeTransfers.create).not.toHaveBeenCalled();
+      expect(transferRepo.save).not.toHaveBeenCalled();
+    });
     it('creates a transfer with calculated vendor net amount and vendor Stripe account as destination', async () => {
       // Set up vendor with Stripe connected account ID
       mockVendorRepo.findById.mockResolvedValue(

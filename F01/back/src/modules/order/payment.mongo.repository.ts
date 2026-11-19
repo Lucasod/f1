@@ -185,6 +185,15 @@ export class MongoPaymentRepository implements PaymentRepository {
     return payments.map(doc => this.mapToPayment(doc));
   }
 
+  async findByStatus(status: PaymentStatus): Promise<Payment[]> {
+    const payments = await this.paymentsCollection
+      .find({ status })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return payments.map(doc => this.mapToPayment(doc));
+  }
+
   async update(payment: Payment): Promise<Payment> {
     // Reuse save logic which handles upserts
     return this.save(payment);

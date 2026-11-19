@@ -35,6 +35,8 @@ test('consumer cannot authorize or capture own payment without verified provider
   }
   const serviceModule = loadSource('payment.service.ts', {
     './order.domain': domain,
+    '../financial/financial.movement': {},
+    '../financial/financial.event': {},
     '../financial/financial.domain': {},
     '../transfer/transfer.domain': {},
     '../transfer/transfer.mongo.repository': { MongoTransferRepository: BlockedAdapter },

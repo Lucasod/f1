@@ -18,7 +18,7 @@ export function LoginForm() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const from = (location.state as { from?: Location })?.from?.pathname || '/';
+  const from = (location.state as { from?: Location })?.from;
 
   const validateEmail = (value: string): string | undefined => {
     if (!value.trim()) return 'Email is required';
@@ -58,9 +58,14 @@ export function LoginForm() {
     if (!validateForm()) return;
 
     try {
-      await login(email, password);
-      // Redirect to the intended destination or home
-      navigate(from, { replace: true });
+      const user = await login(email, password);
+      const dashboard = user.roles.includes('ADMIN') ? '/admin/dashboard'
+        : user.roles.includes('VENDOR') ? '/vendor/dashboard' : '/dashboard';
+      const path = from?.pathname;
+      const destination = path && path.startsWith('/') && !path.startsWith('//')
+        ? { pathname: path, search: from?.search || '', hash: from?.hash || '' }
+        : dashboard;
+      navigate(destination, { replace: true });
     } catch {
       // Error is handled by auth store
     }

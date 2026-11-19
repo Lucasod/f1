@@ -25,12 +25,12 @@ export function useOrders(filters: OrderListParams = {}) {
   });
 }
 
-export function useOrderDetail(orderId: string | null) {
+export function useOrderDetail(orderId: string | null, viewContext?: 'consumer' | 'vendor') {
   const user = useAuthStore(state => state.user);
 
   return useQuery<{ order: Order }, Error>({
-    queryKey: ['orders', 'detail', orderId, getOrderQueryScope(user)],
-    queryFn: () => orderApi.getById(orderId!),
+    queryKey: ['orders', 'detail', orderId, viewContext, getOrderQueryScope(user)],
+    queryFn: () => orderApi.getById(orderId!, viewContext),
     enabled: !!orderId,
     staleTime: 2 * 60 * 1000, // 2 minutes
   });

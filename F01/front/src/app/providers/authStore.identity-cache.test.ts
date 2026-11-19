@@ -105,7 +105,7 @@ describe('authentication identity changes', () => {
   it.each(['login', 'register'] as const)('ignores pending %s after logout', async action => {
     const pending = deferred<Awaited<ReturnType<typeof authApi.login>>>();
     const next = responseFor('next');
-    let attempt: Promise<void>;
+    let attempt: Promise<unknown>;
     if (action === 'login') {
       vi.mocked(authApi.login).mockReturnValueOnce(pending.promise);
       attempt = useAuthStore.getState().login(next.person.email, crypto.randomUUID());
@@ -175,7 +175,7 @@ describe('authentication identity changes', () => {
     const pendingAuth = deferred<Awaited<ReturnType<typeof authApi.login>>>();
     const pendingRefresh = deferred<Awaited<ReturnType<typeof authApi.refreshToken>>>();
     const next = responseFor('next');
-    let attempt: Promise<void>;
+    let attempt: Promise<unknown>;
     if (action === 'login') {
       vi.mocked(authApi.login).mockReturnValueOnce(pendingAuth.promise);
       attempt = useAuthStore.getState().login(next.person.email, crypto.randomUUID());
@@ -201,7 +201,7 @@ describe('authentication identity changes', () => {
     const pendingAuth = deferred<Awaited<ReturnType<typeof authApi.login>>>();
     const pendingRefresh = deferred<Awaited<ReturnType<typeof authApi.refreshToken>>>();
     const next = responseFor('next');
-    let attempt: Promise<void>;
+    let attempt: Promise<unknown>;
     if (action === 'login') {
       vi.mocked(authApi.login).mockReturnValueOnce(pendingAuth.promise);
       attempt = useAuthStore.getState().login(next.person.email, crypto.randomUUID());
@@ -259,7 +259,7 @@ describe('authentication identity changes', () => {
     await login('previous');
     const pending = deferred<Awaited<ReturnType<typeof authApi.login>>>();
     const next = responseFor('next');
-    let attempt: Promise<void>;
+    let attempt: Promise<unknown>;
     if (action === 'login') {
       vi.mocked(authApi.login).mockReturnValueOnce(pending.promise);
       attempt = useAuthStore.getState().login(next.person.email, crypto.randomUUID());

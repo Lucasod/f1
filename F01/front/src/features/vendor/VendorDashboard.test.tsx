@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
@@ -142,6 +142,36 @@ describe('VendorDashboard', () => {
     });
     mockGetVendorOrderGroups.mockResolvedValue({ vendorGroups: [], total: 0, page: 1, limit: 20 });
     localStorage.clear();
+  });
+
+  it('does not present unavailable financial data as zero', async () => {
+    mockGetVendorDashboard.mockRejectedValue(new Error('Financial service unavailable'));
+    renderDashboard();
+    await screen.findByText('Test Store');
+    await waitFor(() => expect(screen.getByText('Gross Sales').closest('.bg-white')).toHaveTextContent('Unavailable'));
+    expect(screen.getByText('Net Expected').closest('.bg-white')).toHaveTextContent('Unavailable');
+  });
+
+  it('does not present unverified distribution totals as reliable balances', async () => {
+    renderDashboard();
+    await screen.findByText('Test Store');
+    await waitFor(() => expect(screen.getByText('Gross Sales').closest('.bg-white')).toHaveTextContent('1.000,00'));
+    expect(screen.getByText('Received').closest('.bg-white')).toHaveTextContent('R$ 800,00');
+    expect(screen.getByText('Pending Distribution').closest('.bg-white')).toHaveTextContent('R$ 100,00');
+  });
+
+  it('keeps the latest period when financial requests resolve out of order', async () => {
+    let resolveOld!: (value: Awaited<ReturnType<typeof financialApi.getVendorDashboard>>) => void;
+    const old = new Promise<Awaited<ReturnType<typeof financialApi.getVendorDashboard>>>(resolve => { resolveOld = resolve; });
+    const latest = { grossSales: 200, grossSalesLabel: 'pre-commission', netExpectedAmount: 180, receivedInStripe: 0, pendingDistribution: 0, bankPayout: 0, history: [] };
+    mockGetVendorDashboard.mockReset().mockReturnValueOnce(old).mockResolvedValueOnce(latest);
+    renderDashboard();
+    await screen.findByText('Test Store');
+    await waitFor(() => expect(mockGetVendorDashboard).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7d' } });
+    await waitFor(() => expect(screen.getByText('Gross Sales').closest('.bg-white')).toHaveTextContent('200,00'));
+    await act(async () => { resolveOld({ ...latest, grossSales: 100 }); await old; });
+    expect(screen.getByText('Gross Sales').closest('.bg-white')).toHaveTextContent('200,00');
   });
 
   it('should load vendor profile and products on mount', async () => {

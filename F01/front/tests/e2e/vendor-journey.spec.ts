@@ -593,7 +593,7 @@ test.describe('FS-01: Vendor Journey Validation (direct token approach)', () => 
     console.log('Step 6: Vendor financial view');
 
     const financialResp = await page.request.get(
-      `${API_BASE_URL}/api/v1/financial/`,
+      `${API_BASE_URL}/api/v1/financial/vendor-dashboard`,
       { headers: { Authorization: `Bearer ${vendorTokenForStep5}` } }
     );
     expect(financialResp.ok()).toBe(true);

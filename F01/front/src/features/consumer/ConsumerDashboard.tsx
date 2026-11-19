@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { orderApi, ConsumerOrderSummary, OrderStatus, OrderApiException } from '@/shared/api/order';
@@ -8,7 +7,6 @@ import { Spinner } from '@/components/ui/Spinner';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
-import { LineChart, PieChart } from '@/components/ui/charts';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getOrderQueryScope } from '@/features/order/useOrder';
 
@@ -50,41 +48,6 @@ function getOrderStatusConfig(status: OrderStatus): { label: string; variant: 'd
   return statusMap[status] || { label: status.toUpperCase(), variant: 'neutral' };
 }
 
-function groupOrdersByDate(orders: any[]): { name: string; spending: number }[] {
-  const byDate = new Map<string, number>();
-  for (const order of orders) {
-    const dateKey = new Date(order.createdAt).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-    });
-    byDate.set(dateKey, (byDate.get(dateKey) || 0) + order.totalAmount);
-  }
-  return Array.from(byDate.entries()).map(([name, spending]) => ({ name, spending }));
-}
-
-function groupOrdersByStatus(orders: any[]): { name: string; value: number }[] {
-  const byStatus = new Map<string, number>();
-  for (const order of orders) {
-    const status = order.status || 'unknown';
-    byStatus.set(status, (byStatus.get(status) || 0) + 1);
-  }
-
-  const statusLabels: Record<string, string> = {
-    pending_payment: 'Pending Payment',
-    paid: 'Paid',
-    processing: 'Processing',
-    shipped: 'Shipped',
-    delivered: 'Delivered',
-    cancelled: 'Cancelled',
-    failed_payment: 'Failed Payment',
-  };
-
-  return Array.from(byStatus.entries()).map(([name, value]) => ({
-    name: statusLabels[name] || name.toUpperCase(),
-    value,
-  }));
-}
-
 export function ConsumerDashboard() {
   const navigate = useNavigate();
   const { user, hasRole } = useAuth();
@@ -102,10 +65,6 @@ export function ConsumerDashboard() {
 
   const summary = data?.summary;
   const recentOrders = summary?.recentOrders ?? [];
-
-  // Chart data transformations from consumer order history
-  const spendingOverTimeData = useMemo(() => groupOrdersByDate(recentOrders), [recentOrders]);
-  const ordersByStatusData = useMemo(() => groupOrdersByStatus(recentOrders), [recentOrders]);
 
   const handleShopAgain = () => {
     // Navigate to catalog/products page
@@ -184,42 +143,6 @@ export function ConsumerDashboard() {
         <MetricCard title="Total Spent" value={formatCurrency(summary?.totalSpent ?? 0)} variant="success" />
         <MetricCard title="Pending" value={summary?.pendingOrders ?? 0} variant="warning" />
         <MetricCard title="Delivered" value={summary?.deliveredOrders ?? 0} variant="success" />
-      </div>
-
-      {/* Consumer charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card variant="bordered" padding="none">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">Spending Over Time</h2>
-            <p className="text-sm text-gray-500 mt-1">Your spending trend across recent orders</p>
-          </div>
-          <LineChart
-            data={spendingOverTimeData}
-            title="Spending Over Time"
-            xKey="name"
-            yKeys={['spending']}
-            yKeyLabels={{ spending: 'Spending (BRL)' }}
-            height={300}
-            loading={isLoading}
-            error={null}
-            emptyMessage="No spending data available"
-          />
-        </Card>
-
-        <Card variant="bordered" padding="none">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">Order History</h2>
-            <p className="text-sm text-gray-500 mt-1">Distribution of your orders by status</p>
-          </div>
-          <PieChart
-            data={ordersByStatusData}
-            title="Order History"
-            height={300}
-            loading={isLoading}
-            error={null}
-            emptyMessage="No order history available"
-          />
-        </Card>
       </div>
 
       {/* Recent Orders */}

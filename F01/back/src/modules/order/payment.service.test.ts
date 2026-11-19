@@ -5,6 +5,18 @@ import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.d
 import { Product, InMemoryProductRepository } from '../product/product.domain';
 import { config } from '../../config';
 
+vi.mock('stripe', () => {
+  const retrieve = vi.fn();
+  return {
+    default: class StripeMock {
+      checkout = { sessions: { retrieve } };
+    },
+    __retrieve: retrieve
+  };
+});
+
+import { __retrieve as mockRetrieve } from 'stripe';
+
 describe('Payment Service', () => {
   let paymentRepo: InMemoryPaymentRepository;
   let orderRepo: InMemoryOrderRepository;
@@ -996,6 +1008,222 @@ describe('Payment Service', () => {
       expect(transferCalls[1][0]).toBe(multiOrder.id);
       const ovgIds = transferCalls.map((c: any[]) => c[1]);
       expect(ovgIds).toHaveLength(2);
+    });
+  });
+
+  describe('recoverPendingPayments', () => {
+    beforeEach(() => {
+      mockRetrieve.mockReset();
+      vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture');
+    });
+
+    async function setPendingPaymentWithSession(
+      payment: Payment,
+      providerTransactionId: string
+    ): Promise<void> {
+      await paymentRepo.save(
+        Payment.reconstruct({
+          ...payment.toJSON(),
+          providerTransactionId,
+          status: PaymentStatus.PENDING
+        } as any)
+      );
+    }
+
+    it.each([
+      ['open paid', { status: 'open' }],
+      ['wrong session', { id: 'cs_other' }],
+      ['wrong order', { metadata: { orderId: 'other', paymentId: 'PAYMENT' } }],
+      ['wrong currency', { currency: 'usd' }],
+      ['missing payment intent', { payment_intent: null }],
+      ['live mode', { livemode: true }],
+    ])('does not capture recovery with %s', async (_case, override) => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_guard');
+      const metadata = override.metadata
+        ? { ...override.metadata, paymentId: payment.id }
+        : { orderId: payment.orderId, paymentId: payment.id };
+      mockRetrieve.mockResolvedValue({ id: 'cs_test_guard', status: 'complete',
+        payment_status: 'paid', payment_intent: 'pi_test', amount_total: 10000,
+        currency: 'brl', livemode: false, ...override, metadata });
+      vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture');
+      await paymentService.recoverPendingPayments();
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('recovers a pending payment whose Checkout Session is paid', async () => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_123');
+
+      mockRetrieve.mockResolvedValue({
+        id: 'cs_test_123', status: 'complete', livemode: false, currency: 'brl',
+        metadata: { paymentId: payment.id, orderId: payment.orderId },
+        payment_status: 'paid',
+        payment_intent: 'pi_test_123',
+        amount_total: 10000
+      });
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 1, failed: 0 });
+      expect(mockRetrieve).toHaveBeenCalledWith('cs_test_123');
+
+      const updated = await paymentRepo.findById(payment.id);
+      expect(updated!.status).toBe(PaymentStatus.CAPTURED);
+      expect((await orderRepo.findById(testOrder.id))!.status).toBe(OrderStatus.PAID);
+    });
+
+    it('keeps a completed but unpaid async payment pending until later confirmation', async () => {
+      const productRepo = new InMemoryProductRepository();
+      const product = Product.create({ vendorId: 'vendor-1', categoryId: 'cat-1', name: 'Test Product', description: 'desc', price: 50, quantity: 8 });
+      product.id = 'product-1';
+      await productRepo.save(product);
+      const createTransferWithDetails = vi.fn();
+      const service = new PaymentService(paymentRepo, orderRepo, productRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { createTransferWithDetails } as any);
+      const payment = await service.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await setPendingPaymentWithSession(payment, 'cs_test_456');
+      const failSpy = vi.spyOn(service, 'failPayment');
+
+      mockRetrieve.mockResolvedValue({ status: 'complete', payment_status: 'unpaid' });
+
+      const result = await service.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 0, failed: 0 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+      expect((await orderRepo.findById(testOrder.id))!.status).toBe(OrderStatus.PENDING_PAYMENT);
+      expect((await productRepo.findById('product-1'))!.quantity).toBe(8);
+      expect(failSpy).not.toHaveBeenCalled();
+      expect(createTransferWithDetails).not.toHaveBeenCalled();
+
+      await service.completeCheckoutPayment(payment.id, 'pi_test_123', 10000);
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.CAPTURED);
+      expect((await orderRepo.findById(testOrder.id))!.status).toBe(OrderStatus.PAID);
+      expect(createTransferWithDetails).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails a pending payment whose Checkout Session is expired', async () => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_789');
+
+      mockRetrieve.mockResolvedValue({ status: 'expired', payment_status: 'unpaid' });
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 0, failed: 1 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.FAILED);
+    });
+
+    it('skips a pending payment whose Checkout Session is still open', async () => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_open');
+
+      mockRetrieve.mockResolvedValue({ status: 'open', payment_status: 'unpaid' });
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 0, failed: 0 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('does not fail an expired session without unpaid payment evidence', async () => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_unknown');
+      mockRetrieve.mockResolvedValue({ status: 'expired', payment_status: 'no_payment_required' });
+
+      expect(await paymentService.recoverPendingPayments()).toEqual({ recovered: 0, failed: 0 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('counts as failed when a pending payment has no providerTransactionId', async () => {
+      const payment = await createTestPayment(); // PENDING, no providerTransactionId
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 0, failed: 1 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('counts as failed when Stripe session retrieval throws', async () => {
+      const payment = await createTestPayment();
+      await setPendingPaymentWithSession(payment, 'cs_test_bad');
+
+      mockRetrieve.mockRejectedValue(new Error('Stripe unreachable'));
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 0, failed: 1 });
+      expect((await paymentRepo.findById(payment.id))!.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('processes multiple pending payments and aggregates counts', async () => {
+      // Distinct orders so createPayment returns distinct payments (no idempotency collision)
+      const makeOrder = async (suffix: string) => {
+        const order = Order.create({
+          personId: testPerson.id,
+          vendorGroups: [{
+            vendorId: 'vendor-1',
+            items: [{ productId: 'product-1', productName: 'Test Product', vendorId: 'vendor-1', quantity: 2, unitPrice: 50 }],
+            commissionPct: config.commissionPct
+          }],
+          shippingAddress: {
+            id: `addr-multi-${suffix}`, street: 'Test Street', number: '123',
+            neighborhood: 'Test Neighborhood', city: 'Test City', state: 'TS', isPrimary: true
+          }
+        });
+        await orderRepo.save(order);
+        return order;
+      };
+
+      const orderPaid = await makeOrder('paid');
+      const paidPayment = await paymentService.createPayment(orderPaid.id, testPerson.id, orderPaid.totalAmount);
+      await setPendingPaymentWithSession(paidPayment, 'cs_paid');
+      const orderUnpaid = await makeOrder('unpaid');
+      const unpaidPayment = await paymentService.createPayment(orderUnpaid.id, testPerson.id, orderUnpaid.totalAmount);
+      await setPendingPaymentWithSession(unpaidPayment, 'cs_unpaid');
+      mockRetrieve.mockImplementation(async (sessionId: string) => sessionId === 'cs_paid'
+        ? { id: 'cs_paid', status: 'complete', livemode: false, currency: 'brl',
+            metadata: { paymentId: paidPayment.id, orderId: paidPayment.orderId },
+            payment_status: 'paid', payment_intent: 'pi_paid', amount_total: 10000 }
+        : { payment_status: 'unpaid' });
+
+      const orderNoTxn = await makeOrder('no-txn');
+      await paymentService.createPayment(orderNoTxn.id, testPerson.id, orderNoTxn.totalAmount); // no providerTransactionId
+
+      const result = await paymentService.recoverPendingPayments();
+
+      expect(result).toEqual({ recovered: 1, failed: 1 });
+    });
+  });
+
+  describe('InMemoryPaymentRepository.findByStatus', () => {
+    it('returns only payments matching the requested status', async () => {
+      const pending = Payment.reconstruct({
+        id: 'p-1', orderId: 'o-1', personId: 'person-1', amount: 100,
+        status: PaymentStatus.PENDING, createdAt: new Date(), updatedAt: new Date()
+      } as any);
+      const authorized = Payment.reconstruct({
+        id: 'p-2', orderId: 'o-1', personId: 'person-1', amount: 100,
+        status: PaymentStatus.AUTHORIZED, createdAt: new Date(), updatedAt: new Date()
+      } as any);
+      const captured = Payment.reconstruct({
+        id: 'p-3', orderId: 'o-1', personId: 'person-1', amount: 100,
+        status: PaymentStatus.CAPTURED, createdAt: new Date(), updatedAt: new Date()
+      } as any);
+
+      await paymentRepo.save(pending);
+      await paymentRepo.save(authorized);
+      await paymentRepo.save(captured);
+
+      const pendingPayments = await paymentRepo.findByStatus(PaymentStatus.PENDING);
+      expect(pendingPayments).toHaveLength(1);
+      expect(pendingPayments[0].id).toBe('p-1');
+
+      const capturedPayments = await paymentRepo.findByStatus(PaymentStatus.CAPTURED);
+      expect(capturedPayments).toHaveLength(1);
+      expect(capturedPayments[0].id).toBe('p-3');
+
+      const failedPayments = await paymentRepo.findByStatus(PaymentStatus.FAILED);
+      expect(failedPayments).toHaveLength(0);
     });
   });
 });

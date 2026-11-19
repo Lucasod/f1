@@ -184,20 +184,21 @@ export class OrderService {
     orderId: string,
     personId: string,
     role: 'consumer' | 'vendor' | 'admin',
-    vendorId?: string
+    vendorId?: string,
+    viewContext?: 'consumer' | 'vendor'
   ): Promise<Order | null> {
     const order = await this.orderRepo.findById(orderId);
     if (!order) {
       return null;
     }
 
-    // Authorization check based on role
-    if (role === 'consumer') {
+    // Authorization check based on role and view context
+    if (viewContext === 'consumer' || (viewContext === undefined && role === 'consumer')) {
       // Consumer can only see their own orders
       if (order.personId !== personId) {
         return null;
       }
-    } else if (role === 'vendor') {
+    } else if (viewContext === 'vendor' || (viewContext === undefined && role === 'vendor')) {
       // Vendor can only see orders containing their vendor groups
       if (!vendorId) {
         throw new Error(OrderError.VENDOR_ID_REQUIRED);

@@ -21,10 +21,10 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 
 /**
- * Format currency in USD (US Dollar)
+ * Format currency in BRL (pt-BR locale)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(value);
@@ -98,6 +98,7 @@ interface VendorGroupCardProps {
   currentVendorId?: string;
   onUpdateStatus: (ovgId: string, status: OrderVendorGroupStatus) => void;
   orderStatus?: OrderStatus;
+  sellerName?: string;
 }
 
 function VendorGroupCard({
@@ -108,6 +109,7 @@ function VendorGroupCard({
   currentVendorId,
   onUpdateStatus,
   orderStatus,
+  sellerName,
 }: VendorGroupCardProps) {
   const statusConfig = getVendorGroupStatusConfig(vendorGroup.status);
   const isOwnVendorGroup = isVendor && !!currentVendorId && vendorGroup.vendorId === currentVendorId;
@@ -135,7 +137,7 @@ function VendorGroupCard({
       {/* Vendor Group Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-gray-200">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Seller: {vendorGroup.vendorId.slice(0, 8).toUpperCase()}</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Seller: {sellerName || vendorGroup.vendorId.slice(0, 8).toUpperCase()}</h3>
           <p className="text-sm text-gray-500 mt-0.5">ID do grupo: {vendorGroup.id.slice(0, 8).toUpperCase()}</p>
         </div>
         <Badge variant={statusConfig.variant} size="md" dot>
@@ -144,8 +146,8 @@ function VendorGroupCard({
       </div>
 
       {/* Items Table */}
-      <div className="overflow-x-auto mb-4">
-        <table className="w-full text-sm" role="table">
+      <div className="overflow-x-auto mb-4" role="region" aria-label="Order items" tabIndex={0}>
+        <table className="w-full min-w-[32rem] text-sm" role="table">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Product</th>
@@ -180,7 +182,7 @@ function VendorGroupCard({
       </div>
 
       {/* Vendor Group Financial Summary */}
-      <div className="grid grid-cols-3 gap-4 text-center p-4 bg-gray-50 rounded-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center p-4 bg-gray-50 rounded-lg">
         <div>
           <p className="text-xs text-gray-500 uppercase tracking-wider">Subtotal</p>
           <p className="text-lg font-semibold text-gray-900">{formatCurrency(vendorGroup.subtotal)}</p>
@@ -352,7 +354,7 @@ function TimelineTracker({ currentStatus }: TimelineTrackerProps) {
 }
 
 export function OrderDetailPage() {
-  const { orderId } = useParams<{ orderId: string }>();
+  const { orderId, as } = useParams<{ orderId: string; as: 'consumer' | 'vendor' }>();
   const navigate = useNavigate();
   const { user, hasRole } = useAuth();
 
@@ -360,10 +362,12 @@ export function OrderDetailPage() {
   const isVendor = hasRole('VENDOR');
   const isAdmin = hasRole('ADMIN');
 
+  const viewingContext = as ?? (isVendor ? 'vendor' : isConsumer ? 'consumer' : undefined);
+
   const vendorProfileQuery = useQuery({
     queryKey: ['vendor', 'me', user?.id ?? null],
     queryFn: () => vendorApi.getMe(),
-    enabled: isVendor,
+    enabled: viewingContext === 'vendor',
     retry: false,
   });
   const currentVendorId = vendorProfileQuery.data?.vendor.id;
@@ -373,7 +377,7 @@ export function OrderDetailPage() {
     isLoading,
     error,
     refetch,
-  } = useOrderDetail(orderId ?? null);
+  } = useOrderDetail(orderId ?? null, viewingContext);
 
   const { useUpdateVendorGroupStatus, useUpdateOrderStatus } = useOrderMutations();
 
@@ -412,7 +416,7 @@ const handleReorder = async () => {
 };
 
   const handleBackToOrders = () => {
-    navigate('/orders');
+    navigate(data?.order?.saleParties ? '/vendor/orders' : '/orders');
   };
 
   // Loading state
@@ -525,7 +529,7 @@ description="The requested order does not exist or has been removed."
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Order Details</h1>
+            <h1 className="text-3xl font-bold text-gray-900">{order.saleParties ? 'Sales Order Details' : 'Order Details'}</h1>
             <p className="text-gray-600 mt-1">
               Order <span className="font-mono text-gray-900">{order.id.slice(0, 8).toUpperCase()}</span>
             </p>
@@ -536,6 +540,18 @@ description="The requested order does not exist or has been removed."
         <Card variant="bordered" padding="md" className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              {order.saleParties && (
+                <div>
+                  <p className="text-sm text-gray-500">Seller</p><p>{order.saleParties.seller}</p>
+                  <p className="text-sm text-gray-500">Buyer</p><p>{order.saleParties.buyer}</p>
+                </div>
+              )}
+              {order.paymentStatus && (
+                <div>
+                  <p className="text-sm text-gray-500">Payment Status</p>
+                  <p>{({ pending: 'Awaiting payment', paid: 'Payment confirmed', failed: 'Payment failed', cancelled: 'Payment cancelled', refunded: 'Payment refunded', partially_refunded: 'Payment partially refunded' })[order.paymentStatus]}</p>
+                </div>
+              )}
               {hasOrderStatus && orderStatusConfig && (
               <div>
                 <p className="text-sm text-gray-500">Order Status</p>
@@ -618,6 +634,7 @@ description="The requested order does not exist or has been removed."
                 <VendorGroupCard
                   key={vendorGroup.id}
                   vendorGroup={vendorGroup}
+                  sellerName={order.saleParties?.seller}
                   isVendor={isVendor}
                   isAdmin={isAdmin}
                   isConsumer={isConsumer}

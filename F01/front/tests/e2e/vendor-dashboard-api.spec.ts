@@ -22,7 +22,7 @@ test.describe('LC-24: Vendor Dashboard API', () => {
     expect(loginResult).not.toBeNull();
     const token = loginResult!.accessToken;
 
-    const resp = await apiFetch(page, 'GET', '/api/v1/financial/', undefined, token);
+    const resp = await apiFetch(page, 'GET', '/api/v1/financial/vendor-dashboard', undefined, token);
     expect(resp.status()).toBe(200);
     const data = await resp.json();
     expect(data).toHaveProperty('grossSales');
@@ -38,7 +38,7 @@ test.describe('LC-24: Vendor Dashboard API', () => {
     await registerUser(page, { ...getConsumerRegistrationData(email), role: 'CONSUMER' as const });
     const token = await getAuthToken(page);
 
-    const resp = await apiFetch(page, 'GET', '/api/v1/financial/', undefined, token);
+    const resp = await apiFetch(page, 'GET', '/api/v1/financial/vendor-dashboard', undefined, token);
     expect(resp.status()).toBe(403);
   });
 });

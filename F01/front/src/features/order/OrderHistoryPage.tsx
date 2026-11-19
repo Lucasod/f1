@@ -11,10 +11,10 @@ import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { Select } from '@/components/ui/Input';
 
 /**
- * Format currency in USD (US Dollar)
+ * Format currency in BRL (pt-BR locale)
  */
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(value);
@@ -181,7 +181,7 @@ export function OrderHistoryPage() {
         <Card variant="bordered" padding="none">
           <div className="divide-y divide-gray-200">
             {orders.map((order) => (
-              <OrderCard key={order.id} order={order} onClick={() => navigate(`/orders/${order.id}`)} />
+              <OrderCard key={order.id} order={order} onClick={() => navigate(`/orders/${order.id}?as=consumer`)} />
             ))}
           </div>
         </Card>

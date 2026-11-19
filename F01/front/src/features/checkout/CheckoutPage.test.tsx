@@ -607,7 +607,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     expect(within(screen.getByTestId('checkout-sidebar-summary')).getByText(/^total$/i)).toBeInTheDocument();
     // Check total amount in sidebar (the large total at the bottom with bold text)
     const sidebar = screen.getByTestId('checkout-sidebar-summary');
-    expect(within(sidebar).getByText(/^total$/i).closest('div')).toContainHTML('R$109.97');
+    expect(within(sidebar).getByText(/^total$/i).closest('div')!.textContent).toMatch(/R\$\s*109,97/);
   });
 
   it('does not show discount (coupons disabled)', async () => {
@@ -638,9 +638,9 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
       const section = within(summary);
-      expect(section.getByText(/discount applied in preview/i).closest('div')).toHaveTextContent(/-R\$\s*6\.00/);
-      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109\.97/);
-      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*103\.97/);
+      expect(section.getByText(/discount applied in preview/i).closest('div')).toHaveTextContent(/-R\$\s*6,00/);
+      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*103,97/);
     }
     expect(screen.getByTestId('main-shipping-amount')).toHaveTextContent('free');
     expect(screen.getByTestId('sidebar-shipping-amount')).toHaveTextContent('free');
@@ -653,9 +653,9 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
       const section = within(summary);
-      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109\.97/);
+      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
       expect(section.queryByText(/discount applied in preview/i)).not.toBeInTheDocument();
-      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*109\.97/);
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
     }
   });
 
@@ -674,7 +674,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
 
     for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
       const section = within(summary);
-      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109\.97/);
+      expect(section.getByText(/^gross subtotal$/i).closest('div')).toHaveTextContent(/R\$\s*109,97/);
       expect(section.getByText(/^shipping$/i).closest('div')).toHaveTextContent(label);
       expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(label);
     }
@@ -693,7 +693,7 @@ it('displays order summary with vendor groups, items, subtotal, discount, total'
     for (const summary of [screen.getAllByTestId('checkout-step-summary')[1], screen.getByTestId('checkout-sidebar-summary')]) {
       const section = within(summary);
       expect(section.getByText(/^shipping$/i).closest('div')).toHaveTextContent('free');
-      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*0\.00/);
+      expect(section.getByText(/^total$/i).closest('div')).toHaveTextContent(/R\$\s*0,00/);
     }
   });
 

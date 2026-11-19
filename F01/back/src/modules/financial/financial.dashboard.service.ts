@@ -84,7 +84,6 @@ export class VendorFinancialDashboardService {
     if (!vendor) {
       throw new Error(`Vendor ${vendorId} not found`);
     }
-    const commissionPct = vendor.commissionPct;
 
     // --- Fetch supporting data ---
     const allocations = await this.allocationRepo.findByVendorId(vendorId);
@@ -102,25 +101,27 @@ export class VendorFinancialDashboardService {
     // --- Gross sales: sum of vendor group subtotals for eligible orders ---
     // Eligible: order status !== CANCELLED AND has captured payment
     let grossSales = 0;
+    let netExpectedAmount = 0;
     for (const order of vendorOrders) {
       if (order.status === OrderStatus.CANCELLED) continue;
 
       // Check if order has any payment with status CAPTURED
       const orderPayments = await this.paymentRepo.findByOrderId(order.id);
-      const hasCapturedPayment = orderPayments.some(
-        (p) => p.status === PaymentStatus.CAPTURED
-      );
+      const hasCapturedPayment = orderPayments.some((payment) => {
+        if (payment.status !== PaymentStatus.CAPTURED || !payment.capturedAt) return false;
+        return (!start || payment.capturedAt >= start) && payment.capturedAt <= end;
+      });
       if (!hasCapturedPayment) continue;
 
       // Sum vendor group subtotals for this vendor in this order
       const vendorVgs = order.vendorGroups.filter((vg) => vg.vendorId === vendorId);
       for (const vg of vendorVgs) {
         grossSales += vg.subtotal;
+        netExpectedAmount += vg.vendorNet;
       }
     }
 
     // --- Net expected amount ---
-    const netExpectedAmount = grossSales * (1 - commissionPct / 100);
 
     // --- Received in Stripe: COMPLETED transfers for this vendor ---
     // Sum of COMPLETED transfer amounts for this vendor's order groups, created in period
@@ -207,18 +208,22 @@ export class VendorFinancialDashboardService {
     // 1. Payments from vendor's orders
     const allOrderPayments: Payment[] = [];
     for (const order of theVendorOrders) {
-      const vendorIds = new Set(order.vendorGroups.map(group => group.vendorId));
-      if (vendorIds.size !== 1 || !vendorIds.has(vendorId)) continue;
       const payments = await this.paymentRepo.findByOrderId(order.id);
       allOrderPayments.push(...payments);
     }
 
+    const capturedOrderIds = new Set<string>();
     for (const payment of allOrderPayments) {
+      if (payment.status !== PaymentStatus.CAPTURED || capturedOrderIds.has(payment.orderId)) continue;
+      const order = theVendorOrders.find(candidate => candidate.id === payment.orderId);
+      if (!order || order.status === OrderStatus.CANCELLED) continue;
+      const vendorAmount = order.vendorGroups.filter(group => group.vendorId === vendorId).reduce((sum, group) => sum + group.subtotal, 0);
+      capturedOrderIds.add(payment.orderId);
       if (seenIds.has(payment.id)) continue;
       seenIds.add(payment.id);
 
       const effectiveAt =
-        payment.authorizedAt || payment.capturedAt || payment.createdAt;
+        payment.capturedAt || payment.createdAt;
       const recordedAt = payment.createdAt;
 
       if (start && effectiveAt && new Date(effectiveAt) < new Date(start))
@@ -229,7 +234,7 @@ export class VendorFinancialDashboardService {
         id: payment.id,
         eventType: payment.eventType || 'payment',
         movementType: MovementType.CONSUMER_PAYMENT,
-        amount: payment.amount,
+        amount: vendorAmount,
         currency: 'BRL',
         effectiveAt: effectiveAt ? new Date(effectiveAt) : recordedAt,
         recordedAt,
@@ -243,6 +248,7 @@ export class VendorFinancialDashboardService {
     // 2. Financial allocations for this vendor
     const seenAllocIds = new Set<string>();
     for (const allocation of theAllocations) {
+      if (allocation.type === FinancialAllocationType.CAPTURE && capturedOrderIds.has(allocation.orderId)) continue;
       if (seenAllocIds.has(allocation.id)) continue;
       seenAllocIds.add(allocation.id);
 
@@ -279,11 +285,11 @@ export class VendorFinancialDashboardService {
     // 3. Transfers for this vendor's order groups
     const seenTransferIds = new Set<string>();
     for (const order of theVendorOrders) {
-      const orderVendorIds = new Set(order.vendorGroups.map(group => group.vendorId));
-      if (orderVendorIds.size !== 1 || !orderVendorIds.has(vendorId)) continue;
+      if (!this.movementRepo) break;
       const orderMovements = await this.movementRepo!.findByOrderId(order.id);
       for (const move of orderMovements) {
         if (move.data.vendorId !== vendorId) continue;
+        if (move.data.movementType === MovementType.CONSUMER_PAYMENT) continue;
         if (seenTransferIds.has(move.data.movementId)) continue;
         seenTransferIds.add(move.data.movementId);
 

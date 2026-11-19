@@ -224,7 +224,7 @@ describe('CartPage', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(oldInput).toHaveValue(3);
     expect(screen.getByRole('spinbutton', { name: /quantity of test product 1/i })).toHaveValue(2);
-    expect(screen.getAllByText(/\$109\.97/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*109,97/).length).toBeGreaterThan(0);
   });
 
   it('discards only drafts for externally removed items after a cart refetch', async () => {
@@ -333,14 +333,14 @@ describe('CartPage', () => {
     expect(screen.getByDisplayValue('1')).toBeInTheDocument();
 
     // Check prices (unit prices)
-    expect(screen.getByText(/\$29\.99 \/ un/)).toBeInTheDocument();
-    expect(screen.getByText(/\$49\.99 \/ un/)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*29,99 \/ un/)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*49,99 \/ un/)).toBeInTheDocument();
 
     // Check line totals
-    expect(screen.getByText(/\$59\.98/)).toBeInTheDocument(); // 2 * 29.99
-    // Product 2 line total is also $49.99 (1 * 49.99), same as unit price
-    // So we verify by checking there are 2 elements with $49.99 (unit price + line total)
-    const price4999Elements = screen.getAllByText(/\$49\.99/);
+    expect(screen.getByText(/R\$\s*59,98/)).toBeInTheDocument(); // 2 * 29.99
+    // Product 2 line total is also R$ 49.99 (1 * 49.99), same as unit price
+    // So we verify by checking there are 2 elements with R$ 49.99 (unit price + line total)
+    const price4999Elements = screen.getAllByText(/R\$\s*49,99/);
     expect(price4999Elements.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -390,7 +390,7 @@ describe('CartPage', () => {
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
     await waitFor(() => expect(screen.getByRole('spinbutton', { name: /quantity of test product 1/i })).toHaveValue(3));
-    expect(screen.getAllByText(/\$139\.96/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*139,96/).length).toBeGreaterThan(0);
   });
 
   it('removes item when remove button clicked and confirmed', async () => {
@@ -431,7 +431,7 @@ describe('CartPage', () => {
     expect(screen.getByText(/subtotal/i)).toBeInTheDocument();
     // Both subtotal and total show the same value, so we check for the text in the summary section
     const summarySection = screen.getByText(/order summary/i).closest('section') || document.body;
-    expect(summarySection).toHaveTextContent(/\$109\.97/);
+    expect(summarySection).toHaveTextContent(/R\$\s*109,97/);
 
     // Shipping
     expect(screen.getByText(/^shipping$/i)).toBeInTheDocument();

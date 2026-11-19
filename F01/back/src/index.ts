@@ -335,6 +335,10 @@ eventRepo = new MongoFinancialEventRepository(db);
       (paymentService as any).transferService = transferService;
       console.log('✅ MongoDB repositories initialized');
 
+      // Automatic recovery remains disabled until payment, ledger and cart effects
+      // are durable and idempotent across retries and concurrent webhooks.
+      console.warn('Automatic payment recovery disabled: durable finalization is not yet available');
+
       // Register routes after services are initialized
       app.use('/api/v1/admin', createAdminMetricsRoutes({ authService, metrics: new MongoAdminMetricsRepository(db) }));
       app.use('/api/v1/admin', createAdminDashboardRoutes({ authService }));

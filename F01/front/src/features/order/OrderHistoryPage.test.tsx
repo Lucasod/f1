@@ -305,9 +305,9 @@ describe('OrderHistoryPage', () => {
     expect(screen.getByText(/01\/10\/2024/i)).toBeInTheDocument();
 
     // Check totals
-    expect(screen.getByText(/R\$59.98/i)).toBeInTheDocument();
-    expect(screen.getByText(/R\$94.99/i)).toBeInTheDocument();
-    expect(screen.getByText(/R\$99.99/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*59,98/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*94,99/i)).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*99,99/i)).toBeInTheDocument();
 
     // Check vendor groups count - rendered as two separate <p> elements
     // Order 1 has 1 vendor group, Order 3 has 1 vendor group, Order 2 has 2 vendor groups
@@ -398,7 +398,7 @@ describe('OrderHistoryPage', () => {
     fireEvent.click(orderCard);
 
     // Should call navigate with /orders/order-1
-    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
+    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1?as=consumer');
   });
 
   it('status badge colors match CD-063 mapping', async () => {
@@ -530,7 +530,7 @@ describe('OrderHistoryPage', () => {
     const viewDetailsButton = screen.getAllByRole('button', { name: /View details/i })[0];
     fireEvent.click(viewDetailsButton);
 
-    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
+    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1?as=consumer');
   });
 
   it('handles keyboard navigation on order card (Enter key)', async () => {
@@ -540,7 +540,7 @@ describe('OrderHistoryPage', () => {
 
     const orderCard = screen.getByRole('button', { name: /Order ORDER-1/i });
     fireEvent.keyDown(orderCard, { key: 'Enter' });
-    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
+    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1?as=consumer');
   });
 
   it('handles keyboard navigation on order card (Space key)', async () => {
@@ -550,6 +550,6 @@ describe('OrderHistoryPage', () => {
 
     const orderCard = screen.getByRole('button', { name: /Order ORDER-1/i });
     fireEvent.keyDown(orderCard, { key: ' ' });
-    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
+    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1?as=consumer');
   });
 });

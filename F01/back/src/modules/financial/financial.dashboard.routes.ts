@@ -21,7 +21,7 @@ export function createFinancialDashboardRoutes({
 
   // GET /api/v1/financial/vendor-dashboard?periodStart?periodEnd
   router.get(
-    '/',
+    '/vendor-dashboard',
     authMw as RequestHandler,
     requireVendor() as RequestHandler,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -41,6 +41,13 @@ export function createFinancialDashboardRoutes({
         const periodEnd = req.query.periodEnd
           ? new Date(String(req.query.periodEnd))
           : undefined;
+
+        if ((periodStart && Number.isNaN(periodStart.getTime())) ||
+            (periodEnd && Number.isNaN(periodEnd.getTime())) ||
+            (periodStart && periodEnd && periodStart > periodEnd)) {
+          res.status(400).json({ error: 'INVALID_PERIOD', message: 'Invalid dashboard period' });
+          return;
+        }
 
         const dashboard: FinancialDashboard =
           await vendorFinancialDashboardService.getVendorDashboard(

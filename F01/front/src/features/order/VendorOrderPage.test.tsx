@@ -275,15 +275,15 @@ describe('VendorOrderPage', () => {
     expect(itemCountOnes).toHaveLength(2);
 
     // Check financial summary
-    expect(screen.getByText(/R\$74\.98/i)).toBeInTheDocument(); // subtotal ovg-1
-    expect(screen.getByText(/R\$149\.97/i)).toBeInTheDocument(); // subtotal ovg-2
-    expect(screen.getByText(/R\$99\.99/i)).toBeInTheDocument(); // subtotal ovg-3
-    expect(screen.getByText(/R\$7\.49/i)).toBeInTheDocument(); // commission amount ovg-1
-    expect(screen.getByText(/R\$17\.99/i)).toBeInTheDocument(); // commission amount ovg-2
-    expect(screen.getByText(/R\$9\.99/i)).toBeInTheDocument(); // commission amount ovg-3
-    expect(screen.getByText(/R\$67\.49/i)).toBeInTheDocument(); // vendor net ovg-1
-    expect(screen.getByText(/R\$131\.98/i)).toBeInTheDocument(); // vendor net ovg-2
-    expect(screen.getByText(/R\$89\.99/i)).toBeInTheDocument(); // vendor net ovg-3
+    expect(screen.getByText(/R\$\s*74,98/i)).toBeInTheDocument(); // subtotal ovg-1
+    expect(screen.getByText(/R\$\s*149,97/i)).toBeInTheDocument(); // subtotal ovg-2
+    expect(screen.getByText(/R\$\s*99,99/i)).toBeInTheDocument(); // subtotal ovg-3
+    expect(screen.getByText(/R\$\s*7,49/i)).toBeInTheDocument(); // commission amount ovg-1
+    expect(screen.getByText(/R\$\s*17,99/i)).toBeInTheDocument(); // commission amount ovg-2
+    expect(screen.getByText(/R\$\s*9,99/i)).toBeInTheDocument(); // commission amount ovg-3
+    expect(screen.getByText(/R\$\s*67,49/i)).toBeInTheDocument(); // vendor net ovg-1
+    expect(screen.getByText(/R\$\s*131,98/i)).toBeInTheDocument(); // vendor net ovg-2
+    expect(screen.getByText(/R\$\s*89,99/i)).toBeInTheDocument(); // vendor net ovg-3
 
     // Check commission percentage - both ovg-1 and ovg-3 have 10%, ovg-2 has 12%
     const commission10 = screen.getAllByText(/Commission \(10%\)/i);
@@ -385,11 +385,11 @@ describe('VendorOrderPage', () => {
     ovg1.getByText(/01\/15\/2024/i);
     // Financial summary
     ovg1.getByText(/Subtotal/i);
-    ovg1.getByText(/R\$74\.98/i);
+    ovg1.getByText(/R\$\s*74,98/i);
     ovg1.getByText(/Commission \(10%\)/i);
-    ovg1.getByText(/R\$7\.49/i);
+    ovg1.getByText(/R\$\s*7,49/i);
     ovg1.getByText(/Vendor Net/i);
-    ovg1.getByText(/R\$67\.49/i);
+    ovg1.getByText(/R\$\s*67,49/i);
   });
 
   it('"Atualizar status" buttons appear for valid next statuses', async () => {
@@ -428,7 +428,7 @@ describe('VendorOrderPage', () => {
     fireEvent.click(viewDetailsButton);
 
     // Should call navigate with /orders/order-1
-    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1');
+    expect(navigateMock).toHaveBeenCalledWith('/orders/order-1?as=vendor');
   });
 
   it('status badge colors match CD-063 vendor group mapping', async () => {

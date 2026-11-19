@@ -613,6 +613,64 @@ export class PaymentService {
     return payment;
   }
 
+  /**
+   * Startup recovery scan for pending payments whose Stripe webhook delivery
+   * was missed (e.g., Stripe CLI / webhook endpoint was stopped when Stripe
+   * sent checkout.session.completed).
+   *
+   * For each PENDING payment with a providerTransactionId (Stripe Checkout
+   * Session ID), retrieves the Checkout Session from Stripe and reconciles:
+   *   - payment_status === 'paid'   -> completeCheckoutPayment (authorize + capture)
+   *   - status === 'expired' and payment_status === 'unpaid' -> failPayment
+   *   - otherwise -> leave pending until confirmation or terminal evidence
+   *
+   * Returns { recovered, failed } counts. Failures are logged and counted,
+   * never thrown, so a missing/failed scan cannot block startup.
+   */
+  async recoverPendingPayments(): Promise<{ recovered: number; failed: number }> {
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-10-28.endive' });
+
+    const pendingPayments = await this.paymentRepo.findByStatus(PaymentStatus.PENDING);
+    let recovered = 0;
+    let failed = 0;
+
+    for (const payment of pendingPayments) {
+      try {
+        if (!payment.providerTransactionId) {
+          failed++;
+          continue;
+        }
+
+        const session = await stripe.checkout.sessions.retrieve(payment.providerTransactionId);
+
+        if (session.payment_status === 'paid') {
+          const key = process.env.STRIPE_SECRET_KEY?.trim() ?? '';
+          const expectedLiveMode = /^(sk|rk)_live_/.test(key) ? true
+            : /^(sk|rk)_test_/.test(key) ? false : undefined;
+          const intentId = typeof session.payment_intent === 'string'
+            ? session.payment_intent : session.payment_intent?.id;
+          if (session.status !== 'complete' || session.id !== payment.providerTransactionId ||
+              session.metadata?.paymentId !== payment.id || session.metadata?.orderId !== payment.orderId ||
+              session.currency?.toLowerCase() !== 'brl' || expectedLiveMode === undefined ||
+              session.livemode !== expectedLiveMode || !intentId || !Number.isInteger(session.amount_total) ||
+              session.amount_total !== Math.round(payment.amount * 100)) {
+            throw new Error('STRIPE_RECOVERY_SESSION_MISMATCH');
+          }
+          await this.completeCheckoutPayment(payment.id, intentId, session.amount_total!);
+          recovered++;
+        } else if (session.status === 'expired' && session.payment_status === 'unpaid') {
+          await this.failPayment(payment.id);
+          failed++;
+        }
+      } catch (error) {
+        console.error(`Recovery failed for payment ${payment.id}:`, error instanceof Error ? error.message : error);
+        failed++;
+      }
+    }
+
+    return { recovered, failed };
+  }
+
   async refundPayment(paymentId: string): Promise<Payment> {
     if (!paymentId || paymentId.trim().length === 0) {
       throw new Error(PaymentError.PAYMENT_NOT_FOUND);

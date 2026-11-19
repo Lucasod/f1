@@ -136,5 +136,8 @@ describe('ConsumerDashboard', () => {
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText(/1\.234,56/)).toBeInTheDocument();
     expect(orderApi.getConsumerSummary).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('heading', { name: 'Spending Over Time' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Order History' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recent Orders' })).toBeInTheDocument();
   });
 });
