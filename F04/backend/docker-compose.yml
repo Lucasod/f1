@@ -1,0 +1,135 @@
+name: f04-backend
+
+services:
+  postgres:
+    image: postgres:15
+    ports:
+      - "127.0.0.1:5433:5432"
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U f04 -d f04"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - f04
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - f04
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["gunicorn", "conf.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - f04
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["celery", "-A", "celery_app:app", "worker", "--loglevel=info", "--concurrency=4"]
+    networks:
+      - f04
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["celery", "-A", "celery_app:app", "beat", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler", "--loglevel=info"]
+    networks:
+      - f04
+
+volumes:
+  postgres_data:
+
+networks:
+  f04:
+    driver: bridge

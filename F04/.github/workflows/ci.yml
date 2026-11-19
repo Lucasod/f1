@@ -8,6 +8,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: f04
+          POSTGRES_USER: f04
+          POSTGRES_PASSWORD: f04
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U f04 -d f04"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,9 +42,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install Django django-multitenant psycopg2-binary pytest pytest-django playwright
+          pip install --no-deps -r backend/requirements.txt
+          pip install pytest pytest-django
 
       - name: Install Node dependencies
+        working-directory: frontend
         run: npm ci
 
       - name: Install Playwright browsers
@@ -40,25 +57,38 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: conf.settings
           PYTHONPATH: ../../backend:../../backend/workspaces/tests
-DB_ENGINE: django.db.backends.postgresql
-           SECRET_KEY: ${{ secrets.SECRET_KEY }}
-           SECRET_TEST_PASS: ${{ secrets.SECRET_TEST_PASS }}
-           WEBHOOK_SIGNING_SECRET: ${{ secrets.WEBHOOK_SIGNING_SECRET }}
-           DEBUG: "True"
+          DB_ENGINE: django.db.backends.postgresql
+          POSTGRES_DB: f04
+          POSTGRES_USER: f04
+          POSTGRES_PASSWORD: f04
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SECRET_TEST_PASS: ${{ secrets.SECRET_TEST_PASS }}
+          WEBHOOK_SIGNING_SECRET: ${{ secrets.WEBHOOK_SIGNING_SECRET }}
+          DEBUG: "True"
         run: python3 -m pytest workspaces/tests/ -v --tb=short
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Start Django dev server for E2E
         working-directory: backend/conf
         env:
           DJANGO_SETTINGS_MODULE: conf.settings
           PYTHONPATH: ../../backend:../../backend/workspaces/tests
-DB_ENGINE: django.db.backends.postgresql
-           SECRET_KEY: ${{ secrets.SECRET_KEY }}
-           DEBUG: "True"
+          DB_ENGINE: django.db.backends.postgresql
+          POSTGRES_DB: f04
+          POSTGRES_USER: f04
+          POSTGRES_PASSWORD: f04
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: "True"
         run: |
           python3 manage.py runserver 127.0.0.1:8000 > /tmp/django-server.log 2>&1 &
           DJANGO_PID=$!
-          # Readiness check: wait up to 30s for the server to respond
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8000/ > /dev/null 2>&1; then
               echo "Django dev server is ready on http://127.0.0.1:8000"
@@ -75,7 +105,3 @@ DB_ENGINE: django.db.backends.postgresql
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8000
         run: npx playwright test
-
-# NOTE (CR-009): Concurrency tests (e.g. test_two_recovery_workers_one_delivery)
-# require PostgreSQL to run. CI now uses DB_ENGINE=django.db.backends.postgresql,
-# so these tests are executed against the PostgreSQL test database.

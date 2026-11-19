@@ -36,6 +36,29 @@ else:
     ALLOWED_HOSTS = "localhost,127.0.0.1,testserver".split(",")
 
 
+# CORS / CSRF trusted origins
+_LOCAL_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:5173",
+]
+
+_cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS")
+if _cors_origins_env:
+    try:
+        CORS_ALLOWED_ORIGINS = json.loads(_cors_origins_env)
+    except (json.JSONDecodeError, TypeError):
+        CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+else:
+    CORS_ALLOWED_ORIGINS = list(_LOCAL_CORS_ORIGINS)
+
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
+
+
 # Template configuration
 TEMPLATES = [
     {
@@ -69,11 +92,14 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "django_filters",
+    "django_celery_beat",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -121,6 +147,7 @@ DATABASES = {
 
 # Static files
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Session settings
 SESSION_COOKIE_HTTPONLY = True

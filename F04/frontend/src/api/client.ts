@@ -10,7 +10,8 @@
  * - Error envelope parsing: { error: { code, message, fields } }
  */
 
-export const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 
 // CSRF token held in memory; populated by bootstrapCsrf() or rotation.
 let csrfToken: string | null = null;

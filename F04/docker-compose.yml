@@ -1,22 +1,14 @@
 name: f04
+
 services:
-  # Frontend: React + TypeScript serving static files
   frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "3001:3000"
-    command: >
-      sh -c "
-        cd /app &&
-        npm install &&
-        npm install -g serve &&
-        serve -s . -l 3000
-      "
+      - "3001:80"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,40 +16,34 @@ services:
     networks:
       - f04
 
-  # Backend: Django + DRF
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./backend/.env
     environment:
-      - DB_ENGINE=django.db.backends.postgresql
-      - POSTGRES_DB=f04
-      - POSTGRES_USER=f04
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DEBUG=False
-      - SECRET_KEY=${SECRET_KEY}
-      - WEBHOOK_SIGNING_SECRET=${WEBHOOK_SIGNING_SECRET}
-      - SECRET_TEST_PASS=${SECRET_TEST_PASS}
-      - PYTHONPATH=/app/backend
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
     working_dir: /app/backend/conf
-    command: >
-      sh -c "
-        pip install --no-cache-dir djangorestframework django-filter celery stripe --break-system-packages &&
-        python3 manage.py check &&
-        python3 manage.py runserver 127.0.0.1:8000
-      "
+    command: ["gunicorn", "conf.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
     healthcheck:
-      test: ["CMD", "python3", "manage.py", "check"]
+      test: ["CMD", "python", "manage.py", "check"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,16 +51,22 @@ services:
     networks:
       - f04
 
-  # PostgreSQL: persistent data volume, port 5432 (internal only)
   postgres:
     image: postgres:15
+    ports:
+      - "127.0.0.1:5433:5432"
+    env_file:
+      - ./backend/.env
     environment:
-      - POSTGRES_DB=f04
-      - POSTGRES_USER=f04
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U f04 -d f04"]
       interval: 30s
@@ -84,13 +76,9 @@ services:
     networks:
       - f04
 
-  # Redis: broker for celery
   redis:
     image: redis:7-alpine
-    command: >
-      sh -c "
-        redis-server --save '' --appendonly no
-      "
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -100,69 +88,57 @@ services:
     networks:
       - f04
 
-# Celery worker: Django celery worker
   celery-worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    env_file:
+      - ./backend/.env
     environment:
-      - DB_ENGINE=django.db.backends.postgresql
-      - POSTGRES_DB=f04
-      - POSTGRES_USER=f04
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DEBUG=False
-      - SECRET_KEY=${SECRET_KEY}
-      - PYTHONPATH=/app/backend
-      - CELERY_APP=conf
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
     working_dir: /app/backend/conf
-    command: >
-      sh -c "
-        pip install --no-cache-dir djangorestframework django-filter celery django-celery-beat --break-system-packages &&
-        python3 manage.py celery worker --loglevel=info --concurrency=4
-      "
+    command: ["celery", "-A", "celery_app:app", "worker", "--loglevel=info", "--concurrency=4"]
     networks:
       - f04
 
-# Celery beat: Django celery beat scheduler
   celery-beat:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    env_file:
+      - ./backend/.env
     environment:
-      - DB_ENGINE=django.db.backends.postgresql
-      - POSTGRES_DB=f04
-      - POSTGRES_USER=f04
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DEBUG=False
-      - SECRET_KEY=${SECRET_KEY}
-      - PYTHONPATH=/app/backend
-      - CELERY_APP=conf
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
     working_dir: /app/backend/conf
-    command: >
-      sh -c "
-        pip install --no-cache-dir djangorestframework django-filter celery django-celery-beat --break-system-packages &&
-        python3 manage.py celery beat --scheduler django_celery_beat --loglevel=info
-      "
+    command: ["celery", "-A", "celery_app:app", "beat", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler", "--loglevel=info"]
     networks:
       - f04
 
