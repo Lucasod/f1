@@ -7,7 +7,7 @@ services:
     volumes:
       - ./frontend:/app
     ports:
-      - "3000:3000"
+      - "3001:3000"
     command: >
       sh -c "
         cd /app &&
@@ -45,8 +45,9 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DEBUG=False
-      - SECRET_KEY=django-insecure-f04-development-key-do-not-use-in-production
+      - SECRET_KEY=${SECRET_KEY}
       - WEBHOOK_SIGNING_SECRET=${WEBHOOK_SIGNING_SECRET}
+      - SECRET_TEST_PASS=${SECRET_TEST_PASS}
       - PYTHONPATH=/app/backend
     working_dir: /app/backend/conf
     command: >
@@ -120,7 +121,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DEBUG=False
-      - SECRET_KEY=django-insecure-f04-development-key-do-not-use-in-production
+      - SECRET_KEY=${SECRET_KEY}
       - PYTHONPATH=/app/backend
       - CELERY_APP=conf
     working_dir: /app/backend/conf
@@ -153,7 +154,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DEBUG=False
-      - SECRET_KEY=django-insecure-f04-development-key-do-not-use-in-production
+      - SECRET_KEY=${SECRET_KEY}
       - PYTHONPATH=/app/backend
       - CELERY_APP=conf
     working_dir: /app/backend/conf

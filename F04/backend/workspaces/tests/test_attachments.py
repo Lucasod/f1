@@ -1,6 +1,7 @@
 """Attachment tests for F04 MP-F04-016."""
 
 import os
+import secrets as test_secrets
 import hashlib
 import io
 
@@ -167,8 +168,9 @@ class AttachmentTestCase(TestCase):
 
     def test_delete_attachment_non_uploader(self):
         """Non-uploader cannot delete attachment."""
+        test_password = test_secrets.token_urlsafe(16)
         other_user = User.objects.create_user(
-            "bob", "bob@example.com", "testpass123"
+            "bob", "bob@example.com", test_password
         )
         att = Attachment.objects.create(
             issue=self.issue,
@@ -182,7 +184,7 @@ class AttachmentTestCase(TestCase):
             state="ready",
         )
         
-        self.client.login(username="bob", password=os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="bob", password=test_password)
         response = self.client.delete(
             f"/api/v1/attachments/{att.id}/",
             format="json",

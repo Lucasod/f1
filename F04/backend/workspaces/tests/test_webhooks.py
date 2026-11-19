@@ -1,6 +1,7 @@
 """Webhook tests for F04 MP-F04-014 Step 4."""
 
 import os
+import secrets as test_secrets
 
 from django.test import TestCase
 from django.contrib.auth import get_user_model
@@ -15,8 +16,10 @@ class WebhookSubscriptionTest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("alice", "alice@example.com", "testpass123")
-        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
+        test_password = test_secrets.token_urlsafe(16)
+        self.user = User.objects.create_user("alice", "alice@example.com", test_password)
+        self.client.login(username="alice", password=test_password)
+        self.test_signing_secret = test_secrets.token_urlsafe(16)
         self.ws = Workspace.objects.create(name="Webhook Test Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
 
@@ -26,7 +29,7 @@ class WebhookSubscriptionTest(TestCase):
             "url": "https://example.com/webhook",
             "events": ["issue.created"],
             "is_enabled": True,
-            "signing_secret": "whsec_test123",
+            "signing_secret": self.test_signing_secret,
         }, format="json")
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.data["subscription"]["url"], "https://example.com/webhook")
@@ -37,7 +40,7 @@ class WebhookSubscriptionTest(TestCase):
             "workspace_id": self.ws.id,
             "url": "http://localhost/webhook",
             "events": ["issue.created"],
-            "signing_secret": "whsec_test123",
+            "signing_secret": self.test_signing_secret,
         }, format="json")
         self.assertEqual(resp.status_code, 400)
 
@@ -46,7 +49,7 @@ class WebhookSubscriptionTest(TestCase):
             "workspace_id": self.ws.id,
             "url": "http://10.0.0.1/webhook",
             "events": ["issue.created"],
-            "signing_secret": "whsec_test123",
+            "signing_secret": self.test_signing_secret,
         }, format="json")
         self.assertEqual(resp.status_code, 400)
 
@@ -55,19 +58,19 @@ class WebhookSubscriptionTest(TestCase):
             "workspace_id": self.ws.id,
             "url": "http://169.254.169.254/webhook",
             "events": ["issue.created"],
-            "signing_secret": "whsec_test123",
+            "signing_secret": self.test_signing_secret,
         }, format="json")
         self.assertEqual(resp.status_code, 400)
 
     def test_create_webhook_workspace_scoped(self):
-        other_user = User.objects.create_user("bob", "bob@example.com", "testpass123")
+        other_user = User.objects.create_user("bob", "bob@example.com", test_secrets.token_urlsafe(16))
         other_ws = Workspace.objects.create(name="Bob's Workspace")
         Membership.objects.create(user=other_user, workspace=other_ws, role="owner")
         resp = self.client.post("/api/v1/webhooks/", {
             "workspace_id": other_ws.id,
             "url": "https://example.com/webhook",
             "events": ["issue.created"],
-            "signing_secret": "whsec_test123",
+            "signing_secret": self.test_signing_secret,
         }, format="json")
         self.assertEqual(resp.status_code, 403)
 
@@ -133,9 +136,10 @@ class WebhookDeliveryTaskTest(TestCase):
     """Tests for webhook delivery task."""
 
     def setUp(self):
-        self.user = User.objects.create_user("alice", "alice@example.com", "testpass123")
+        test_password = test_secrets.token_urlsafe(16)
+        self.user = User.objects.create_user("alice", "alice@example.com", test_password)
         self.client = APIClient()
-        self.client.login(username="alice", password=os.environ["SECRET_TEST_PASS"])
+        self.client.login(username="alice", password=test_password)
         self.ws = Workspace.objects.create(name="Webhook Delivery Workspace")
         Membership.objects.create(user=self.user, workspace=self.ws, role="owner")
 
