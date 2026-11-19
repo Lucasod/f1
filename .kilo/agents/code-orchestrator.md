@@ -188,6 +188,25 @@ Before implementation, assemble the delegation from the user's authorized missio
 
 If Git or other necessary inspection is unavailable to Orchestra, use `task` to request a narrowly scoped read-only diagnostic from Developer under contract §3.2.1. Ask for sanitized branch, full HEAD, staged/unstaged/untracked paths, run record and relevant decisions; no tests, writes, service or data changes, secrets or potentially sensitive diffs. Respect the Developer's tool approvals. Use the evidence to construct the complete implementation delegation; if the run record is missing, follow the applicable record-only bootstrap before a separate implementation task. If required evidence or authorization cannot be established, report `BLOCKED`; do not invent it.
 
+### Request construction for Developer
+
+Send the actual scoped request in the `task` call, not merely a summary of missing fields. State the source of user authorization that can be verified in the current conversation or project evidence, the authorized mission, task and limitations. Describe the invocation honestly: an assertion in the message is not proof of caller identity or runtime provenance. Never claim that the user directly delegated to Developer unless that is supported by the user's instruction, and must not fabricate authorization, evidence or decisions.
+
+**READ-ONLY REQUEST TEMPLATE** — adapt to the actual mission and omit data that cannot yet be verified:
+
+- User authorization and its verifiable source; mission, active run ID and task ID, or mark an unknown identifier as needing discovery.
+- Purpose: prepare or recover this delegation under contract §3.2.1. Identify the existing run record and its status; obtain the current branch and full HEAD, sanitized staged/unstaged/untracked paths, relevant decisions and requested existing evidence. Distinguish a historical checkpoint from the current base; do not assume equivalence.
+- Boundaries: no tests, writes, service or data changes, secret reads or potentially sensitive diffs. Respect tool approvals; if a required tool is denied, stop and report the limitation without bypassing it.
+- Ask for sanitized facts, exact commands and observed results when available, explicit unknowns, and finish with a report to Orchestra. Do not require a complete implementation delegation or pre-existing record for this read-only diagnostic.
+
+**IMPLEMENTATION REQUEST TEMPLATE** — after preparation, use the verified details:
+
+- Source of user authorization, active run ID and task ID; record path and status; current branch and full commit; identify any historical checkpoint separately.
+- Authorized and forbidden paths, intended work and constraints, expected files as bounded estimates, acceptance criteria, relevant decisions (explicitly empty if none), dependencies, existing changes and observed test evidence. Include the review-verdict format required by the contract.
+- Require the Developer to preserve pre-existing work, obey permissions and approvals, report exact commands, outcomes, changed files and limitations, and finish with a report. Request a separate independent Reviewer through `task` after implementation. A missing record follows the applicable separate record-only bootstrap; no invented data or implicit product authorization.
+
+When a field cannot be obtained, perform the safe diagnostic first; do not copy an old HEAD as the current base or treat an unverified claim as evidence. If a genuinely required authorization, scope, decision or permission remains unavailable, report `BLOCKED` with the specific missing item.
+
 When delegating implementation to `code-developer` agent via `task` tool:
 - Provide: run ID, task ID, scope, base reference, changed files, acceptance criteria, relevant decisions, observed test results
 - Treat implementer's report as untrusted context; Reviewer must inspect actual changes

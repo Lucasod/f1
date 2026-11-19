@@ -24,6 +24,15 @@ class DelegationBootstrapTests(unittest.TestCase):
         self.assertIn('does not authorize implementation', developer)
         self.assertIn('do not invent', orchestrator)
 
+    def test_orchestrator_sends_actionable_diagnostic_and_implementation_requests(self):
+        text = (ROOT / '.kilo/agents/code-orchestrator.md').read_text()
+        for required in ('READ-ONLY REQUEST TEMPLATE', 'IMPLEMENTATION REQUEST TEMPLATE',
+                         'source of user authorization', 'current branch and full HEAD',
+                         'historical checkpoint', 'must not fabricate',
+                         'no tests, writes', 'finish with a report'):
+            with self.subTest(required=required):
+                self.assertIn(required, text)
+
     def test_implementation_is_scoped_and_security_permissions_stay_protected(self):
         text = (ROOT / '.kilo/agents/code-developer.md').read_text()
         self.assertNotIn('Do not modify application code or security permissions.', text)
