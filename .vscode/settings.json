@@ -1,0 +1,9 @@
+{
+    "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#065F46",
+        "titleBar.inactiveBackground": "#065F46",
+        "activityBar.background": "#065F46",
+        "statusBar.background": "#065F46"
+    },
+    "python.terminal.useEnvFile": true
+}

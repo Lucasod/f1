@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
+import { PersonRole } from '@/shared/types/person';
+import { Input, Select, Button, Card, ErrorAlert } from '@/components/ui';
 
 type TaxIdType = 'CPF' | 'CNPJ';
-type UserRole = 'CONSUMER' | 'VENDOR' | 'ADMIN';
 
 interface FormData {
   name: string;
@@ -11,7 +13,6 @@ interface FormData {
   email: string;
   password: string;
   confirmPassword: string;
-  role: UserRole;
 }
 
 interface FormErrors {
@@ -21,7 +22,6 @@ interface FormErrors {
   email?: string;
   password?: string;
   confirmPassword?: string;
-  role?: string;
   general?: string;
 }
 
@@ -74,17 +74,20 @@ const validateCnpj = (cnpj: string): boolean => {
 
 export function RegisterForm() {
   const { register, isLoading, error: authError, clearError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     taxIdType: 'CPF',
     taxIdValue: '',
     email: '',
     password: '',
-    confirmPassword: '',
-    role: 'CONSUMER'
+    confirmPassword: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const from = (location.state as { from?: Location })?.from?.pathname || '/';
 
   const validateName = (value: string): string | undefined => {
     if (!value.trim()) return 'Name is required';
@@ -121,11 +124,6 @@ export function RegisterForm() {
     return undefined;
   };
 
-  const validateRole = (value: string): string | undefined => {
-    if (!value) return 'Role is required';
-    return undefined;
-  };
-
   const validateField = (field: keyof FormData): string | undefined => {
     switch (field) {
       case 'name':
@@ -140,8 +138,6 @@ export function RegisterForm() {
         return validatePassword(formData.password);
       case 'confirmPassword':
         return validateConfirmPassword(formData.password, formData.confirmPassword);
-      case 'role':
-        return validateRole(formData.role);
       default:
         return undefined;
     }
@@ -154,8 +150,7 @@ export function RegisterForm() {
       taxIdValue: validateTaxIdValue(formData.taxIdType, formData.taxIdValue),
       email: validateEmail(formData.email),
       password: validatePassword(formData.password),
-      confirmPassword: validateConfirmPassword(formData.password, formData.confirmPassword),
-      role: validateRole(formData.role)
+      confirmPassword: validateConfirmPassword(formData.password, formData.confirmPassword)
     };
     setErrors(newErrors);
     // Mark all fields as touched on submit attempt
@@ -165,8 +160,7 @@ export function RegisterForm() {
       taxIdValue: true,
       email: true,
       password: true,
-      confirmPassword: true,
-      role: true
+      confirmPassword: true
     });
     return !Object.values(newErrors).some(Boolean);
   };
@@ -208,209 +202,138 @@ export function RegisterForm() {
         taxIdValue: formData.taxIdValue.replace(/\D/g, ''),
         email: formData.email,
         password: formData.password,
-        role: formData.role
+        role: PersonRole.CONSUMER
       });
+      // Redirect to the intended destination or home
+      navigate(from, { replace: true });
     } catch {
       // Error handled by auth store
     }
   };
 
-  const getInputProps = (field: keyof FormData, extraProps: React.InputHTMLAttributes<HTMLInputElement> = {}) => ({
-    value: formData[field],
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleChange(field, e.target.value),
-    onBlur: () => handleBlur(field),
-    disabled: isLoading,
-    'aria-invalid': touched[field] && !!errors[field],
-    'aria-describedby': touched[field] && errors[field] ? `${field}-error` : undefined,
-    ...extraProps
-  });
+  const taxIdTypeOptions = [
+    { value: 'CPF', label: 'CPF (Individual)' },
+    { value: 'CNPJ', label: 'CNPJ (Company)' },
+  ];
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Register</h2>
-      
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="mb-4">
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-            Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            autoComplete="name"
-            {...getInputProps('name', { className: 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.name && errors.name ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {touched.name && errors.name && (
-            <p id="name-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.name}
-            </p>
-          )}
-        </div>
+    <Card variant="elevated" padding="lg" className="max-w-md mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900">Register</h2>
+        <p className="text-gray-500 mt-1">Create your account to get started</p>
+      </div>
 
-        <div className="mb-4">
-          <label htmlFor="taxIdType" className="block text-sm font-medium text-gray-700 mb-1">
-            Tax ID Type
-          </label>
-          <select
-            id="taxIdType"
-            value={formData.taxIdType}
-            onChange={(e) => handleTaxIdTypeChange(e.target.value as TaxIdType)}
-            onBlur={() => handleBlur('taxIdType')}
-            disabled={isLoading}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.taxIdType && errors.taxIdType ? 'border-red-500' : 'border-gray-300'
-            }`}
-            aria-invalid={touched.taxIdType && !!errors.taxIdType}
-            aria-describedby={touched.taxIdType && errors.taxIdType ? 'taxIdType-error' : undefined}
-          >
-            <option value="">Select type</option>
-            <option value="CPF">CPF (Individual)</option>
-            <option value="CNPJ">CNPJ (Company)</option>
-          </select>
-          {touched.taxIdType && errors.taxIdType && (
-            <p id="taxIdType-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.taxIdType}
-            </p>
-          )}
-        </div>
+      {authError && (
+        <ErrorAlert
+          message={
+            authError === 'EMAIL_ALREADY_EXISTS' ? 'Email already registered' :
+            authError === 'TAX_ID_ALREADY_EXISTS' ? 'Tax ID already registered' :
+            authError === 'WEAK_PASSWORD' ? 'Password does not meet requirements' :
+            authError === 'INVALID_EMAIL' ? 'Invalid email format' :
+            authError === 'INVALID_TAX_ID' ? 'Invalid CPF/CNPJ' :
+            authError
+          }
+          onDismiss={clearError}
+          dismissible
+        />
+      )}
 
-        <div className="mb-4">
-          <label htmlFor="taxIdValue" className="block text-sm font-medium text-gray-700 mb-1">
-            Tax ID Value
-          </label>
-          <input
-            id="taxIdValue"
-            type="text"
-            placeholder={formData.taxIdType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
-            {...getInputProps('taxIdValue', { className: 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.taxIdValue && errors.taxIdValue ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {touched.taxIdValue && errors.taxIdValue && (
-            <p id="taxIdValue-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.taxIdValue}
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            {...getInputProps('email', { className: 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.email && errors.email ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {touched.email && errors.email && (
-            <p id="email-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.email}
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            {...getInputProps('password', { className: 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.password && errors.password ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {touched.password && errors.password && (
-            <p id="password-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.password}
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            {...getInputProps('confirmPassword', { className: 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.confirmPassword && errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {touched.confirmPassword && errors.confirmPassword && (
-            <p id="confirmPassword-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.confirmPassword}
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-            Role
-          </label>
-          <select
-            id="role"
-            value={formData.role}
-            onChange={(e) => handleChange('role', e.target.value)}
-            onBlur={() => handleBlur('role')}
-            disabled={isLoading}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              touched.role && errors.role ? 'border-red-500' : 'border-gray-300'
-            }`}
-            aria-invalid={touched.role && !!errors.role}
-            aria-describedby={touched.role && errors.role ? 'role-error' : undefined}
-          >
-            <option value="">Select role</option>
-            <option value="CONSUMER">Consumer</option>
-            <option value="VENDOR">Vendor</option>
-            <option value="ADMIN">Admin</option>
-          </select>
-          {touched.role && errors.role && (
-            <p id="role-error" className="mt-1 text-sm text-red-600" role="alert">
-              {errors.role}
-            </p>
-          )}
-        </div>
-
-        {authError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm" role="alert">
-            {authError === 'EMAIL_ALREADY_EXISTS' ? 'Email already registered' :
-             authError === 'TAX_ID_ALREADY_EXISTS' ? 'Tax ID already registered' :
-             authError === 'WEAK_PASSWORD' ? 'Password does not meet requirements' :
-             authError === 'INVALID_EMAIL' ? 'Invalid email format' :
-             authError === 'INVALID_TAX_ID' ? 'Invalid CPF/CNPJ' :
-             authError}
-          </div>
-        )}
-
-        <button
-          type="submit"
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <Input
+          id="name"
+          type="text"
+          label="Name"
+          autoComplete="name"
+          value={formData.name}
+          onChange={(e) => handleChange('name', e.target.value)}
+          onBlur={() => handleBlur('name')}
+          error={touched.name ? errors.name : undefined}
+          required
           disabled={isLoading}
-          className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Loading...' : 'Register'}
-        </button>
+          aria-invalid={touched.name && !!errors.name}
+        />
+
+        <Select
+          id="taxIdType"
+          label="Tax ID Type"
+          value={formData.taxIdType}
+          onChange={(e) => handleTaxIdTypeChange(e.target.value as TaxIdType)}
+          onBlur={() => handleBlur('taxIdType')}
+          error={touched.taxIdType ? errors.taxIdType : undefined}
+          required
+          disabled={isLoading}
+          options={taxIdTypeOptions}
+          placeholder="Select type"
+          aria-invalid={touched.taxIdType && !!errors.taxIdType}
+        />
+
+        <Input
+          id="taxIdValue"
+          type="text"
+          label="Tax ID Value"
+          placeholder={formData.taxIdType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
+          value={formData.taxIdValue}
+          onChange={(e) => handleChange('taxIdValue', e.target.value)}
+          onBlur={() => handleBlur('taxIdValue')}
+          error={touched.taxIdValue ? errors.taxIdValue : undefined}
+          required
+          disabled={isLoading}
+          aria-invalid={touched.taxIdValue && !!errors.taxIdValue}
+        />
+
+        <Input
+          id="email"
+          type="email"
+          label="Email"
+          autoComplete="email"
+          value={formData.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          onBlur={() => handleBlur('email')}
+          error={touched.email ? errors.email : undefined}
+          required
+          disabled={isLoading}
+          aria-invalid={touched.email && !!errors.email}
+        />
+
+        <Input
+          id="password"
+          type="password"
+          label="Password"
+          autoComplete="new-password"
+          value={formData.password}
+          onChange={(e) => handleChange('password', e.target.value)}
+          onBlur={() => handleBlur('password')}
+          error={touched.password ? errors.password : undefined}
+          required
+          disabled={isLoading}
+          aria-invalid={touched.password && !!errors.password}
+        />
+
+        <Input
+          id="confirmPassword"
+          type="password"
+          label="Confirm Password"
+          autoComplete="new-password"
+          value={formData.confirmPassword}
+          onChange={(e) => handleChange('confirmPassword', e.target.value)}
+          onBlur={() => handleBlur('confirmPassword')}
+          error={touched.confirmPassword ? errors.confirmPassword : undefined}
+          required
+          disabled={isLoading}
+          aria-invalid={touched.confirmPassword && !!errors.confirmPassword}
+        />
+
+        <Button type="submit" fullWidth isLoading={isLoading}>
+          Register
+        </Button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-gray-600">
         Already have an account?{' '}
-        <a href="/login" className="text-blue-600 hover:underline">
+        <a href="/login" className="text-blue-600 hover:underline font-medium">
           Login
         </a>
       </p>
-    </div>
+    </Card>
   );
 }

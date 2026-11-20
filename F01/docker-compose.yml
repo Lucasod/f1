@@ -1,7 +1,7 @@
-version: '3.8'
-
 services:
   backend:
+    env_file:
+      - ./back/.env
     build:
       context: ./back
       dockerfile: Dockerfile
@@ -9,20 +9,26 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - MONGO_URI=mongodb://mongo:27017/fs01_marketplace
+      - MONGO_URI=mongodb://mongo:27017/fs01_marketplace?replicaSet=fs01&directConnection=true
       - MONGO_DB_NAME=fs01_marketplace
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - JWT_SECRET=dev-secret-change-in-production
       - JWT_EXPIRES_IN=24h
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - STORAGE_ROOT=/app/storage/uploads
     depends_on:
-      - mongo
-      - redis
-      - elasticsearch
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
     volumes:
       - ./back/src:/app/src
       - ./back/package.json:/app/package.json
       - ./back/package-lock.json:/app/package-lock.json
+      - uploads_data:/app/storage/uploads
 
   frontend:
     build:
@@ -46,6 +52,17 @@ services:
 
   mongo:
     image: mongo:7
+    command: ["mongod", "--replSet", "fs01", "--bind_ip_all"]
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - 'try { rs.status(); } catch (e) { if (e.code !== 94) throw e; rs.initiate({_id: "fs01", members: [{_id: 0, host: "mongo:27017"}]}); } quit(db.hello().isWritablePrimary ? 0 : 1);'
+      interval: 5s
+      timeout: 5s
+      retries: 20
     ports:
       - "27017:27017"
     volumes:
@@ -75,3 +92,4 @@ volumes:
   mongo_data:
   redis_data:
   elasticsearch_data:
+  uploads_data:

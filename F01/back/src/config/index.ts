@@ -1,8 +1,18 @@
 import dotenv from 'dotenv';
+import path from 'path';
+console.error('CONFIG MODULE LOADING, cwd=', process.cwd());
 dotenv.config();
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
+}
+
+function getEnableStartupCleanup(): boolean {
+  // Default: true in production, false in development
+  if (process.env.ENABLE_STARTUP_CLEANUP !== undefined) {
+    return process.env.ENABLE_STARTUP_CLEANUP === 'true';
+  }
+  return isProduction();
 }
 
 function validateRequiredInProduction(value: string | undefined, name: string): string {
@@ -32,6 +42,30 @@ function validateCorsOrigins(origins: string[]): void {
   }
 }
 
+/**
+ * Resolve the storage root path consistently across the application.
+ * In Docker: /app/storage/uploads (mounted volume)
+ * In development: project-relative path that works from anywhere
+ * Reads STORAGE_ROOT env var at call time to allow test overrides.
+ */
+function getStorageRoot(): string {
+  // If explicitly set via env, use it (for Docker and tests)
+  if (process.env.STORAGE_ROOT) {
+    return process.env.STORAGE_ROOT;
+  }
+  // Default: resolve from project root (F01/)
+  // This file is at F01/back/src/config/index.ts, so go up 3 levels to F01/
+  const projectRoot = path.resolve(__dirname, '..', '..', '..');
+  return path.join(projectRoot, 'storage', 'uploads');
+}
+
+/**
+ * Resolve the public URL base for uploaded files
+ */
+function getPublicUrlBase(): string {
+  return process.env.STORAGE_PUBLIC_URL || '/api/v1/uploads';
+}
+
 const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
 validateCorsOrigins(corsOrigins);
 
@@ -46,7 +80,16 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
   corsOrigins,
   isProduction: isProduction(),
+  enableStartupCleanup: getEnableStartupCleanup(),
   commissionPct: parseFloat(process.env.COMMISSION_PCT || '10'),
+  frontendUrl: process.env.FRONTEND_URL?.trim() || 'http://localhost:5173',
+  stripePaymentMethodConfiguration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || '',
+  awsRegion: process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim() || '',
+  awsS3Bucket: process.env.AWS_S3_BUCKET?.trim() || '',
+  awsS3PublicUrlBase: process.env.AWS_S3_PUBLIC_URL_BASE?.trim() || '/api/v1/uploads',
+  awsS3StorageClass: process.env.AWS_S3_STORAGE_CLASS?.trim() || 'STANDARD',
+  get storageRoot() { return getStorageRoot(); },
+  get storagePublicUrlBase() { return getPublicUrlBase(); },
 };
 
 export function validateConfig(): void {

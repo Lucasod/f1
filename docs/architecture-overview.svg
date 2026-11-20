@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 288" role="img" aria-labelledby="title desc">
+  <title id="title">F01 and F04 architecture overview</title>
+  <desc id="desc">F01 React connects to Express, which uses MongoDB, Redis, and Stripe Connect. F04 React connects to Django REST, which uses PostgreSQL, Celery with Redis, and Stripe Billing.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#526480"/></marker>
+  </defs>
+  <rect width="760" height="288" rx="14" fill="#f2f6fc"/>
+  <g fill="#fff" stroke="#9eb2ce">
+    <rect x="28" y="57" width="165" height="52" rx="8"/>
+    <rect x="245" y="57" width="180" height="52" rx="8"/>
+    <rect x="477" y="49" width="255" height="68" rx="8"/>
+    <rect x="28" y="196" width="165" height="52" rx="8"/>
+    <rect x="245" y="196" width="180" height="52" rx="8"/>
+    <rect x="477" y="176" width="255" height="92" rx="8"/>
+  </g>
+  <g fill="none" stroke="#526480" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M198 83H239"/><path d="M430 83H471"/>
+    <path d="M198 222H239"/><path d="M430 222H471"/>
+  </g>
+  <g fill="#172d4a" font-family="system-ui,sans-serif" font-size="17">
+    <text x="28" y="33" font-weight="700">F01 · Multi-vendor marketplace</text>
+    <text x="28" y="161" font-weight="700">F04 · Multi-tenant project management</text>
+    <g text-anchor="middle">
+      <text x="110" y="89">React storefront</text>
+      <text x="335" y="89">Express API</text>
+      <text x="604" y="77">MongoDB · Redis</text>
+      <text x="604" y="101">Stripe Connect</text>
+      <text x="110" y="228">React application</text>
+      <text x="335" y="228">Django REST API</text>
+      <text x="604" y="204">PostgreSQL</text>
+      <text x="604" y="228">Celery · Redis</text>
+      <text x="604" y="252">Stripe Billing</text>
+    </g>
+  </g>
+</svg>

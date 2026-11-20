@@ -1,0 +1,34 @@
+import { it, expect, vi } from 'vitest';
+import { PaymentService } from './modules/order/payment.service';
+import { VendorFinancialDashboardService } from './modules/financial/financial.dashboard.service';
+import { InMemoryFinancialMovementRepository, MovementType } from './modules/financial/financial.movement';
+import { EventType } from './modules/financial/financial.event';
+import { createStripeWebhookHandler } from './modules/checkout/stripe-webhook.handler';
+
+it('exposes shared payment amount through vendor-tagged movement', async () => {
+ const movementRepo = new InMemoryFinancialMovementRepository();
+ const order = { id: 'order1', status: 'paid', vendorGroups: [{vendorId:'v1', subtotal:20}, {vendorId:'v2', subtotal:500}] };
+ const pay = { id:'pay1', orderId:'order1', amount:520 };
+ const paymentService = new PaymentService({} as any, {} as any, undefined, undefined, undefined, undefined, undefined, movementRepo);
+ for (const id of ['v1','v2']) await (paymentService as any).recordPaymentLedger(pay, id, MovementType.CONSUMER_PAYMENT, EventType.PAYMENT_CAPTURED);
+ const service = new VendorFinancialDashboardService({findById:async()=>({commissionPct:10})} as any, {findAll:async()=>[order]} as any, {findByOrderId:async()=>[]} as any, movementRepo, {findByVendorId:async()=>[]} as any, {findByVendorId:async()=>[]} as any);
+ const dashboard = await service.getVendorDashboard('v1');
+ const exposed = dashboard.history.filter(x=>x.relatedEntityId==='pay1');
+ expect(exposed.map(x=>x.amount)).toEqual([520]);
+ expect((await movementRepo.findByVendorId('v2')).map(m=>m.data.amount)).toEqual([520]);
+});
+
+it('returns success on retry while a failed cart reconciliation remains incomplete', async () => {
+ process.env.STRIPE_WEBHOOK_SECRET=['whsec','fake'].join('_');
+ const event={id:'event1',type:'checkout.session.completed',data:{object:{metadata:{paymentId:'pay1'},payment_status:'paid',payment_intent:'pi_fake',amount_total:2000,currency:'brl'}}};
+ let eventId: string | undefined;
+ const payment={personId:'buyer', id:'pay1'};
+ const complete=vi.fn().mockResolvedValue(payment);
+ const cart=vi.fn().mockRejectedValueOnce(new Error('temporary storage failure')).mockResolvedValue(undefined);
+ const handler=createStripeWebhookHandler({webhooks:{constructEvent:()=>event}} as any,{getPaymentById:async()=>({...payment,eventId}),isPaymentFinalized:async()=>false,completeCheckoutPayment:complete,getPaymentEventId:async()=>eventId,setPaymentEventId:async (_:string,id:string)=>{eventId=id},getOrderByPaymentId:async()=>({vendorGroups:[{items:[{productId:'p1',quantity:1}]}]})} as any,{removeItemQuantity:cart} as any,{} as any);
+ const req={body:Buffer.from('{}'),headers:{'stripe-signature':'fake'}} as any;
+ const response=()=>({status:vi.fn().mockReturnThis(),json:vi.fn().mockReturnThis()});
+ const first=response(), second=response();
+ await handler(req,first as any,vi.fn()); await handler(req,second as any,vi.fn());
+ expect(first.status).toHaveBeenCalledWith(500); expect(second.status).toHaveBeenCalledWith(200); expect(cart).toHaveBeenCalledTimes(1); expect(complete).toHaveBeenCalledTimes(1);
+});

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Pre-commit secret scanner hook (MP-31D).
+# Invokes the shared secret scanner on staged content; fails closed on findings.
+set -eu
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+"$REPO_ROOT/.kilo/scripts/scan-secrets.sh" --staged

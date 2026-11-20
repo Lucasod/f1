@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { InMemoryPersonRepository } from '../person/person.domain';
+import { InMemoryPersonRepository, Person } from '../person/person.domain';
 import { InMemoryVendorRepository } from './vendor.domain';
 import { AuthService } from '../auth/auth.service';
 import { VendorService } from './vendor.service';
@@ -9,6 +9,7 @@ import { createVendorRoutes } from './vendor.routes';
 import { createAuthRoutes } from '../auth/auth.routes';
 import { PersonRole } from '../person/person.domain';
 import { config } from '../../config';
+import { hashPassword } from '../auth/credential.domain';
 
 // Valid test CPF/CNPJ values (these pass validation)
 const VALID_CPF_1 = '52998224725';
@@ -22,7 +23,10 @@ describe('Vendor Routes', () => {
   let vendorRepo: InMemoryVendorRepository;
   let authService: AuthService;
   let vendorService: VendorService;
-  const testPassword = 'SecurePass123!';
+  const testPassword =  process.env.TEST_USER_PASSWORD!;
+
+  // Global admin token for tests that need admin access
+  let adminToken: string;
 
   beforeEach(async () => {
     personRepo = new InMemoryPersonRepository();
@@ -38,6 +42,27 @@ describe('Vendor Routes', () => {
       vendorService,
       personRepo
     }));
+
+    // Create admin user directly in repository (bypassing register API which rejects ADMIN)
+    const adminPerson = Person.create({
+      name: 'Admin User',
+      mainInfo: { name: 'Admin User', taxIdType: 'CPF', taxIdValue: VALID_CPF_2 },
+      contactInfos: [{ type: 'email', value: 'admin@example.com', isPrimary: true }],
+      addresses: []
+    });
+    adminPerson.addRole(PersonRole.ADMIN);
+    adminPerson.setCredential(await hashPassword(testPassword));
+    await personRepo.save(adminPerson);
+    
+    // Login to get admin token
+    const adminLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'admin@example.com',
+        password: testPassword
+      });
+    expect(adminLogin.status).toBe(200);
+    adminToken = adminLogin.body.tokens.accessToken;
   });
 
   describe('POST /api/v1/vendor/onboard', () => {
@@ -133,20 +158,7 @@ describe('Vendor Routes', () => {
     });
 
     it('should return 403 for user without VENDOR or CONSUMER role (e.g., ADMIN)', async () => {
-      // Register an admin with a unique valid CPF
-      const adminRegister = await request(app)
-        .post('/api/v1/auth/register')
-        .send({
-          name: 'Admin User',
-          taxIdType: 'CPF',
-          taxIdValue: VALID_CPF_2,
-          email: 'admin@example.com',
-          password: testPassword,
-          role: PersonRole.ADMIN
-        });
-      expect(adminRegister.status).toBe(201);
-      const adminToken = adminRegister.body.tokens.accessToken;
-
+      // Use global admin token (created in global beforeEach)
       const response = await request(app)
         .post('/api/v1/vendor/onboard')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -282,6 +294,16 @@ describe('Vendor Routes', () => {
           storeName: 'John\'s Electronics',
           slug: 'johns-electronics'
         });
+
+      // Login again to get fresh token with VENDOR role
+      const vendorLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'john@vendor.com',
+          password: testPassword
+        });
+      expect(vendorLogin.status).toBe(200);
+      vendorToken = vendorLogin.body.tokens.accessToken;
     });
 
     it('should return current user\'s vendor profile', async () => {
@@ -296,8 +318,7 @@ describe('Vendor Routes', () => {
       expect(response.body.vendor.status).toBe('active');
     });
 
-    it('should return 404 for user without vendor profile', async () => {
-      // Register a consumer without vendor
+    it('should return 404 for a consumer who does not yet have a vendor profile', async () => {
       const consumerRegister = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -352,6 +373,16 @@ describe('Vendor Routes', () => {
           storeName: 'John\'s Electronics',
           slug: 'johns-electronics'
         });
+
+      // Login again to get fresh token with VENDOR role
+      const vendorLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'john@vendor.com',
+          password: testPassword
+        });
+      expect(vendorLogin.status).toBe(200);
+      vendorToken = vendorLogin.body.tokens.accessToken;
     });
 
     it('should update vendor storeName', async () => {
@@ -379,7 +410,7 @@ describe('Vendor Routes', () => {
       expect(response.body.error).toBe('STORE_NAME_REQUIRED');
     });
 
-    it('should return 404 for user without vendor profile', async () => {
+    it('should return 403 for CONSUMER role (requires VENDOR role)', async () => {
       const consumerRegister = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -400,8 +431,245 @@ describe('Vendor Routes', () => {
           storeName: 'New Name'
         });
 
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('PATCH /api/v1/vendor/vendors/:vendorId/suspend', () => {
+    let vendorToken: string;
+    let vendorId: string;
+
+    beforeEach(async () => {
+      // Register a vendor
+      const vendorRegister = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'John Vendor',
+          taxIdType: 'CNPJ',
+          taxIdValue: VALID_CNPJ_1,
+          email: 'john@vendor.com',
+          password: testPassword,
+          role: PersonRole.VENDOR
+        });
+      expect(vendorRegister.status).toBe(201);
+      vendorToken = vendorRegister.body.tokens.accessToken;
+
+      // Onboard vendor
+      const onboardResponse = await request(app)
+        .post('/api/v1/vendor/onboard')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          storeName: 'John\'s Electronics',
+          slug: 'johns-electronics'
+        });
+      expect(onboardResponse.status).toBe(201);
+      vendorId = onboardResponse.body.vendor.id;
+
+      // Login again to get fresh token with VENDOR role
+      const vendorLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'john@vendor.com',
+          password: testPassword
+        });
+      expect(vendorLogin.status).toBe(200);
+      vendorToken = vendorLogin.body.tokens.accessToken;
+    });
+
+    it('should allow ADMIN to suspend a vendor and return 200 with suspended status', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.vendor).toBeDefined();
+      expect(response.body.vendor.id).toBe(vendorId);
+      expect(response.body.vendor.status).toBe('suspended');
+      expect(response.body.vendor.storeName).toBe('John\'s Electronics');
+      expect(response.body.vendor.slug).toBe('johns-electronics');
+    });
+
+    it('should return 403 for VENDOR role (not authorized to suspend)', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should return 403 for CONSUMER role (not authorized to suspend)', async () => {
+      const consumerRegister = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Jane Consumer',
+          taxIdType: 'CPF',
+          taxIdValue: VALID_CPF_1,
+          email: 'jane@consumer.com',
+          password: testPassword,
+          role: PersonRole.CONSUMER
+        });
+      expect(consumerRegister.status).toBe(201);
+      const consumerToken = consumerRegister.body.tokens.accessToken;
+
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`)
+        .set('Authorization', `Bearer ${consumerToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should return 401 for missing token', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`);
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 404 for non-existent vendorId', async () => {
+      const response = await request(app)
+        .patch('/api/v1/vendor/vendors/non-existent-id/suspend')
+        .set('Authorization', `Bearer ${adminToken}`);
+
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+    });
+
+    it('should use vendorId from path param and ignore body vendorId', async () => {
+      // This test verifies vendorId is taken from path param, not body
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vendorId: 'different-id' }); // body vendorId should be ignored
+
+      expect(response.status).toBe(200);
+      expect(response.body.vendor.id).toBe(vendorId); // Should use path param
+    });
+  });
+
+  describe('PATCH /api/v1/vendor/vendors/:vendorId/activate', () => {
+    let vendorToken: string;
+    let vendorId: string;
+
+    beforeEach(async () => {
+      // Register a vendor
+      const vendorRegister = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'John Vendor',
+          taxIdType: 'CNPJ',
+          taxIdValue: VALID_CNPJ_1,
+          email: 'john@vendor.com',
+          password: testPassword,
+          role: PersonRole.VENDOR
+        });
+      expect(vendorRegister.status).toBe(201);
+      vendorToken = vendorRegister.body.tokens.accessToken;
+
+      // Onboard vendor
+      const onboardResponse = await request(app)
+        .post('/api/v1/vendor/onboard')
+        .set('Authorization', `Bearer ${vendorToken}`)
+        .send({
+          storeName: 'John\'s Electronics',
+          slug: 'johns-electronics'
+        });
+      expect(onboardResponse.status).toBe(201);
+      vendorId = onboardResponse.body.vendor.id;
+
+      // Login again to get fresh token with VENDOR role
+      const vendorLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'john@vendor.com',
+          password: testPassword
+        });
+      expect(vendorLogin.status).toBe(200);
+      vendorToken = vendorLogin.body.tokens.accessToken;
+
+      // Suspend the vendor (using global adminToken)
+      await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/suspend`)
+        .set('Authorization', `Bearer ${adminToken}`);
+    });
+
+    it('should allow ADMIN to reactivate a suspended vendor and return 200 with active status', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.vendor).toBeDefined();
+      expect(response.body.vendor.id).toBe(vendorId);
+      expect(response.body.vendor.status).toBe('active');
+      expect(response.body.vendor.storeName).toBe('John\'s Electronics');
+      expect(response.body.vendor.slug).toBe('johns-electronics');
+    });
+
+    it('should return 403 for VENDOR role (not authorized to activate)', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`)
+        .set('Authorization', `Bearer ${vendorToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should return 403 for CONSUMER role (not authorized to activate)', async () => {
+      const consumerRegister = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Jane Consumer',
+          taxIdType: 'CPF',
+          taxIdValue: VALID_CPF_1,
+          email: 'jane@consumer.com',
+          password: testPassword,
+          role: PersonRole.CONSUMER
+        });
+      expect(consumerRegister.status).toBe(201);
+      const consumerToken = consumerRegister.body.tokens.accessToken;
+
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`)
+        .set('Authorization', `Bearer ${consumerToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN');
+    });
+
+    it('should return 401 for missing token', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`);
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 404 for non-existent vendorId', async () => {
+      const response = await request(app)
+        .patch('/api/v1/vendor/vendors/non-existent-id/activate')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('VENDOR_NOT_FOUND');
+    });
+
+    it('should return 400 for already active vendor', async () => {
+      // First activate the vendor
+      await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      // Try to activate again
+      const response = await request(app)
+        .patch(`/api/v1/vendor/vendors/${vendorId}/activate`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('VENDOR_ALREADY_ACTIVE');
     });
   });
 });

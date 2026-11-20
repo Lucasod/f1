@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: FS-01 Marketplace API
   version: 1.0.0
-  description: API specification for the FS-01 Marketplace
+  description: Partial API specification for the FS-01 Marketplace; consult current routes and tests for endpoints not yet documented.
 servers:
   - url: http://localhost:3000/api/v1
     description: Development server
@@ -175,6 +175,64 @@ components:
           type: boolean
           description: Whether this is the primary contact
           example: true
+
+    PersonProfile:
+      type: object
+      description: Authenticated person's profile; tax ID is masked in this response
+      required: [id, name, mainInfo, contactInfos, addresses, roles, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mainInfo:
+          type: object
+          required: [name, taxIdType, taxIdValue]
+          properties:
+            name:
+              type: string
+            taxIdType:
+              type: string
+              enum: [CPF, CNPJ]
+            taxIdValue:
+              type: string
+              description: Masked tax identifier; only the last four digits are visible
+        contactInfos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactInfo'
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [CONSUMER, VENDOR, ADMIN]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PersonProfileResponse:
+      type: object
+      required: [person]
+      properties:
+        person:
+          $ref: '#/components/schemas/PersonProfile'
+
+    CartResponse:
+      type: object
+      required: [cart]
+      properties:
+        cart:
+          $ref: '#/components/schemas/Cart'
+        guestCartId:
+          type: string
+          description: Present only in guest-cart responses; persist and send as X-Guest-Cart-Id
 
     MainInfo:
       type: object
@@ -512,11 +570,11 @@ components:
           example: "active"
         images:
           type: array
-          description: Product image URLs
+          description: Array of local image URLs (served via /api/v1/uploads/; S3 integration deferred to T-703b)
           items:
             type: string
-            format: uri
-          example: ["https://cdn.example.com/images/phone1.jpg", "https://cdn.example.com/images/phone2.jpg"]
+            format: string
+          example: ["/api/v1/uploads/products/vendor123/product456/main.jpg"]
         createdAt:
           type: string
           format: date-time
@@ -596,7 +654,7 @@ components:
 
     Cart:
       type: object
-      description: Shopping cart associated with a person
+      description: Shopping cart associated with an authenticated person or anonymous guest session
       required:
         - id
         - items
@@ -605,8 +663,7 @@ components:
       properties:
         id:
           type: string
-          format: uuid
-          description: Cart identifier (same as personId)
+          description: Authenticated person ID or opaque guest cart ID
           example: "550e8400-e29b-41d4-a716-446655440000"
         items:
           type: array
@@ -818,7 +875,7 @@ components:
 
     CheckoutResponse:
       type: object
-      description: Response from checkout with order and payment intent
+      description: Local checkout response. clientSecret is a placeholder for development and does not represent a Stripe PaymentIntent.
       required:
         - order
         - clientSecret
@@ -827,22 +884,25 @@ components:
           $ref: '#/components/schemas/Order'
         clientSecret:
           type: string
-          description: Stripe PaymentIntent client_secret for client-side confirmation
-          example: "pi_1234567890_secret_abcdef"
+          description: Development placeholder only; no provider payment has been authorized.
+          example: "mock_client_secret_for_testing"
 
     OrderListResponse:
       type: object
       description: Paginated order list response
       required:
-        - items
+        - orders
         - total
         - page
         - limit
       properties:
-        items:
+        orders:
           type: array
           items:
-            $ref: '#/components/schemas/Order'
+            anyOf:
+              - $ref: '#/components/schemas/Order'
+              - $ref: '#/components/schemas/VendorOrder'
+          description: Orders visible to the caller; vendors receive vendor-scoped VendorOrder entries.
         total:
           type: integer
           format: int32
@@ -868,8 +928,8 @@ components:
         status:
           type: string
           description: New status for the vendor group
-          enum: [PENDING, CONFIRMED, PREPARING, SHIPPED, DELIVERED, CANCELLED, RETURNED]
-          example: "CONFIRMED"
+          enum: [pending, confirmed, preparing, shipped, delivered, cancelled, returned]
+          example: "confirmed"
 
     OrderItem:
       type: object
@@ -955,8 +1015,8 @@ components:
         status:
           type: string
           description: Vendor group status per CD-063
-          enum: [PENDING, CONFIRMED, PREPARING, SHIPPED, DELIVERED, CANCELLED, RETURNED]
-          example: "CONFIRMED"
+          enum: [pending, confirmed, preparing, shipped, delivered, cancelled, returned]
+          example: "confirmed"
         items:
           type: array
           description: Order items belonging to this vendor
@@ -1030,8 +1090,8 @@ components:
         status:
           type: string
           description: Order status per CD-063
-          enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
-          example: "PAID"
+          enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
+          example: "paid"
         vendorGroups:
           type: array
           description: Vendor-specific groups within this order
@@ -1048,8 +1108,8 @@ components:
         financialStatus:
           type: string
           description: Financial status per CD-058
-          enum: [FULLY_REFUNDED, PARTIALLY_REFUNDED, PAID]
-          example: "PAID"
+          enum: [fully_refunded, partially_refunded, paid]
+          example: "paid"
         createdAt:
           type: string
           format: date-time
@@ -1060,6 +1120,60 @@ components:
           format: date-time
           description: Last update timestamp
           example: "2024-01-20T14:45:00Z"
+
+    VendorOrder:
+      type: object
+      description: Vendor-scoped view of an order. Omits global order/financial status and recomputes totalAmount from the vendor's own OrderVendorGroups only (CD-039/CD-059).
+      required:
+        - id
+        - personId
+        - vendorGroups
+        - shippingAddress
+        - totalAmount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+          example: "550e8400-e29b-41d4-a716-446655440008"
+        personId:
+          type: string
+          format: uuid
+          description: Reference to the customer
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        vendorGroups:
+          type: array
+          description: Only the vendor's own groups within this order
+          items:
+            $ref: '#/components/schemas/OrderVendorGroup'
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        totalAmount:
+          type: number
+          format: float
+          description: Sum of the vendor's own group subtotals (in BRL)
+          minimum: 0
+          example: 599.98
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-20T14:45:00Z"
+        comment:
+          type: string
+          description: Optional order comment
+        commentedAt:
+          type: string
+          format: date-time
+        commentedBy:
+          type: string
 
     Payment:
       type: object
@@ -1133,14 +1247,14 @@ components:
 
     PaymentIntentResponse:
       type: object
-      description: Response with PaymentIntent client secret and payment ID
+      description: Planned response schema for the future Stripe adapter; not returned by the current local runtime.
       required:
         - clientSecret
         - paymentId
       properties:
         clientSecret:
           type: string
-          description: Stripe PaymentIntent client_secret for client-side confirmation
+          description: Stripe PaymentIntent client_secret after provider integration is implemented.
           example: "pi_1234567890_secret_abcdef"
         paymentId:
           type: string
@@ -1181,7 +1295,7 @@ components:
 
     ReviewCreateRequest:
       type: object
-      description: Request to create a product review with verified purchase per CD-017
+      description: Request to create a review for a delivered order item per CD-017 and CD-072. Upload owned images separately after creation.
       required:
         - rating
         - orderItemId
@@ -1197,41 +1311,10 @@ components:
           type: string
           description: Review comment
           example: "Excellent product, fast delivery!"
-        images:
-          type: array
-          description: Review image URLs
-          items:
-            type: string
-            format: uri
-          example: ["https://cdn.example.com/reviews/review1.jpg"]
         orderItemId:
           type: string
-          format: uuid
           description: Reference to order item for verified purchase per CD-017
-          example: "550e8400-e29b-41d4-a716-446655440010"
-
-    ReviewUpdateRequest:
-      type: object
-      description: Request to update own review (only allowed when status=pending)
-      properties:
-        rating:
-          type: integer
-          format: int32
-          description: Rating from 1 to 5
-          minimum: 1
-          maximum: 5
-          example: 4
-        comment:
-          type: string
-          description: Updated review comment
-          example: "Good product, but shipping was slow."
-        images:
-          type: array
-          description: Updated review image URLs
-          items:
-            type: string
-            format: uri
-          example: ["https://cdn.example.com/reviews/review1.jpg", "https://cdn.example.com/reviews/review2.jpg"]
+          example: "1762020000000-d4e5f6g7h"
 
     ReviewModerateRequest:
       type: object
@@ -1242,8 +1325,16 @@ components:
         status:
           type: string
           description: New moderation status
-          enum: [published, hidden]
+          enum: [published, hidden, rejected]
           example: "published"
+
+    ReviewResponse:
+      type: object
+      required:
+        - review
+      properties:
+        review:
+          $ref: '#/components/schemas/Review'
 
     ReviewListResponse:
       type: object
@@ -1253,6 +1344,7 @@ components:
         - total
         - page
         - limit
+        - averageRating
       properties:
         items:
           type: array
@@ -1273,6 +1365,12 @@ components:
           format: int32
           description: Number of items per page
           example: 20
+        averageRating:
+          type: number
+          format: float
+          nullable: true
+          description: Arithmetic mean of published ratings; null when there are no published reviews.
+          example: 4.5
 
     WebhookResponse:
       type: object
@@ -1291,32 +1389,30 @@ components:
       required:
         - id
         - productId
-        - personId
+        - consumerId
+        - orderItemId
         - rating
         - status
+        - images
         - createdAt
         - updatedAt
       properties:
         id:
           type: string
-          format: uuid
-          description: Unique identifier
-          example: "550e8400-e29b-41d4-a716-446655440014"
+          description: Unique review identifier
+          example: "1762020000000-a1b2c3d4e"
         productId:
           type: string
-          format: uuid
           description: Reference to the product
-          example: "550e8400-e29b-41d4-a716-446655440005"
-        personId:
+          example: "1762020000000-b2c3d4e5f"
+        consumerId:
           type: string
-          format: uuid
-          description: Reference to the reviewer
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: Authenticated Consumer who created the review
+          example: "1762020000000-c3d4e5f6g"
         orderItemId:
           type: string
-          format: uuid
           description: Reference to order item for verified purchase per CD-017
-          example: "550e8400-e29b-41d4-a716-446655440010"
+          example: "1762020000000-d4e5f6g7h"
         rating:
           type: integer
           format: int32
@@ -1330,15 +1426,15 @@ components:
           example: "Excellent product, fast delivery!"
         images:
           type: array
-          description: Review image URLs
+          description: Owned image URLs stored by the current local adapter; the S3 adapter remains a future integration.
           items:
             type: string
-            format: uri
-          example: ["https://cdn.example.com/reviews/review1.jpg"]
+            format: uri-reference
+          maxItems: 5
         status:
           type: string
           description: Review moderation status
-          enum: [pending, published, hidden]
+          enum: [published, hidden, rejected]
           example: "published"
         createdAt:
           type: string
@@ -1491,7 +1587,7 @@ components:
         status:
           type: string
           description: Invoice status
-          enum: [generated, sent]
+          enum: [pending, generated, sent]
           example: "generated"
 
     Wallet:
@@ -1778,17 +1874,17 @@ components:
 
     ProductImagesRequest:
       type: object
-      description: Request to upload product images
+      description: Request to upload product images (local storage implementation; S3 integration deferred to T-703b)
       required:
         - images
       properties:
         images:
           type: array
-          description: Array of presigned S3 image URLs
+          description: Array of local image URLs (served via /api/v1/uploads/)
           items:
             type: string
-            format: uri
-          example: ["https://bucket.s3.amazonaws.com/product1.jpg", "https://bucket.s3.amazonaws.com/product2.jpg"]
+            format: string
+          example: ["/api/v1/uploads/products/vendor123/product456/main.jpg"]
 
     ProductInput:
       type: object
@@ -2398,6 +2494,336 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /auth/change-password:
+    patch:
+      summary: Change the authenticated user's password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                newPassword:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password changed
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /person/me:
+    get:
+      summary: Get the authenticated person's profile
+      operationId: getMyPerson
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved; tax identifier is masked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      summary: Update the authenticated person's name
+      operationId: updateMyPersonName
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /person/me/contacts:
+    post:
+      summary: Add a contact to the authenticated person's profile
+      operationId: addMyContact
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type:
+                  type: string
+                  enum: [email, phone, whatsapp]
+                value:
+                  type: string
+                isPrimary:
+                  type: boolean
+      responses:
+        '201':
+          description: Contact added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      summary: Replace the authenticated person's contact list
+      operationId: updateMyContacts
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contacts]
+              properties:
+                contacts:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/ContactInfo'
+      responses:
+        '200':
+          description: Contacts updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /person/me/contacts/{contactId}:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Update one of the authenticated person's contacts
+      operationId: updateMyContact
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                type:
+                  type: string
+                  enum: [email, phone, whatsapp]
+                value:
+                  type: string
+                isPrimary:
+                  type: boolean
+      responses:
+        '200':
+          description: Contact updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      summary: Remove one of the authenticated person's contacts
+      operationId: removeMyContact
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Contact removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /person/me/addresses:
+    post:
+      summary: Add a delivery address
+      operationId: addMyAddress
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [street, number, neighborhood, city, state]
+              properties:
+                street:
+                  type: string
+                number:
+                  type: string
+                neighborhood:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                  minLength: 2
+                  maxLength: 2
+                isPrimary:
+                  type: boolean
+      responses:
+        '201':
+          description: Address added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      summary: Replace the authenticated person's address list
+      operationId: updateMyAddresses
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [addresses]
+              properties:
+                addresses:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Address'
+      responses:
+        '200':
+          description: Addresses updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /person/me/addresses/{addressId}:
+    parameters:
+      - name: addressId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Update one of the authenticated person's addresses
+      operationId: updateMyAddress
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                street:
+                  type: string
+                number:
+                  type: string
+                neighborhood:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                isPrimary:
+                  type: boolean
+      responses:
+        '200':
+          description: Address updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      summary: Remove one of the authenticated person's addresses
+      operationId: removeMyAddress
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Address removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /vendor/onboard:
     post:
       summary: Onboard as a vendor
@@ -2508,17 +2934,26 @@ paths:
   /cart:
     get:
       summary: Get current cart
-      description: Returns the authenticated user's shopping cart with all items
+      description: Returns the authenticated user's or guest's cart. Guest responses issue X-Guest-Cart-Id; send that value on later guest requests.
       operationId: getCart
       security:
         - bearerAuth: []
+        - {}
+      parameters:
+        - name: X-Guest-Cart-Id
+          in: header
+          required: false
+          description: Opaque guest cart identifier previously returned by the API. Ignored when authenticated.
+          schema:
+            type: string
+            pattern: '^guest:[0-9a-fA-F-]{36}$'
       responses:
         '200':
           description: Current cart retrieved successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cart'
+                $ref: '#/components/schemas/CartResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -2531,10 +2966,19 @@ paths:
   /cart/items:
     post:
       summary: Add item to cart
-      description: Adds a product to the cart or updates quantity if already present. Validates stock availability per CD-018/019.
+      description: Adds a product to either the authenticated cart or the guest cart identified by X-Guest-Cart-Id. Validates product availability and stock.
       operationId: addCartItem
       security:
         - bearerAuth: []
+        - {}
+      parameters:
+        - name: X-Guest-Cart-Id
+          in: header
+          required: false
+          description: Opaque guest cart identifier previously returned by the API. Ignored when authenticated.
+          schema:
+            type: string
+            pattern: '^guest:[0-9a-fA-F-]{36}$'
       requestBody:
         required: true
         content:
@@ -2542,12 +2986,12 @@ paths:
             schema:
               $ref: '#/components/schemas/CartItemInput'
       responses:
-        '200':
+        '201':
           description: Item added to cart successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cart'
+                $ref: '#/components/schemas/CartResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -2572,18 +3016,25 @@ paths:
   /cart/items/{productId}:
     patch:
       summary: Update item quantity
-      description: Updates the quantity of a specific product in the cart. Set quantity to 0 to remove the item. Validates stock availability.
+      description: Updates the quantity in either the authenticated cart or the guest cart identified by X-Guest-Cart-Id. Set quantity to 0 to remove the item. Validates stock availability.
       operationId: updateCartItemQuantity
       security:
         - bearerAuth: []
+        - {}
       parameters:
         - name: productId
           in: path
           required: true
           schema:
             type: string
-            format: uuid
           description: Product unique identifier
+        - name: X-Guest-Cart-Id
+          in: header
+          required: false
+          description: Opaque guest cart identifier previously returned by the API. Ignored when authenticated.
+          schema:
+            type: string
+            pattern: '^guest:[0-9a-fA-F-]{36}$'
       requestBody:
         required: true
         content:
@@ -2596,7 +3047,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cart'
+                $ref: '#/components/schemas/CartResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -2619,25 +3070,32 @@ paths:
           $ref: '#/components/responses/InternalServerError'
     delete:
       summary: Remove item from cart
-      description: Removes a specific product from the cart
+      description: Removes a product from the authenticated cart or the guest cart identified by X-Guest-Cart-Id.
       operationId: removeCartItem
       security:
         - bearerAuth: []
+        - {}
       parameters:
         - name: productId
           in: path
           required: true
           schema:
             type: string
-            format: uuid
           description: Product unique identifier
+        - name: X-Guest-Cart-Id
+          in: header
+          required: false
+          description: Opaque guest cart identifier previously returned by the API. Ignored when authenticated.
+          schema:
+            type: string
+            pattern: '^guest:[0-9a-fA-F-]{36}$'
       responses:
         '200':
           description: Item removed from cart successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cart'
+                $ref: '#/components/schemas/CartResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -2670,7 +3128,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cart'
+                $ref: '#/components/schemas/CartResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -2692,6 +3150,127 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /checkout/attempts:
+    post:
+      summary: Prepare a checkout attempt
+      description: Creates a proposal for the authenticated consumer; this does not itself confirm payment.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, shippingAddressId]
+              properties:
+                requestId: { type: string }
+                shippingAddressId: { type: string }
+                couponSelections:
+                  type: array
+                  items:
+                    type: object
+                    required: [vendorId, code]
+                    properties:
+                      vendorId: { type: string }
+                      code: { type: string }
+      responses:
+        '201': { description: Attempt prepared }
+        '400': { description: Invalid input }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}:
+    get:
+      summary: Read an owned checkout attempt
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Attempt returned }
+        '403': { description: Forbidden }
+        '404': { description: Attempt not found }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}/accept:
+    post:
+      summary: Accept a checkout attempt snapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, expectedHash]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                expectedHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { description: Attempt accepted }
+        '400': { description: Invalid input }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Attempt unavailable }
+  /checkout/attempts/{attemptId}/checkout:
+    post:
+      summary: Create checkout from an accepted attempt
+      description: Creates an order and payment under the current test gate; provider completion requires a verified webhook.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: attemptId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Order and payment created }
+        '400': { description: Invalid request }
+        '403': { description: Forbidden }
+        '409': { description: Conflict }
+        '503': { description: Checkout unavailable }
+  /products:
+    get:
+      summary: List public products
+      security: []
+      responses:
+        '200': { description: Product listing }
+    post:
+      summary: Create a vendor product
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Product created }
+        '400': { description: Invalid product }
+        '401': { description: Authentication required }
+        '403': { description: Vendor role required }
+  /products/{productId}:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Get a public product
+      security: []
+      responses:
+        '200': { description: Product returned }
+        '404': { description: Product not found }
+    patch:
+      summary: Update a product
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Product updated }
+        '401': { description: Authentication required }
+        '403': { description: Not authorized }
+        '404': { description: Product not found }
+    delete:
+      summary: Inactivate a product
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Product inactivated }
+        '401': { description: Authentication required }
+        '403': { description: Not authorized }
+        '404': { description: Product not found }
   /checkout/preview:
     get:
       summary: Preview checkout totals
@@ -2732,7 +3311,7 @@ paths:
   /checkout:
     post:
       summary: Create order from cart
-      description: Validates stock, applies coupons, creates Order and OrderVendorGroups with status PENDING_PAYMENT, and returns a Stripe PaymentIntent client_secret for payment confirmation.
+      description: Validates stock, applies coupons, creates Order and OrderVendorGroups with status PENDING_PAYMENT. Returns a local placeholder clientSecret for development only; no Stripe PaymentIntent is created and no payment is authorized or captured.
       operationId: createOrderFromCart
       security:
         - bearerAuth: []
@@ -2744,7 +3323,7 @@ paths:
               $ref: '#/components/schemas/CheckoutRequest'
       responses:
         '201':
-          description: Order created successfully with payment intent
+          description: Local order created. Placeholder payment data does not represent provider confirmation.
           content:
             application/json:
               schema:
@@ -2780,10 +3359,10 @@ paths:
       parameters:
         - name: status
           in: query
-          description: Filter orders by status
+          description: Filter orders by status. Vendors cannot filter by global order status and receive 400 VENDOR_ORDER_STATUS_FILTER_UNAVAILABLE.
           schema:
             type: string
-            enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
+            enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
         - name: page
           in: query
           description: Page number (1-based)
@@ -2817,6 +3396,46 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /orders/summary:
+    get:
+      summary: Get the authenticated consumer's order summary
+      description: Returns counts, total spend, and up to five recent orders belonging only to the authenticated consumer.
+      operationId: getConsumerOrderSummary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Consumer order summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary]
+                properties:
+                  summary:
+                    type: object
+                    required: [totalOrders, totalSpent, pendingOrders, deliveredOrders, recentOrders]
+                    properties:
+                      totalOrders:
+                        type: integer
+                      totalSpent:
+                        type: number
+                      pendingOrders:
+                        type: integer
+                      deliveredOrders:
+                        type: integer
+                      recentOrders:
+                        type: array
+                        maxItems: 5
+                        items:
+                          $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /orders/{orderId}:
     get:
       summary: Get order details
@@ -2834,11 +3453,17 @@ paths:
           description: Order unique identifier
       responses:
         '200':
-          description: Order retrieved successfully
+          description: Order retrieved successfully. Consumer/Admin receive the full Order; a Vendor receives the vendor-scoped VendorOrder variant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Order'
+                type: object
+                required: [order]
+                properties:
+                  order:
+                    anyOf:
+                      - $ref: '#/components/schemas/Order'
+                      - $ref: '#/components/schemas/VendorOrder'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -2954,11 +3579,17 @@ paths:
               $ref: '#/components/schemas/OrderStatusUpdate'
       responses:
         '200':
-          description: OrderVendorGroup status updated successfully
+          description: OrderVendorGroup status updated successfully. Vendor actors receive the vendor-scoped VendorOrder variant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrderVendorGroup'
+                type: object
+                required: [order]
+                properties:
+                  order:
+                    anyOf:
+                      - $ref: '#/components/schemas/Order'
+                      - $ref: '#/components/schemas/VendorOrder'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -2979,7 +3610,7 @@ paths:
   /payments/intent:
     post:
       summary: Create PaymentIntent for order
-      description: Creates a Stripe PaymentIntent using Separate Charges and Transfers (per CD-064/065) for an order after checkout. Returns client_secret for client-side confirmation and internal payment ID.
+      description: Planned Stripe integration contract (not connected in the current local runtime). No Stripe PaymentIntent is created until provider integration is configured and implemented.
       operationId: createPaymentIntent
       security:
         - bearerAuth: []
@@ -3013,11 +3644,18 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /payments/webhook:
+  /webhooks/stripe:
     post:
       summary: Stripe webhook handler
-      description: "Handles Stripe webhook events for payment processing. No authentication required - uses Stripe signature verification. Handles: payment_intent.succeeded, payment_intent.payment_failed, charge.refunded, transfer.created, transfer.reversed."
+      description: "Receives Stripe events using the raw request body and validates the Stripe-Signature header. Recovery after partial processing remains incomplete."
       operationId: handleStripeWebhook
+      security: []
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -3136,7 +3774,7 @@ paths:
   /products/{productId}/reviews:
     get:
       summary: List reviews for product
-      description: Returns paginated list of reviews for a product. Supports filtering by status (pending, published, hidden). No authentication required.
+      description: Returns a paginated list of published reviews and the arithmetic mean rating. No authentication required.
       operationId: listProductReviews
       parameters:
         - name: productId
@@ -3144,14 +3782,7 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: Product unique identifier
-        - name: status
-          in: query
-          description: Filter reviews by moderation status
-          schema:
-            type: string
-            enum: [pending, published, hidden]
         - name: page
           in: query
           description: Page number (1-based)
@@ -3184,7 +3815,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
     post:
       summary: Create review (Consumer, verified purchase required)
-      description: Creates a new review for a product. Requires verified purchase (orderItemId must reference a delivered order item for this product by the authenticated consumer). Returns review with status=pending for moderation per CD-017.
+      description: Creates and immediately publishes a review. The authenticated Consumer must own a delivered order item for this product. One review is allowed per order item. Non-empty review image lists are not supported yet.
       operationId: createProductReview
       security:
         - bearerAuth: []
@@ -3194,7 +3825,6 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: Product unique identifier
       requestBody:
         required: true
@@ -3204,19 +3834,23 @@ paths:
               $ref: '#/components/schemas/ReviewCreateRequest'
       responses:
         '201':
-          description: Review created successfully (status=pending)
+          description: Review created successfully with status=published
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Review'
+                $ref: '#/components/schemas/ReviewResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
-          $ref: '#/components/responses/ForbiddenError'
+          description: The authenticated Consumer has no delivered order item for this product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
-          description: Product not found or order item not found/delivered
+          description: Product not found
           content:
             application/json:
               schema:
@@ -3230,34 +3864,11 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /reviews/{reviewId}:
-    get:
-      summary: Get review details
-      description: Returns full review details.
-      operationId: getReview
-      parameters:
-        - name: reviewId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Review unique identifier
-      responses:
-        '200':
-          description: Review retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Review'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    patch:
-      summary: Update own review (Consumer, only if status=pending)
-      description: Updates the authenticated consumer's own review. Only allowed when review status is pending (not yet moderated). Returns updated review.
-      operationId: updateReview
+  /reviews/{reviewId}/images:
+    post:
+      summary: Upload an owned review image (Consumer)
+      description: Uploads one validated JPEG, PNG, or WebP image to temporary local storage. The authenticated Consumer must own the review. The storage adapter can be replaced by S3 when that provider integration is required.
+      operationId: uploadReviewImage
       security:
         - bearerAuth: []
       parameters:
@@ -3266,99 +3877,36 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: Review unique identifier
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ReviewUpdateRequest'
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG, or WebP image; max 10 MB and at least 800x800 pixels.
       responses:
-        '200':
-          description: Review updated successfully
+        '201':
+          description: Review image stored and linked to the review
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Review'
+                $ref: '#/components/schemas/ReviewResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden - not the review owner or review status is not pending
+          description: Authenticated Consumer is not the review owner
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    delete:
-      summary: Delete own review (Consumer)
-      description: Deletes the authenticated consumer's own review.
-      operationId: deleteReview
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: reviewId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Review unique identifier
-      responses:
-        '204':
-          description: Review deleted successfully
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          description: Forbidden - not the review owner
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /reviews/{reviewId}/moderate:
-    patch:
-      summary: Moderate review (Admin)
-      description: Updates the moderation status of a review (published or hidden). Admin only per Q-017.
-      operationId: moderateReview
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: reviewId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Review unique identifier
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReviewModerateRequest'
-      responses:
-        '200':
-          description: Review moderated successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Review'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
         '500':
@@ -3457,7 +4005,6 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: Coupon unique identifier
       responses:
         '200':
@@ -3978,7 +4525,7 @@ paths:
           description: Filter orders by status
           schema:
             type: string
-            enum: [PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, FAILED_PAYMENT]
+            enum: [pending_payment, paid, processing, shipped, delivered, cancelled, failed_payment]
         - name: vendorId
           in: query
           description: Filter orders by vendor ID
@@ -4018,11 +4565,11 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /admin/reviews/pending:
+  /admin/reviews:
     get:
-      summary: List pending reviews for moderation (Admin)
-      description: Returns paginated list of reviews with status=pending for moderation. Admin only with permission=review:moderate.
-      operationId: listPendingReviews
+      summary: List reviews for moderation (Admin)
+      description: Returns all reviews, including hidden and rejected reviews. Admin only.
+      operationId: listAdminReviews
       security:
         - bearerAuth: []
       parameters:
@@ -4045,7 +4592,7 @@ paths:
             default: 20
       responses:
         '200':
-          description: Pending reviews retrieved successfully
+          description: Reviews retrieved successfully
           content:
             application/json:
               schema:
@@ -4062,7 +4609,7 @@ paths:
   /admin/reviews/{reviewId}/moderate:
     patch:
       summary: Moderate review (Admin)
-      description: Updates the moderation status of a review (published or hidden). Admin only with permission=review:moderate.
+      description: Updates the moderation status of a review (published, hidden, or rejected). Admin only.
       operationId: moderateAdminReview
       security:
         - bearerAuth: []
@@ -4072,7 +4619,6 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: Review unique identifier
       requestBody:
         required: true
@@ -4086,7 +4632,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Review'
+                $ref: '#/components/schemas/ReviewResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':

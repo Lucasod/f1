@@ -1,0 +1,90 @@
+
+services:
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb://mongo:27017/fs01_marketplace?replicaSet=fs01&directConnection=true
+      - MONGO_DB_NAME=fs01_marketplace
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_EXPIRES_IN=24h
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+    volumes:
+      - ./back/src:/app/src
+      - ./back/package.json:/app/package.json
+      - ./back/package-lock.json:/app/package-lock.json
+
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    ports:
+      - "5174:5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_PROXY_TARGET=http://backend:3000
+    depends_on:
+      - backend
+    volumes:
+      - ./front/src:/app/src
+      - ./front/package.json:/app/package.json
+      - ./front/package-lock.json:/app/package-lock.json
+      - ./front/vite.config.ts:/app/vite.config.ts
+      - ./front/index.html:/app/index.html
+      - ./front/tsconfig.json:/app/tsconfig.json
+      - ./front/tsconfig.node.json:/app/tsconfig.node.json
+
+  mongo:
+    image: mongo:7
+    command: ["mongod", "--replSet", "fs01", "--bind_ip_all"]
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - 'try { rs.status(); } catch (e) { if (e.code !== 94) throw e; rs.initiate({_id: "fs01", members: [{_id: 0, host: "mongo:27017"}]}); } quit(db.hello().isWritablePrimary ? 0 : 1);'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=fs01_marketplace
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    ports:
+      - "9201:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+volumes:
+  mongo_data:
+  redis_data:
+  elasticsearch_data:

@@ -586,40 +586,32 @@ async function validateNoCycle(categoryId, newParentId) {
 
 ### 3.16 `reviews`
 
-**Schema Validation:**
+**Current runtime note (2026-11-01):** The old proposed snake_case/ObjectId schema below is superseded. The MongoDB repository persists `Review.toJSON()` fields in camelCase with string IDs. MongoDB collection indexes enforce one review per order item; eligibility is checked by the service against the order repository. Orders are currently in-memory, so this relationship is not a durable MongoDB foreign key.
+
+**Current document shape (MongoDB JSON Schema validation is not configured):**
 ```json
 {
-  "$jsonSchema": {
-    "bsonType": "object",
-    "required": ["product_id", "consumer_id", "order_item_id", "rating", "status", "created_at", "updated_at"],
-    "properties": {
-      "product_id": { "bsonType": "objectId" },
-      "consumer_id": { "bsonType": "objectId" },
-      "order_item_id": { "bsonType": "objectId" },
-      "rating": { "bsonType": "int", "minimum": 1, "maximum": 5 }, // Q-017: 1-5 stars
-      "comment": { "bsonType": "string" },
-      "images": { "bsonType": "array", "items": { "bsonType": "objectId" } }, // refs product_pics
-      "status": { "enum": ["published", "hidden"] }, // post-moderation (Q-017)
-      "vendor_response": {
-        "bsonType": "object",
-        "properties": {
-          "text": { "bsonType": "string" },
-          "responded_at": { "bsonType": "date" }
-        }
-      }
-    }
-  }
+  "id": "string",
+  "productId": "string",
+  "consumerId": "string",
+  "orderItemId": "string",
+  "rating": "integer (1..5)",
+  "comment": "string (optional)",
+  "images": ["string URL (temporary local storage)"],
+  "status": "published | hidden | rejected",
+  "createdAt": "date",
+  "updatedAt": "date"
 }
 ```
 
 **Unique Constraints:**
-- `order_item_id` — unique (one review per purchase, CD-017)
+- `orderItemId` — unique (one review per delivered order item, CD-017/CD-072)
 
 **Referential Integrity:**
-- `product_id` → `products._id`
-- `consumer_id` → `people._id` (role consumer)
-- `order_item_id` → `order_vendor_groups.items._id` (validar verified purchase)
-- `images[]` → `product_pics._id`
+- `productId` → Product repository lookup
+- `consumerId` → authenticated Consumer claim
+- `orderItemId` → an item in the authenticated Consumer's delivered order (currently in-memory)
+- `images[]` → owner-validated URLs in temporary local storage (CD-071); S3 remains a separate future integration
 
 ---
 

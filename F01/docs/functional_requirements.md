@@ -1376,7 +1376,7 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Dependencies:** FR-COUPON-003
 
-**Note:** Discount calculation formula for mixed eligible/ineligible cart contents remains pending (Q-016 PARTIALLY_RESOLVED, FR-PEND-004). This requirement covers eligibility validation only.
+**Note:** Q-016's mixed-cart business invariants are approved in CD-050 and traced by FR-PEND-004. This requirement covers eligibility validation only; the precise calculation/allocation algorithm and its implementation and tests remain technical work.
 
 **Dependencies:** FR-COUPON-003
 
@@ -1746,21 +1746,21 @@ Non-functional requirements are covered in the separate NFR document.
 
 **Title:** Discount Calculation for Mixed Eligible/Ineligible Cart Contents
 
-**Description:** When a cart contains both products that are eligible for a coupon and products that are not, the discount calculation formula has not been defined.
+**Description:** For a cart containing both eligible and ineligible items, calculate the coupon discount on the eligible subtotal only. Round deterministically to the operational currency's minor unit. Any allocation must be deterministic, preserve the exact rounded total, allocate nothing to ineligible items, and produce stable repeated results. Preserve the currency abstraction. CD-050 is the authoritative decision; the precise algorithm and its implementation and tests remain technical work.
 
 **Actors:** Consumer
 
-**Category:** Pendente
+**Category:** **Resolvido** — business decision; implementation and verification pending
 
-**Origin:** Q-016
+**Origin:** Q-016, CD-050
 
 **Concepts:** Coupon, Order_Vendor_Group
 
 **Affected Behavior:** How discounts are applied when only some items in a vendor group qualify for a coupon.
 
-**Decision Required:** Define whether discount applies only to eligible items, whether ineligible items block the coupon, or other formula.
+**Decision Required:** None for the approved invariants in CD-050. Selecting a precise algorithm within those invariants and verifying it remain technical work.
 
-**Status:** Pendente
+**Status:** **Resolvido** — business invariants approved; implementation and tests not verified
 
 ---
 
@@ -1857,10 +1857,10 @@ Non-functional requirements are covered in the separate NFR document.
 | FR-REFUND-003 | Refunds | Obrigatório | CD-025 | Q-009 |
 | FR-COUPON-001 | Coupons | Obrigatório | MP-07E rule 1 | - |
 | FR-COUPON-002 | Coupons | Obrigatório | MP-07E rule 2 | - |
-| FR-COUPON-003 | Coupons | Obrigatório | MP-07E rules 3, 5, 6 | Q-016 |
-| FR-COUPON-004 | Coupons | Obrigatório | CD-050 | Q-016 |
+| FR-COUPON-003 | Coupons | Obrigatório | MP-07E rules 3, 5, 6; CD-050 (Q-016) | - |
+| FR-COUPON-004 | Coupons | Obrigatório | CD-050 (Q-016) | - |
 | FR-COUPON-005 | Coupons | Derivado | CD-026 | - |
-| FR-COUPON-006 | Coupons | Obrigatório | CD-026, CD-050 | Q-016 |
+| FR-COUPON-006 | Coupons | Obrigatório | CD-026, CD-050 (Q-016) | - |
 | FR-RW-001 | Reviews | Obrigatório | CD-017, CD-072 | - |
 | FR-INV-001 | Invoices | Obrigatório | CD-035, CD-036 | Q-018 |
 | FR-INV-002 | Invoices | Obrigatório | CD-037 | Q-018 |
@@ -1874,7 +1874,7 @@ Non-functional requirements are covered in the separate NFR document.
 | FR-PEND-001 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
 | FR-PEND-002 | Search | Pendente | Q-015 | Q-015 |
 | FR-PEND-003 | Reviews | **Resolvido** | Q-017, CD-067..CD-072 | - |
-| FR-PEND-004 | Coupons | Pendente | Q-016 | Q-016 |
+| FR-PEND-004 | Coupons | **Resolvido** (business invariants; implementation and tests pending) | Q-016, CD-050 | - |
 | FR-PEND-005 | Invoices | Pendente | Q-018 | Q-018 |
 | FR-PEND-006 | Currency | **Resolvido** | Q-026, CD-054, CD-064 | Q-026 |
 

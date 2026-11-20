@@ -22,5 +22,9 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 120000
+  },
+  // Add environment variables for tests
+  env: {
+    TEST_USER_PASSWORD: process.env.TEST_USER_PASSWORD,
   }
 });

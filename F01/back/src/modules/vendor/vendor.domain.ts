@@ -10,6 +10,7 @@ export interface VendorData {
   slug: string;
   status?: VendorStatus;
   commissionPct: number;
+  stripeAccountId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -25,12 +26,13 @@ function validateSlug(slug: string): boolean {
 export class Vendor {
   public readonly id: string;
   public readonly personId: string;
-  public readonly storeName: string;
+  public storeName: string;
   public readonly slug: string;
-  public readonly status: VendorStatus;
+  public status: VendorStatus;
   public readonly commissionPct: number;
   public readonly createdAt: Date;
-  public readonly updatedAt: Date;
+  public updatedAt: Date;
+  public readonly stripeAccountId: string | undefined;
 
   private constructor(data: VendorData) {
     this.id = data.id || generateId();
@@ -39,6 +41,7 @@ export class Vendor {
     this.slug = data.slug;
     this.status = data.status || VendorStatus.ACTIVE;
     this.commissionPct = data.commissionPct;
+    this.stripeAccountId = data.stripeAccountId;
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
   }
@@ -48,15 +51,23 @@ export class Vendor {
       throw new Error('PERSON_ID_REQUIRED');
     }
 
-    if (!data.storeName || data.storeName.trim().length === 0) {
+    const trimmedStoreName = data.storeName.trim();
+    if (!trimmedStoreName || trimmedStoreName.length === 0) {
       throw new Error('STORE_NAME_REQUIRED');
     }
-
-    if (!data.slug || data.slug.trim().length === 0) {
-      throw new Error('SLUG_REQUIRED');
+    if (trimmedStoreName.length < 2) {
+      throw new Error('STORE_NAME_TOO_SHORT');
     }
 
-    if (!validateSlug(data.slug)) {
+    const trimmedSlug = data.slug.trim().toLowerCase();
+    if (!trimmedSlug || trimmedSlug.length === 0) {
+      throw new Error('SLUG_REQUIRED');
+    }
+    if (trimmedSlug.length < 2) {
+      throw new Error('INVALID_SLUG_FORMAT');
+    }
+
+    if (!validateSlug(trimmedSlug)) {
       throw new Error('INVALID_SLUG_FORMAT');
     }
 
@@ -67,6 +78,8 @@ export class Vendor {
 
     return new Vendor({
       ...data,
+      storeName: trimmedStoreName,
+      slug: trimmedSlug,
       commissionPct,
       status: VendorStatus.ACTIVE
     });
@@ -76,24 +89,43 @@ export class Vendor {
     if (this.status === VendorStatus.SUSPENDED) {
       return;
     }
-    (this as any).status = VendorStatus.SUSPENDED;
-    (this as any).updatedAt = new Date();
+    this.status = VendorStatus.SUSPENDED;
+    this.updatedAt = new Date();
   }
 
-  activate(): void {
-    if (this.status === VendorStatus.SUSPENDED) {
+  activate(force: boolean = false): void {
+    if (this.status === VendorStatus.ACTIVE) {
+      return;
+    }
+    if (this.status === VendorStatus.SUSPENDED && !force) {
       throw new Error('CANNOT_ACTIVATE_SUSPENDED');
     }
-    (this as any).status = VendorStatus.ACTIVE;
-    (this as any).updatedAt = new Date();
+    this.status = VendorStatus.ACTIVE;
+    this.updatedAt = new Date();
   }
 
   updateStoreName(newStoreName: string): void {
-    if (!newStoreName || newStoreName.trim().length === 0) {
+    const trimmedStoreName = newStoreName.trim();
+    if (!trimmedStoreName || trimmedStoreName.length === 0) {
       throw new Error('STORE_NAME_REQUIRED');
     }
-    (this as any).storeName = newStoreName;
-    (this as any).updatedAt = new Date();
+    if (trimmedStoreName.length < 2) {
+      throw new Error('STORE_NAME_TOO_SHORT');
+    }
+    this.storeName = trimmedStoreName;
+    this.updatedAt = new Date();
+  }
+
+  setStripeAccountId(accountId: string): void {
+    if (!accountId || accountId.trim().length === 0) {
+      throw new Error('STRIPE_ACCOUNT_ID_REQUIRED');
+    }
+    (this as any).stripeAccountId = accountId.trim();
+    this.updatedAt = new Date();
+  }
+
+  static reconstruct(data: VendorData): Vendor {
+    return new Vendor(data);
   }
 }
 
@@ -110,6 +142,10 @@ export class InMemoryVendorRepository implements VendorRepository {
   private vendors: Map<string, Vendor> = new Map();
   private slugIndex: Map<string, string> = new Map();
   private personIndex: Map<string, string> = new Map();
+
+  async countAll(): Promise<number> {
+    return this.vendors.size;
+  }
 
   async save(vendor: Vendor): Promise<Vendor> {
     const existingSlugId = this.slugIndex.get(vendor.slug.toLowerCase());

@@ -4,7 +4,7 @@
 
 **Project:** FS-01 — Multi-Vendor E-Commerce Marketplace  
 **Period:** 19/10/2026 to 19/11/2026 (estimated 14 days effort)  
-**Current Stage:** Planning and conceptual modeling (per README)
+**Current Stage:** The user explicitly authorized the scoped P5 mission MP-F01-P5-006; this does not establish a blanket authorization for unrelated deployment or other P5 work. Earlier phase-limit statements are historical. Current mission status is tracked in `F01/docs/task_list.md` and its run record.
 
 ## Planned Technologies
 
@@ -15,8 +15,10 @@
 | Database | MongoDB |
 | Search & Filtering | Elasticsearch |
 | Caching & Sessions | Redis |
-| Payments | Stripe Connect or Razorpay (test mode) |
+| Payments | Stripe Connect (Separate Charges and Transfers; test-mode integration still pending) |
 | Image Storage | AWS S3 |
+
+**Integration boundary:** Local and S3 image adapters and Stripe Checkout/webhook code exist; runtime configuration selects the available path. Provider access and financial completeness must be evidenced independently. For the current mission, see the [run record](agent_runs/orch-mp-f01-p5-006-2026-11-18.md).
 
 ## Official Deliverables
 
@@ -37,15 +39,15 @@
 6. Integrate payments and commissions with Stripe Connect or Razorpay (test mode)
 7. Implement reviews, coupons, PDF invoices, admin dashboard, separate frontend/backend deploy
 
-> Note: These stages guide planning but do not authorize implementation during conceptual modeling phase.
+> Note: These stages guide planning. Initial implementation (Stages 1-2: auth, vendor onboarding) has been merged. P4 is authorized; `MAX_AUTHORIZED_PHASE = 4`. P5 requires separate explicit human authorization and is not authorized.
 
 ## Scope Boundaries
 
 - **In scope:** Multi-vendor marketplace core domain (users, vendors, products, orders, payments, commissions, reviews, coupons, admin)
-- **Out of scope (for now):** Implementation details, specific class designs, database schema optimization, API endpoint specifications, infrastructure provisioning
+- **P5 only (not authorized):** Deployment, demo, presentation, and other P5 deliverables. P4 implementation remains in scope under the existing authorization.
 
 ## Source References
 
 - Official internship statement (requirements & deliverables)
 - F01/README.md (project description, objectives, technologies, features, status)
-- F01/docs/modeling/conceptual-model.drawio (current conceptual diagram)
+- F01/docs/modeling/conceptual-model.drawio (removed — see conceptual_model.md for current structured model; decisions.md is authoritative source)

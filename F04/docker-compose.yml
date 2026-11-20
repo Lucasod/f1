@@ -1,0 +1,163 @@
+name: f04
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - f04
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["gunicorn", "conf.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - f04
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "127.0.0.1:5433:5432"
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U f04 -d f04"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - f04
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - f04
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["celery", "-A", "celery_app:app", "worker", "--loglevel=info", "--concurrency=4"]
+    networks:
+      - f04
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      POSTGRES_DB: f04
+      POSTGRES_USER: f04
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DEBUG: "False"
+      PYTHONPATH: /app/backend
+    working_dir: /app/backend/conf
+    command: ["celery", "-A", "celery_app:app", "beat", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler", "--loglevel=info"]
+    networks:
+      - f04
+
+  stripe-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.stripe-cli
+    env_file:
+      - ./backend/.env.stripe-cli
+    networks:
+      - f04
+    command: ["stripe", "listen", "--forward-to", "http://backend:8000/api/v1/integrations/stripe/webhook/", "--events", "checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed"]
+    volumes:
+      - stripe-cli-auth-f04:/home/stripeuser/.stripe/
+
+volumes:
+  postgres_data:
+  stripe-cli-auth-f04:
+
+networks:
+  f04:
+    driver: bridge

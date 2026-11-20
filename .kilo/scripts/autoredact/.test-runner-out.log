@@ -1,0 +1,12 @@
+/home/workstation/source/f1/.kilo/scripts/autoredact/test-autoredact.sh: line 17: /home/workstation/source/f1/.kilo/scripts/common.sh: No such file or directory
+FAIL: end-to-end (rc=127)
+
+FAIL: end-to-end classification missing/wrong
+
+FAIL: end-to-end action missing/wrong
+
+PASS: end-to-end output contains no secret-like tokens
+PASS: malformed finding fails closed
+PASS: missing --finding fails closed
+
+Results: 3 passed, 3 failed

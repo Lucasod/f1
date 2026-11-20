@@ -1,0 +1,23 @@
+{
+  "name": "f04",
+  "version": "1.0.0",
+  "description": "A Jira-like product where each company has an isolated workspace with projects, boards, issues, sprints, and billing.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "start": "serve -s build -l 3000",
+    "build": "echo 'Build skipped - serve static from host'"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.65.1",
+    "serve": "^14.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,7 +1,7 @@
 # Conceptual Model — FS-01 Marketplace
 
 ## Source
-Extracted from `F01/docs/modeling/conceptual-model.drawio` (draw.io diagram).  
+Extracted from `F01/docs/modeling/conceptual-model.drawio` (draw.io diagram — **removed**; this document and `decisions.md` are now the authoritative sources).  
 **Status:** Updated with MP-02 confirmed decisions. Subject to further review.  
 **Note:** Diagram uses swimlane notation; relationships shown as edges. This document translates visual model to structured inventory, now incorporating confirmed business rules.
 
@@ -623,6 +623,13 @@ See `F01/docs/analysis/analysis_review_moderation.md` for detailed analysis and 
 ---
 
 ## Diagram Quality Issues Noted (Updated)
+
+> ⚠️ **IMPORTANT WARNING:** The Draw.io diagram (`F01/docs/modeling/conceptual-model.drawio` — **intentionally removed**) contained elements that **conflict with confirmed decisions** recorded in `decisions.md`. The diagram was NOT updated to reflect all MP-02 through MP-08 decisions before removal. **`decisions.md` is the authoritative source of truth** for all confirmed business rules; this document (`conceptual_model.md`) reflects the updated structured model. Historical conflicts included:
+> - CD-007 (CPF/CNPJ mutual exclusivity) — diagram shows both fields
+> - CD-004 (Role only for Admin) — diagram shows Role as general concept
+> - CD-040 (Address/Contact_Info field restrictions) — diagram may include excluded fields
+> - CD-043 (Category hierarchy rules) — diagram may not reflect cycle prevention requirement
+> Always cross-reference with `decisions.md` before relying on the diagram for implementation.
 
 1. **CONFLICT RESOLVED:** `Main_Info` shows both CPF and CNPJ — **CD-007 confirms mutual exclusivity** (exactly one). Diagram needs correction.
 2. **Inconsistent naming:** `Product_Pic` vs `Product_Pics` (plural on Product), `Orders_Vendor_Products_History` vs `Order_Vendor_Group_History`

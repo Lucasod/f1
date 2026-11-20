@@ -6,7 +6,7 @@ Frontend application for the FS-01 Marketplace, built with React, Vite, and Type
 
 This is a single-page application (SPA) for the FS-01 marketplace platform. It provides user authentication, role-based access control, and a foundation for consumer, vendor, and admin interfaces.
 
-**Stack**: React 18 · Vite 5 · TypeScript 5 · React Router 7 · Zustand 5 · Vitest · Playwright
+**Stack**: React 18 · Vite 6 · TypeScript 5 · React Router 7 · Zustand 5 · Vitest · Playwright
 
 ## Project Structure
 
@@ -32,10 +32,10 @@ src/
 | Category | Technology | Version |
 |----------|------------|---------|
 | Framework | React | 18.3 |
-| Build Tool | Vite | 5.4 |
+| Build Tool | Vite | 6.4 |
 | Routing | React Router | 7.18 |
 | State Management | Zustand | 5.0 |
-| Unit Testing | Vitest + JSDOM + Testing Library | 2.1 |
+| Unit Testing | Vitest + JSDOM + Testing Library | 4.1 |
 | E2E Testing | Playwright | 1.47 |
 | Language | TypeScript | 5.6 |
 
@@ -147,8 +147,9 @@ Routes defined in `src/App.tsx` with nested `ProtectedRoute` wrappers:
 | `/login` | Public | Login page |
 | `/register` | Public | Registration page |
 | `/dashboard` | Authenticated | User dashboard |
-| `/products` | Authenticated | Product listing |
-| `/vendor/*` | VENDOR / ADMIN | Vendor management |
+| `/products` and `/products/:productId` | Public | Product catalog and details |
+| `/vendor/onboard` | CONSUMER | Vendor onboarding |
+| `/vendor/dashboard`, `/vendor/products/*`, `/vendor/orders`, `/vendor/payouts` | VENDOR | Vendor management |
 | `/admin/*` | ADMIN | Admin panel |
 
 **ProtectedRoute** (`src/app/routes/ProtectedRoute.tsx`):
@@ -156,7 +157,7 @@ Routes defined in `src/App.tsx` with nested `ProtectedRoute` wrappers:
 - Supports `allowedRoles` prop for role-based access
 - Shows loading spinner while `isLoading`
 - Shows "Access Denied" for insufficient permissions
-- Admin role bypasses all role checks
+- Allowed roles are checked explicitly; ADMIN does not bypass a role restriction automatically
 
 ## Testing Approach
 

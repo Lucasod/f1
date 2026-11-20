@@ -190,8 +190,8 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Redis hash per user: `cart:{userId}` with TTL 30d
 - Separate `cart_items` in MongoDB + Redis cache
 - Guest cart in localStorage → merge on login
-**Resolution:** Redis strategy analyzed and documented: Hash per consumer (`cart:{consumer_id}`), multi-vendor items with vendor_id, guest cart merge via Lua scripts, atomic operations. TTL values (cart, session) remain pending NFR-PERF-003 confirmation.
-**State:** **PARTIALLY_RESOLVED** — Strategy documented (analysis_redis_schemas.md). TTLs (cart, session) pending NFR-PERF-003. Redis keys, sync, guest merge remain TECHNICAL_FUTURE for implementation.
+**Resolution:** Redis strategy analyzed and documented: hash per authenticated consumer, isolated anonymous guest cart IDs, multi-vendor items, atomic operations, and guest-to-consumer merge. The current cart implementation uses a configurable 30-day TTL as the existing P3a proposal/default. Cart/session TTL approval remains pending NFR-PERF-003.  
+**State:** **PARTIALLY_RESOLVED** — The pending TTL decision does not block implementing or testing the cart contract using the current configurable proposal. Do not describe 30 days as an approved business decision. Session timeout and final cart retention remain unapproved.
 
 ---
 
@@ -205,19 +205,6 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - MongoDB Atlas Search instead of separate Elasticsearch (prohibited by CD-049)  
 **Resolution:** Index mapping + sync mechanism + query DSL examples approved  
 **State:** **PARTIALLY_RESOLVED** — ES confirmed as search engine (CD-049). **Conceptual scope resolved:** Single `products` index with denormalized `category_path` for descendant filtering; Portuguese stemmer analyzer; dual-write sync + periodic full reindex for rebuildability. Mapping, analyzers, synchronization mechanisms remain TECHNICAL_FUTURE for implementation phase (T-302, T-801, T-802). See `F01/docs/analysis/analysis_es_strategy.md` for detailed analysis.
-
----
-
-## Q-016: Coupon Inclusion/Exclusion & Stacking Rules
-**What:** Inclusion/exclusion lists targeting products/categories; category descendant behavior; exclusion precedence; mixed-cart discount calculation; coupon stacking and priority  
-**Why:** Stage 7 (coupons), Order_Vendor_Group has single Coupon ref  
-**Dependencies:** CD-026, CD-027, CD-050  
-**Alternatives:**  
-- One coupon per vendor group (current diagram)  
-- Multiple with stacking rules (category first, then cart total)  
-- Platform-wide + vendor-specific, non-stacking  
-**Resolution:** Coupon application algorithm with precedence rules approved  
-**State:** **PARTIALLY_RESOLVED** — Inclusion/exclusion rules confirmed (CD-050: Inclusion lists target products/categories; including category includes descendants; exclusion lists target products/categories; excluding category excludes descendants; exclusions override inclusions). **Coupon stacking and priority rules resolved (CD-050/MP-07E): no stacking (max one coupon per vendor per purchase); no automatic priority; consumer selects eligible coupon per vendor.** Mixed-cart discount calculation remains PENDING.
 
 ---
 
@@ -250,10 +237,11 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Scope: **RESOLVED** — Commercial receipt (PDF), not NF-e (CD-035)  
 - Generation trigger: **DEFERRED** — On-demand for MVP; automation (on payment/delivery/scheduled) post-MVP  
 - Storage: **RESOLVED** — S3 Standard-IA with naming convention (analysis_s3_naming.md Section 6)  
-- Glacier transition (90 days): **PENDING HUMAN DECISION**  
-- Object Lock/WORM (10 years): **PENDING HUMAN DECISION**  
+- Glacier transition (90 days): **PENDING HUMAN DECISION** — applies to invoice retention only; does not block product-image storage.
+- Object Lock/WORM (10 years): **PENDING HUMAN DECISION** — applies to invoice retention only; does not block product-image storage.
+- Generation trigger automation: **PENDING HUMAN DECISION** — blocks only automated invoice generation; on-demand generation is the MVP behavior.
 - NF-e: **EXCLUDED** per CD-035  
-**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP: PDF receipt on-demand, S3 Standard-IA. Glacier/WORM/automation deferred pending human decision.
+**State:** **PARTIALLY_RESOLVED** — Scope confirmed (CD-035: commercial receipt, not NF-e). Uses historical Order values (CD-036). Partial refund doesn't rewrite invoice (CD-037). Invoice has Order+Emission_At; Invoice_History empty intentionally (CD-038). MVP generation is on-demand with S3 Standard-IA storage. Glacier/WORM decisions affect invoice retention only; trigger automation remains deferred. These decisions do not block unrelated review, coupon, or admin-dashboard work.
 
 ---
 
@@ -310,15 +298,15 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 ---
 
 ## Q-023: Frontend State Management
-**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?
-**Why:** Stage 2-7 frontend implementation consistency
-**Dependencies:** API style, auth flow, cart (Redis sync)
+**What:** React Query/TanStack Query, Redux Toolkit, Context + hooks, Zustand? Server state vs client state?  
+**Why:** Stage 2-7 frontend implementation consistency  
+**Dependencies:** API style, auth flow, cart (Redis sync)  
 **Alternatives:** 
 - TanStack Query for server state + Context for auth/cart
 - Redux Toolkit for all state
 - Zustand for client + React Query for server
-**Resolution:** Frontend state management decision confirmed: TanStack Query (v5) for server state + Zustand (v5) for client state + React Router (v7) for URL state. Decision recorded as CD-074 in decisions.md.
-**State:** **RESOLVED** — Architecture decision formalized; implementation deferred to P4.
+**Resolution:** Frontend state management decision confirmed: TanStack Query (v5) for server state + Zustand (v5) for client state + React Router (v7) for URL state. Decision recorded as CD-074 in decisions.md.  
+**State:** **PARTIALLY_RESOLVED** — Architecture decision formalized (CD-074); TanStack Query (React Query) not yet installed in F01/front package.json; implementation deferred to P4.
 
 ---
 
@@ -398,3 +386,30 @@ Each entry: **ID** — What needs definition | Why it matters | Dependencies | K
 - Login contact identification: implicit via email lookup vs explicit flag  
 **Resolution:** Pendências catalogadas: cardinalidade de Credential (1:1 ou 1:N), unicidade do e-mail de login, identificação inequívoca da Person via e-mail, e regras de gestão de credencial. Nenhuma tem resolução de negócio confirmada.  
 **State:** **PARTIALLY_RESOLVED** — Credential concept confirmed (CD-057). **Credential cardinality resolved (CD-060): 1:1 (single credential per Person). Email uniqueness for login resolved (CD-060): globally unique. Login contact identification remains implicit via email lookup (CD-057 step 2), no `Is_Login` flag added. Credential status values, MFA support, recovery/reset flow remain TECHNICAL_FUTURE. Policy for changing/removing login email while protecting auth integrity not defined.
+
+---
+
+## Q-030: Order Comment Rules — editing, moderation, quantity per order
+**What:** The Consumer may submit exactly one comment per order when the order status is `delivered`. After submission, the comment becomes immutable (cannot be edited, replaced, or a new comment sent for the same order). Moderation rules are deferred to a future decision.
+**Why:** T-1108 (Backend Order Comment API) depends on this decision. Decision recorded per MP-AFIRDD-A-02-DECISION-01 (user approval).
+**Dependencies:** T-1108
+**Alternatives:**
+- Editable vs immutable after submission
+- Post-moderation vs pre-moderation vs none
+- One comment per order vs multiple
+**Resolution:** One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 implemented and tests pass (MP-AFIRDD-CYCLE-EXEC-02).
+**State:** **PARTIALLY_RESOLVED** — One comment per order, immutable after submission. Moderation deferred to future decision. T-1108 implemented and tests pass (MP-AFIRDD-CYCLE-EXEC-02). Moderation rules remain deferred (separate from Q-031).
+
+---
+
+## Q-031: T-1110 Eligible-Order-Flow Design Decision
+**What:** Consumer may submit a Product Review only when the associated order has reached `DELIVERED`. The review must be associated with a product included in that delivered order. The backend must validate order ownership and delivery status. Reviews must remain linked to verified purchases. Product Reviews must be submitted through the Orders flow, not through a direct submission form on the Product Detail page.
+**Why:** User approved decision per MP-AFIRDD-A-02-DECISION-02. Governing reference: CD-072 (verified purchase qualifying state = DELIVERED).
+**Dependencies:** T-1101, CD-072 (verified purchase qualifying state = DELIVERED)
+**Alternatives:**
+- Reviews only eligible after order status `DELIVERED` (decided)
+- Reviews eligible after order status `PAID` or `CONFIRMED`
+- Reviews eligible for any completed order regardless of status
+- Maintain direct product-page submission with no order-flow restriction
+**Resolution:** Eligibility: Product Reviews only eligible after order status `DELIVERED` (per CD-072). Reviews submitted via Orders flow, not direct product page submission. Backend validates order ownership and delivery status. Reviews linked to verified purchases. Design decision recorded per MP-AFIRDD-A-02-DECISION-02 (user approval).
+**State:** **RESOLVED** — Eligibility: Product Reviews only eligible after order status `DELIVERED` (per CD-072). Reviews submitted via Orders flow, not direct product page submission. Backend validates order ownership and delivery status. Reviews linked to verified purchases. Design decision recorded per MP-AFIRDD-A-02-DECISION-02 (user approval).

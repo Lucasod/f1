@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LoginForm } from './LoginForm';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
@@ -15,7 +16,11 @@ vi.mock('@/shared/api/auth', () => ({
 const mockLogin = vi.mocked(authApi.login);
 
 const renderWithProvider = (component: React.ReactNode) => {
-  return render(<AuthProvider>{component}</AuthProvider>);
+  return render(
+    <MemoryRouter initialEntries={['/login']}>
+      <AuthProvider>{component}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe('LoginForm', () => {
@@ -30,6 +35,30 @@ describe('LoginForm', () => {
       error: null
     });
     localStorage.clear();
+  });
+
+  it.each([
+    { roles: ['CONSUMER'] as const, target: '/dashboard' },
+    { roles: ['CONSUMER', 'VENDOR'] as const, target: '/vendor/dashboard' },
+    { roles: ['ADMIN'] as const, target: '/admin/dashboard' },
+  ])('opens the appropriate dashboard for $roles', async ({ roles, target }) => {
+    mockLogin.mockResolvedValueOnce({ person: { id: '1', name: 'Test', email: 'test@example.com', roles: [...roles] }, tokens: { accessToken: crypto.randomUUID(), refreshToken: crypto.randomUUID() } });
+    const Path = () => <span data-testid="current-path">{useLocation().pathname}</span>;
+    render(<MemoryRouter initialEntries={['/login']}><AuthProvider><LoginForm /><Path /></AuthProvider></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com');
+    await userEvent.type(screen.getByLabelText(/password/i), 'sample');
+    await userEvent.click(screen.getByRole('button', { name: /login/i }));
+    await waitFor(() => expect(screen.getByTestId('current-path')).toHaveTextContent(target));
+  });
+
+  it('returns to a protected page requested before login', async () => {
+    mockLogin.mockResolvedValueOnce({ person: { id: '1', name: 'Test', email: 'test@example.com', roles: ['CONSUMER'] }, tokens: { accessToken: crypto.randomUUID(), refreshToken: crypto.randomUUID() } });
+    const Path = () => { const location = useLocation(); return <span data-testid="current-path">{location.pathname + location.search + location.hash}</span>; };
+    render(<MemoryRouter initialEntries={[{ pathname: '/login', state: { from: { pathname: '/cart', search: '?view=compact', hash: '#items' } } }]}><AuthProvider><LoginForm /><Path /></AuthProvider></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com');
+    await userEvent.type(screen.getByLabelText(/password/i), 'sample');
+    await userEvent.click(screen.getByRole('button', { name: /login/i }));
+    await waitFor(() => expect(screen.getByTestId('current-path')).toHaveTextContent('/cart?view=compact#items'));
   });
 
   it('renders email and password fields', () => {
@@ -79,8 +108,8 @@ describe('LoginForm', () => {
   it('calls login API on valid submit', async () => {
     const mockResponse = {
       person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-      tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
-    };
+      tokens: { sessionId: 'session-abc-123', refreshId: 'refresh-def-456' }
+    } as unknown as AuthResponse;
     mockLogin.mockResolvedValueOnce(mockResponse);
 
     renderWithProvider(<LoginForm />);
@@ -95,10 +124,10 @@ describe('LoginForm', () => {
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith({
-        email: 'john@example.com',
-        password: 'password123'
-      });
+      expect(mockLogin).toHaveBeenCalledTimes(1);
+      const [input] = mockLogin.mock.calls[0];
+      expect(input.email).toBe('john@example.com');
+      expect(input.password).toBe('password123');
     });
   });
 
@@ -125,8 +154,8 @@ describe('LoginForm', () => {
 
     resolveLogin!({
       person: { id: '1', name: 'John', email: 'john@example.com', roles: ['CONSUMER'] as ('CONSUMER' | 'VENDOR' | 'ADMIN')[] },
-      tokens: { accessToken: 'access-token', refreshToken: 'refresh-token' }
-    });
+      tokens: { sessionId: 'session-abc-123', refreshId: 'refresh-def-456' }
+    } as unknown as AuthResponse);
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /loading/i })).not.toBeInTheDocument();

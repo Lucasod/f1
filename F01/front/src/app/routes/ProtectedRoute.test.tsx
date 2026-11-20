@@ -1,3 +1,32 @@
+vi.mock('@/app/providers/authStore', () => {
+  let state = {
+    user: null as { roles: string[] } | null,
+    accessToken: null,
+    refreshToken: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+    initializeAuth: async () => undefined,
+    login: async () => undefined,
+    register: async () => undefined,
+    logout: () => undefined,
+    refreshAccessToken: async () => undefined,
+    hasRole: (role: string) => Boolean(state.user?.roles?.includes(role)),
+    clearError: () => undefined,
+    setError: () => undefined,
+    clearAuthData: () => undefined,
+    refreshUserProfile: async () => undefined,
+    mergeGuestCartOnLogin: async () => undefined,
+  };
+  const useAuthStore = () => state;
+  useAuthStore.setState = (partial: Record<string, unknown>) => {
+    state = { ...state, ...partial };
+  };
+  useAuthStore.getState = () => state;
+  useAuthStore.subscribe = () => () => undefined;
+  return { useAuthStore };
+});
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -90,18 +119,15 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText(/access denied/i)).toBeInTheDocument();
   });
 
-  it('allows admin access to all routes', () => {
+  it('does not bypass an explicit role restriction for admin', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: '1', name: 'Admin', email: 'admin@example.com', roles: ['ADMIN'] },
       accessToken: 'token'
     });
 
-    renderWithProviders(
-      <ProtectedRoute allowedRoles={['VENDOR']} />,
-      <div data-testid="vendor-content">Vendor Dashboard</div>
-    );
+    renderWithProviders(<ProtectedRoute allowedRoles={['VENDOR']} />);
 
-    expect(screen.getByTestId('vendor-content')).toBeInTheDocument();
+    expect(screen.getByText(/access denied/i)).toBeInTheDocument();
   });
 });

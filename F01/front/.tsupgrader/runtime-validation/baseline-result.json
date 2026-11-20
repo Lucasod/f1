@@ -1,0 +1,195 @@
+{
+  "planHash": "35a32526c2268ec7c5ecb58204c3a970cf7c35cf43b78aebd5270cdbcb1db47b",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-10-28T21:15:13.0486257Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 1732,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "tsc-no-emit",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "",
+        "durationMs": 2690
+      },
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\n\u003E fs01-frontend@1.0.0 build\n\u003E tsc \u0026\u0026 vite build\n\nvite v6.4.5 building for production...\ntransforming...\n\u2713 119 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                  0.33 kB \u2502 gzip:  0.24 kB\ndist/assets/index-CDwbZ0x-.js  284.62 kB \u2502 gzip: 88.61 kB\n\u2713 built in 934ms\n",
+        "durationMs": 3856
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\n\u003E fs01-frontend@1.0.0 test\n\u003E vitest run\n\n\n RUN  v4.1.12 /home/workstation/source/f1/F01/front\n\n\n Test Files  23 passed (23)\n      Tests  390 passed (390)\n   Start at  18:15:08\n   Duration  4.27s (transform 1.71s, setup 4.11s, import 4.02s, tests 14.12s, environment 23.31s)\n\n",
+        "durationMs": 4662,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 390,
+          "testsPassed": 390,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "dev-server-serves-home",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!DOCTYPE html\u003E\n\u003Chtml lang=\u0022en\u0022\u003E\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\n    \u003Ctitle\u003EFS-01 Marketplace\u003C/title\u003E\n  \u003C/head\u003E\n  \u003Cbody\u003E\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\n  \u003C/body\u003E\n\u003C/html\u003E\n--- server output ---\n\n\u003E fs01-frontend@1.0.0 dev\n\u003E vite --host 127.0.0.1\n\n\n  VITE v6.4.5  ready in 110 ms\n\n  \u279C  Local:   http://127.0.0.1:5173/\n",
+        "durationMs": 653
+      }
+    ],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "/usr/bin/npm",
+        "args": [
+          "ci"
+        ],
+        "cwd": "/home/workstation/source/f1/F01/front",
+        "env": {},
+        "prependPath": [],
+        "platform": "linux",
+        "nodeExecutable": "/usr/bin/node",
+        "nodeVersion": "v22.23.4",
+        "packageManager": "npm",
+        "packageManagerExecutable": "/usr/bin/npm",
+        "packageManagerVersion": "10.9.9",
+        "cleanup": {
+          "RootProcessId": 108627,
+          "Completed": true,
+          "ProcessesObserved": 1,
+          "ProcessesTerminated": 0,
+          "Failure": null
+        }
+      },
+      {
+        "source": "tsc-no-emit",
+        "resolvedExecutable": "/usr/bin/npx",
+        "args": [
+          "tsc",
+          "--noEmit"
+        ],
+        "cwd": "/home/workstation/source/f1/F01/front",
+        "env": {},
+        "prependPath": [],
+        "platform": "linux",
+        "nodeExecutable": null,
+        "nodeVersion": null,
+        "packageManager": null,
+        "packageManagerExecutable": null,
+        "packageManagerVersion": null,
+        "cleanup": {
+          "RootProcessId": 108663,
+          "Completed": true,
+          "ProcessesObserved": 1,
+          "ProcessesTerminated": 0,
+          "Failure": null
+        }
+      },
+      {
+        "source": "production-build",
+        "resolvedExecutable": "/usr/bin/npm",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "/home/workstation/source/f1/F01/front",
+        "env": {},
+        "prependPath": [],
+        "platform": "linux",
+        "nodeExecutable": "/usr/bin/node",
+        "nodeVersion": "v22.23.4",
+        "packageManager": "npm",
+        "packageManagerExecutable": "/usr/bin/npm",
+        "packageManagerVersion": "10.9.9",
+        "cleanup": {
+          "RootProcessId": 108703,
+          "Completed": true,
+          "ProcessesObserved": 1,
+          "ProcessesTerminated": 0,
+          "Failure": null
+        }
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "/usr/bin/npm",
+        "args": [
+          "test"
+        ],
+        "cwd": "/home/workstation/source/f1/F01/front",
+        "env": {},
+        "prependPath": [],
+        "platform": "linux",
+        "nodeExecutable": "/usr/bin/node",
+        "nodeVersion": "v22.23.4",
+        "packageManager": "npm",
+        "packageManagerExecutable": "/usr/bin/npm",
+        "packageManagerVersion": "10.9.9",
+        "cleanup": {
+          "RootProcessId": 108771,
+          "Completed": true,
+          "ProcessesObserved": 1,
+          "ProcessesTerminated": 0,
+          "Failure": null
+        }
+      },
+      {
+        "source": "dev-server-serves-home",
+        "resolvedExecutable": "/usr/bin/npm",
+        "args": [
+          "run",
+          "dev",
+          "--",
+          "--host",
+          "127.0.0.1"
+        ],
+        "cwd": "/home/workstation/source/f1/F01/front",
+        "env": {},
+        "prependPath": [],
+        "platform": "linux",
+        "nodeExecutable": "/usr/bin/node",
+        "nodeVersion": "v22.23.4",
+        "packageManager": "npm",
+        "packageManagerExecutable": "/usr/bin/npm",
+        "packageManagerVersion": "10.9.9",
+        "cleanup": {
+          "RootProcessId": 109014,
+          "Completed": true,
+          "ProcessesObserved": 1,
+          "ProcessesTerminated": 1,
+          "Failure": null
+        }
+      }
+    ]
+  }
+}

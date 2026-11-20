@@ -1,7 +1,9 @@
-version: '3.8'
 
 services:
   backend:
+    env_file:
+      - ./.env
+    command: npm run dev
     build:
       context: .
       dockerfile: Dockerfile
@@ -15,6 +17,8 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - JWT_SECRET=dev-secret-change-in-production
       - JWT_EXPIRES_IN=24h
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - STORAGE_ROOT=/app/storage/uploads
     depends_on:
       - mongo
       - redis
@@ -23,6 +27,7 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - ./package-lock.json:/app/package-lock.json
+      - f01_uploads:/app/storage/uploads
 
   mongo:
     image: mongo:7
@@ -36,7 +41,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - f01_redis_data:/data
 
@@ -51,7 +56,39 @@ services:
     volumes:
       - f01_elasticsearch_data:/usr/share/elasticsearch/data
 
+  stripe-cli:
+    image: stripe/stripe-cli:2.6.0
+    environment:
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+    volumes:
+      - stripe-cli-config:/root/.stripe
+    command: >
+      sh -c "
+        stripe login || true
+        stripe listen
+        --forward-to http://backend:3000/api/v1/webhooks/stripe
+        --project-name f01
+        --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired
+      "
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - default
+    profiles:
+      - stripe
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "stripe", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 volumes:
   f01_mongo_data:
   f01_redis_data:
   f01_elasticsearch_data:
+  f01_uploads:
+  stripe-cli-config:

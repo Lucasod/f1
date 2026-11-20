@@ -230,7 +230,7 @@ Each requirement is categorized by domain and references the confirmed decisions
 
 **Reference:** Q-014, CD-018
 
-**Status:** PENDING — Cart TTL and session timeout values not defined. Typical values are implementation details pending decision.
+**Status:** PENDING — No TTL or timeout has been approved as a business requirement. The current Redis implementation uses a configurable 30-day cart TTL as the existing P3a proposal/default; the analysis document also proposes a 24-hour session TTL. These values are implementation defaults, not approved retention decisions, and must remain configurable until confirmed.
 
 **Impact:** Affects Redis memory usage, session invalidation strategy.
 

@@ -1,3 +1,5 @@
+import { apiClient } from './client';
+
 export interface RegisterInput {
   name: string;
   taxIdType: 'CPF' | 'CNPJ';
@@ -10,6 +12,11 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface Person {
@@ -83,6 +90,11 @@ export const authApi = {
       body: JSON.stringify({ refreshToken })
     });
     return handleResponse<RefreshResponse>(response);
+  },
+
+  async changePassword(input: ChangePasswordInput): Promise<{ message: string }> {
+    const response = await apiClient.patch('/api/v1/auth/change-password', input);
+    return handleResponse<{ message: string }>(response);
   }
 };
 

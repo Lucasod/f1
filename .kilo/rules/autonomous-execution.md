@@ -15,6 +15,7 @@
 - The Reviewer is independent and read-only. It reports findings and ends. Code verifies each finding, fixes confirmed in-scope defects, reruns relevant checks, and requests a new review after material changes. Do not claim review approval when delegation failed, was skipped, or was inconclusive.
 - Use orchestration outcomes `PASS`, `CORRECTIONS_NEEDED`, `INCONCLUSIVE`, or `BLOCKED`. `PASS` means only that the completed review found no corrective finding in the examined scope.
 - Stop retrying the same finding after three attempts without demonstrable progress. Record exact errors and continue with independent eligible tasks when safe.
+- For unresolved REDs, name each failing behavior and link it to its acceptance criterion, evidence, dependency, and current state in the run record. A peripheral mitigation is not completion of the RED or its criterion. After two consecutive rounds without demonstrated progress on the RED, stop that line of work, record the evidence and reassess its dependencies and state; select independent eligible work only when authorized and safe. This earlier convergence stop does not extend or replace the existing per-finding attempt limit.
 
 ## Persistence and reports
 
@@ -26,7 +27,9 @@
 
 ## Runtime limits and safety
 
-- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlist limits Code to the `code-reviewer` agent. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.
+- Kilo's `task` tool runs a delegated agent in the parent workspace and returns its result; the configured `permission.task` allowlists differ by agent: the general `code` agent (kilo.jsonc) allows `code-reviewer`, `code-orchestrator`, and `code-developer`, while the `code-orchestrator` agent (`.kilo/agents/code-orchestrator.md`) allows `code-developer` and `code-reviewer`. This is runtime permission enforcement, while the requirement that a user explicitly starts an autonomous run remains a prompt-level rule.
 - The reviewer's `edit`, `bash`, and `task` tools are denied. This prevents file edits through those tools and nested delegation, but does not prove every runtime or external path is read-only. Do not claim stronger enforcement than the installed runtime exposes.
 - If delegation is unavailable, report `BLOCKED` for required independent review. Do not substitute self-review or claim a delegated review occurred.
-- Do not commit, push, merge, rebase, deploy, alter operational data, or change external/global configuration during autonomous execution unless the user separately authorizes that specific action.
+## Secrets Protection
+
+Mandatory secrets-protection rules are defined in `.kilo/rules/secrets-protection.md`. That file is the authoritative source and takes precedence over diagnostic, debugging, audit, test, command, and delegation instructions.

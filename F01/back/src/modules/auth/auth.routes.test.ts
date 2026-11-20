@@ -10,7 +10,11 @@ describe('Auth Routes', () => {
   let app: express.Express;
   let repo: InMemoryPersonRepository;
   let authService: AuthService;
-  const testPassword = 'SecurePass123!';
+  const testValue = process.env.TEST_USER_PASSWORD!;
+  const weakValue = 'weak';
+  const wrongValue = 'WrongPass123!';
+  const invalidJwt = 'invalid-token';
+  const nextValue = 'NewSecurePass456!';
 
   beforeEach(async () => {
     repo = new InMemoryPersonRepository();
@@ -30,7 +34,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -44,7 +48,7 @@ describe('Auth Routes', () => {
       expect(response.body.tokens.refreshToken).toBeDefined();
     });
 
-    it('should register a new Vendor and return 201', async () => {
+    it('should register with VENDOR role granting both CONSUMER and VENDOR roles and return 201', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -52,12 +56,29 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '11222333000181',
           email: 'jane@vendor.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.VENDOR
         });
 
       expect(response.status).toBe(201);
+      expect(response.body.person.roles).toContain(PersonRole.CONSUMER);
       expect(response.body.person.roles).toContain(PersonRole.VENDOR);
+    });
+
+    it('should reject ADMIN role registration with 403', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Admin User',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'admin@example.com',
+          password: testValue,
+          role: PersonRole.ADMIN
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('FORBIDDEN_ROLE');
     });
 
     it('should return 400 for missing fields', async () => {
@@ -80,7 +101,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: 'INVALID_ROLE'
         });
 
@@ -96,7 +117,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -107,7 +128,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '11222333000181',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -123,7 +144,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -134,7 +155,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'jane@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -150,7 +171,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: 'weak',
+          password: weakValue,
           role: PersonRole.CONSUMER
         });
 
@@ -166,7 +187,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'invalid-email',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -182,7 +203,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '12345678901',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
 
@@ -198,8 +219,8 @@ describe('Auth Routes', () => {
           taxIdType: 'CNPJ',
           taxIdValue: '12345678000190',
           email: 'jane@vendor.com',
-          password: testPassword,
-          role: PersonRole.VENDOR
+          password: testValue,
+          role: PersonRole.CONSUMER
         });
 
       expect(response.status).toBe(400);
@@ -216,7 +237,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
     });
@@ -226,7 +247,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'john@example.com',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(200);
@@ -242,7 +263,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'JOHN@EXAMPLE.COM',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(200);
@@ -254,7 +275,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'john@example.com',
-          password: 'WrongPass123!'
+          password: wrongValue
         });
 
       expect(response.status).toBe(401);
@@ -266,7 +287,7 @@ describe('Auth Routes', () => {
         .post('/api/v1/auth/login')
         .send({
           email: 'nonexistent@example.com',
-          password: testPassword
+          password: testValue
         });
 
       expect(response.status).toBe(401);
@@ -294,7 +315,7 @@ describe('Auth Routes', () => {
           taxIdType: 'CPF',
           taxIdValue: '52998224725',
           email: 'john@example.com',
-          password: testPassword,
+          password: testValue,
           role: PersonRole.CONSUMER
         });
       refreshToken = registerResponse.body.tokens.refreshToken;
@@ -314,7 +335,7 @@ describe('Auth Routes', () => {
     it('should return 401 for invalid refresh token', async () => {
       const response = await request(app)
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: 'invalid-token' });
+        .send({ refreshToken: invalidJwt });
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('INVALID_TOKEN');
@@ -327,6 +348,114 @@ describe('Auth Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('MISSING_REFRESH_TOKEN');
+    });
+  });
+
+  describe('PATCH /api/v1/auth/change-password', () => {
+    let accessToken: string;
+
+    beforeEach(async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Password User',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'password-user@example.com',
+          password: testValue,
+          role: PersonRole.CONSUMER
+        });
+      accessToken = response.body.tokens.accessToken;
+    });
+
+    it('requires authentication and the current password before replacing it', async () => {
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .send({ currentPassword: testValue, newPassword: nextValue })
+        .expect(401);
+
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ currentPassword: wrongValue, newPassword: nextValue })
+        .expect(400)
+        .expect(({ body }) => expect(body.error).toBe('INVALID_CURRENT_PASSWORD'));
+
+      await request(app)
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ currentPassword: testValue, newPassword: nextValue })
+        .expect(200);
+
+      await expect(authService.login({
+        email: 'password-user@example.com',
+        password: nextValue
+      })).resolves.toBeDefined();
+    });
+  });
+
+  describe('POST /api/v1/auth/logout', () => {
+    let refreshToken: string;
+    let accessToken: string;
+
+    beforeEach(async () => {
+      const registerResponse = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'John Doe',
+          taxIdType: 'CPF',
+          taxIdValue: '52998224725',
+          email: 'john@example.com',
+          password: testValue,
+          role: PersonRole.CONSUMER
+        });
+      accessToken = registerResponse.body.tokens.accessToken;
+      refreshToken = registerResponse.body.tokens.refreshToken;
+    });
+
+    it('should logout and revoke the refresh token (200)', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      expect(response.status).toBe(200);
+
+      // Refresh token should no longer work
+      const refreshResponse = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken });
+      expect(refreshResponse.status).toBe(401);
+      expect(refreshResponse.body.error).toBe('INVALID_TOKEN');
+    });
+
+    it('should return 401 for missing auth token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .send({ refreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('MISSING_TOKEN');
+    });
+
+    it('should return 400 for missing refresh token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('MISSING_REFRESH_TOKEN');
+    });
+
+    it('should return 401 for invalid refresh token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken: invalidJwt });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('INVALID_TOKEN');
     });
   });
 });

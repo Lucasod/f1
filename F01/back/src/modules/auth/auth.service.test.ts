@@ -2,17 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthService, AuthError, JWTPayload } from './auth.service';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
 import { hashPassword } from '../auth/credential.domain';
+const weakValue = 'weak';
+const wrongValue = 'WrongPass123!';
+const nextValue = 'NewSecurePass456!';
+const invalidJwt = 'invalid-token';
+const testKey = 'test-secret-key';
 
 describe('Auth Service', () => {
   let repo: InMemoryPersonRepository;
   let authService: AuthService;
-  const testPassword = 'SecurePass123!';
+  const password = process.env.TEST_USER_PASSWORD!;
   let hashedPassword: string;
 
   beforeEach(async () => {
     repo = new InMemoryPersonRepository();
-    authService = new AuthService(repo, 'test-secret-key', '24h', '30d');
-    hashedPassword = await hashPassword(testPassword);
+    authService = new AuthService(repo, testKey, '24h', '30d');
+    hashedPassword = await hashPassword(password);
   });
 
   describe('register', () => {
@@ -22,7 +27,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -42,7 +47,7 @@ describe('Auth Service', () => {
         taxIdType: 'CNPJ',
         taxIdValue: '11222333000181',
         email: 'jane@vendor.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.VENDOR
       });
 
@@ -55,7 +60,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -64,7 +69,7 @@ describe('Auth Service', () => {
         taxIdType: 'CNPJ',
         taxIdValue: '11222333000181',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       })).rejects.toThrow(AuthError.EMAIL_ALREADY_EXISTS);
     });
@@ -75,7 +80,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -84,7 +89,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'jane@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       })).rejects.toThrow(AuthError.TAX_ID_ALREADY_EXISTS);
     });
@@ -95,9 +100,9 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: 'weak',
+        password: weakValue,
         role: PersonRole.CONSUMER
-      })).rejects.toThrow(AuthError.WEAK_PASSWORD);
+      })).rejects.toThrow(AuthError.CREDENTIAL_TOO_WEAK);
     });
 
     it('should reject registration with invalid email format', async () => {
@@ -106,7 +111,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'invalid-email',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       })).rejects.toThrow(AuthError.INVALID_EMAIL);
     });
@@ -117,7 +122,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '12345678901',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       })).rejects.toThrow(AuthError.INVALID_TAX_ID);
     });
@@ -128,7 +133,7 @@ describe('Auth Service', () => {
         taxIdType: 'CNPJ',
         taxIdValue: '12345678000190',
         email: 'jane@vendor.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.VENDOR
       })).rejects.toThrow(AuthError.INVALID_TAX_ID);
     });
@@ -141,7 +146,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
     });
@@ -149,7 +154,7 @@ describe('Auth Service', () => {
     it('should login with correct credentials', async () => {
       const result = await authService.login({
         email: 'john@example.com',
-        password: testPassword
+        password: password
       });
 
       expect(result.person).toBeDefined();
@@ -161,7 +166,7 @@ describe('Auth Service', () => {
     it('should login case-insensitive email', async () => {
       const result = await authService.login({
         email: 'JOHN@EXAMPLE.COM',
-        password: testPassword
+        password: password
       });
 
       expect(result.person.email).toBe('john@example.com');
@@ -170,14 +175,14 @@ describe('Auth Service', () => {
     it('should reject login with wrong password', async () => {
       await expect(authService.login({
         email: 'john@example.com',
-        password: 'WrongPass123!'
+        password: wrongValue
       })).rejects.toThrow(AuthError.INVALID_CREDENTIALS);
     });
 
     it('should reject login with non-existent email', async () => {
       await expect(authService.login({
         email: 'nonexistent@example.com',
-        password: testPassword
+        password: password
       })).rejects.toThrow(AuthError.INVALID_CREDENTIALS);
     });
 
@@ -189,6 +194,46 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('changePassword', () => {
+    let personId: string;
+
+    beforeEach(async () => {
+      const result = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+      personId = result.person.id;
+    });
+
+    it('should replace the credential after verifying the current password', async () => {
+      const nextValue = 'NewSecurePass456!';
+
+      await authService.changePassword(personId, password, nextValue);
+
+      await expect(authService.login({ email: 'john@example.com', password: nextValue }))
+        .resolves.toBeDefined();
+      await expect(authService.login({ email: 'john@example.com', password: password }))
+        .rejects.toThrow(AuthError.INVALID_CREDENTIALS);
+    });
+
+    it('should reject an incorrect current password', async () => {
+      await expect(authService.changePassword(personId, wrongValue, nextValue))
+        .rejects.toThrow(AuthError.INVALID_CURRENT_CREDENTIAL);
+    });
+
+    it('should reject a weak new password without changing the existing credential', async () => {
+      await expect(authService.changePassword(personId, password, weakValue))
+        .rejects.toThrow(AuthError.CREDENTIAL_TOO_WEAK);
+
+      await expect(authService.login({ email: 'john@example.com', password: password }))
+        .resolves.toBeDefined();
+    });
+  });
+
   describe('refreshToken', () => {
     it('should generate new tokens with valid refresh token', async () => {
       const registerResult = await authService.register({
@@ -196,7 +241,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -211,25 +256,25 @@ describe('Auth Service', () => {
     });
 
     it('should reject invalid refresh token', async () => {
-      await expect(authService.refreshToken('invalid-token')).rejects.toThrow(AuthError.INVALID_TOKEN);
+      await expect(authService.refreshToken(invalidJwt)).rejects.toThrow(AuthError.INVALID_SESSION);
     });
 
     it('should reject expired refresh token', async () => {
       // Create auth service with very short expiry for both access and refresh
-      const shortExpiryAuth = new AuthService(repo, 'test-secret-key', '1ms', '1ms');
+      const shortExpiryAuth = new AuthService(repo, testKey, '1ms', '1ms');
       
       await shortExpiryAuth.register({
         name: 'John Doe',
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john2@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
       const loginResult = await shortExpiryAuth.login({
         email: 'john2@example.com',
-        password: testPassword
+        password: password
       });
 
       // Wait for token to expire
@@ -240,6 +285,56 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('logout', () => {
+    let registerResult: Awaited<ReturnType<typeof authService.register>>;
+
+    beforeEach(async () => {
+      registerResult = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+    });
+
+    it('should revoke a refresh token so it can no longer be used to refresh', async () => {
+      const refreshToken = registerResult.tokens.refreshToken;
+
+      await authService.logout(refreshToken);
+
+      await expect(authService.refreshToken(refreshToken)).rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+
+    it('should reject logout with an invalid refresh token', async () => {
+      await expect(authService.logout(invalidJwt)).rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+
+    it('should not affect other valid refresh tokens', async () => {
+      // Wait to ensure different iat
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      const otherResult = await authService.register({
+        name: 'Jane Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '98765432100',
+        email: 'jane@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+
+      await authService.logout(registerResult.tokens.refreshToken);
+
+      // The other user's token should still work
+      const result = await authService.refreshToken(otherResult.tokens.refreshToken);
+      expect(result.accessToken).toBeDefined();
+
+      // The revoked token should not work
+      await expect(authService.refreshToken(registerResult.tokens.refreshToken))
+        .rejects.toThrow(AuthError.INVALID_SESSION);
+    });
+  });
+
   describe('verifyToken', () => {
     it('should return payload for valid access token', async () => {
       const registerResult = await authService.register({
@@ -247,7 +342,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -261,24 +356,24 @@ describe('Auth Service', () => {
     });
 
     it('should reject invalid token', () => {
-      expect(() => authService.verifyToken('invalid-token')).toThrow(AuthError.INVALID_TOKEN);
+      expect(() => authService.verifyToken(invalidJwt)).toThrow(AuthError.INVALID_SESSION);
     });
 
     it('should reject expired access token', async () => {
-      const shortExpiryAuth = new AuthService(repo, 'test-secret-key', '1ms', '30d');
+      const shortExpiryAuth = new AuthService(repo, testKey, '1ms', '30d');
       
       await shortExpiryAuth.register({
         name: 'John Doe',
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john3@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
       const loginResult = await shortExpiryAuth.login({
         email: 'john3@example.com',
-        password: testPassword
+        password: password
       });
 
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -295,7 +390,7 @@ describe('Auth Service', () => {
         taxIdType: 'CPF',
         taxIdValue: '52998224725',
         email: 'john@example.com',
-        password: testPassword,
+        password: password,
         role: PersonRole.CONSUMER
       });
 
@@ -309,18 +404,60 @@ describe('Auth Service', () => {
       expect(payload.exp).toBeDefined();
     });
   });
+
+  describe('setStripeCustomerId', () => {
+    let personId: string;
+
+    beforeEach(async () => {
+      const result = await authService.register({
+        name: 'John Doe',
+        taxIdType: 'CPF',
+        taxIdValue: '52998224725',
+        email: 'john@example.com',
+        password: password,
+        role: PersonRole.CONSUMER
+      });
+      personId = result.person.id;
+    });
+
+    it('should set stripeCustomerId on person', async () => {
+      const customerId = 'cus_test123';
+
+      await authService.setStripeCustomerId(personId, customerId);
+
+      const person = await repo.findById(personId);
+      expect(person).toBeDefined();
+      expect(person!.stripeCustomerId).toBe(customerId);
+    });
+
+    it('should throw PERSON_NOT_FOUND for non-existent person', async () => {
+      await expect(authService.setStripeCustomerId('non-existent-id', 'cus_test123'))
+        .rejects.toThrow(AuthError.PERSON_NOT_FOUND);
+    });
+
+    it('should throw error for empty customerId', async () => {
+      await expect(authService.setStripeCustomerId(personId, ''))
+        .rejects.toThrow(AuthError.STRIPE_CUSTOMER_ID_REQUIRED);
+    });
+
+    it('should throw error for whitespace-only customerId', async () => {
+      await expect(authService.setStripeCustomerId(personId, '   '))
+        .rejects.toThrow(AuthError.STRIPE_CUSTOMER_ID_REQUIRED);
+    });
+  });
 });
 
 describe('AuthError', () => {
   it('should have expected error codes', () => {
     expect(AuthError.EMAIL_ALREADY_EXISTS).toBe('EMAIL_ALREADY_EXISTS');
     expect(AuthError.TAX_ID_ALREADY_EXISTS).toBe('TAX_ID_ALREADY_EXISTS');
-    expect(AuthError.WEAK_PASSWORD).toBe('WEAK_PASSWORD');
+    expect(AuthError.CREDENTIAL_TOO_WEAK).toBe('WEAK_PASSWORD');
     expect(AuthError.INVALID_EMAIL).toBe('INVALID_EMAIL');
     expect(AuthError.INVALID_TAX_ID).toBe('INVALID_TAX_ID');
     expect(AuthError.INVALID_CREDENTIALS).toBe('INVALID_CREDENTIALS');
-    expect(AuthError.INVALID_TOKEN).toBe('INVALID_TOKEN');
+    expect(AuthError.INVALID_SESSION).toBe('INVALID_TOKEN');
     expect(AuthError.TOKEN_EXPIRED).toBe('TOKEN_EXPIRED');
     expect(AuthError.PERSON_NOT_FOUND).toBe('PERSON_NOT_FOUND');
+    expect(AuthError.STRIPE_CUSTOMER_ID_REQUIRED).toBe('STRIPE_CUSTOMER_ID_REQUIRED');
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { RegisterForm } from './RegisterForm';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { useAuthStore } from '@/app/providers/authStore';
@@ -17,7 +18,11 @@ vi.mock('@/shared/api/auth', () => ({
 const mockRegister = vi.mocked(authApi.register);
 
 const renderWithProvider = (component: React.ReactNode) => {
-  return render(<AuthProvider>{component}</AuthProvider>);
+  return render(
+    <MemoryRouter initialEntries={['/register']}>
+      <AuthProvider>{component}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe('RegisterForm', () => {
@@ -43,7 +48,6 @@ describe('RegisterForm', () => {
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/role/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /register/i })).toBeInTheDocument();
   });
 
@@ -222,9 +226,6 @@ describe('RegisterForm', () => {
     const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
     await userEvent.type(confirmPasswordInput, 'password123');
 
-    const roleSelect = screen.getByLabelText(/role/i);
-    await userEvent.selectOptions(roleSelect, 'CONSUMER');
-
     const submitButton = screen.getByRole('button', { name: /register/i });
     await userEvent.click(submitButton);
 
@@ -267,9 +268,6 @@ describe('RegisterForm', () => {
     const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
     await userEvent.type(confirmPasswordInput, 'password123');
 
-    const roleSelect = screen.getByLabelText(/role/i);
-    await userEvent.selectOptions(roleSelect, 'CONSUMER');
-
     const submitButton = screen.getByRole('button', { name: /register/i });
     await userEvent.click(submitButton);
 
@@ -309,9 +307,6 @@ describe('RegisterForm', () => {
     const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
     await userEvent.type(confirmPasswordInput, 'password123');
 
-    const roleSelect = screen.getByLabelText(/role/i);
-    await userEvent.selectOptions(roleSelect, 'CONSUMER');
-
     const submitButton = screen.getByRole('button', { name: /register/i });
     await userEvent.click(submitButton);
 
@@ -341,15 +336,8 @@ describe('RegisterForm', () => {
     expect(confirmPasswordInput).toHaveAttribute('autoComplete', 'new-password');
   });
 
-  it('displays role options: Consumer, Vendor, Admin', () => {
+  it('does not display role selector (defaults to CONSUMER)', () => {
     renderWithProvider(<RegisterForm />);
-
-    const roleSelect = screen.getByLabelText(/role/i);
-    expect(roleSelect).toHaveAccessibleName(/role/i);
-    
-    // Check options exist
-    expect(screen.getByRole('option', { name: /consumer/i })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /vendor/i })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /admin/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/role/i)).not.toBeInTheDocument();
   });
 });

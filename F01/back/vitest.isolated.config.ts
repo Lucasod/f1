@@ -1,0 +1,9 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/modules/checkout/checkout.duplicate-order.test.ts'],
+    testTimeout: 60000
+  }
+});

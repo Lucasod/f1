@@ -1,0 +1,26 @@
+{
+  "worktrees": {},
+  "sessions": {
+    "ses_e37adce0affesOHeiuJ38OcliQ": {
+      "worktreeId": null,
+      "createdAt": "2026-11-11T01:56:32.459Z"
+    },
+    "ses_e35a19101ffeeVypXRdHZM9gUc": {
+      "worktreeId": null,
+      "createdAt": "2026-11-11T11:29:08.916Z"
+    }
+  },
+  "tabOrder": {
+    "local": [
+      "pending:15f306a3-d5a2-489e-9335-efdb552c6f56",
+      "ses_e37adce0affesOHeiuJ38OcliQ",
+      "ses_e35a19101ffeeVypXRdHZM9gUc"
+    ]
+  },
+  "sessionsCollapsed": true,
+  "sidebarCollapsed": true,
+  "activeTarget": {
+    "projectId": "prj-12d1072c7f50",
+    "kind": "local"
+  }
+}

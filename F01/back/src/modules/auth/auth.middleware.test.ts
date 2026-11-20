@@ -4,8 +4,9 @@ import express from 'express';
 import { InMemoryPersonRepository } from '../person/person.domain';
 import { AuthService } from './auth.service';
 import { createAuthRoutes } from './auth.routes';
-import { authMiddleware, requireRole, requireAnyRole, AuthenticatedRequest } from './auth.middleware';
+import { authMiddleware, requireRole, requireAnyRole, AuthenticatedRequest, optionalAuthMiddleware, OptionalAuthenticatedRequest } from './auth.middleware';
 import { PersonRole } from '../person/person.domain';
+import { config } from '../../config';
 
 describe('Auth Middleware', () => {
   let app: express.Express;
@@ -14,7 +15,7 @@ describe('Auth Middleware', () => {
   let consumerToken: string;
   let vendorToken: string;
   let adminToken: string;
-  const testPassword = 'SecurePass123!';
+  const testPassword = process.env.TEST_USER_PASSWORD!;
 
   beforeEach(async () => {
     repo = new InMemoryPersonRepository();
@@ -217,6 +218,114 @@ describe('Auth Middleware', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('optionalAuthMiddleware', () => {
+    it('should allow request without token and set user to undefined', async () => {
+      let capturedUser: any;
+      
+      app.get('/api/v1/optional', optionalAuthMiddleware(authService), (req: OptionalAuthenticatedRequest, res) => {
+        capturedUser = req.user;
+        res.json({ ok: true });
+      });
+
+      const response = await request(app)
+        .get('/api/v1/optional');
+
+      expect(response.status).toBe(200);
+      expect(capturedUser).toBeUndefined();
+    });
+
+    it('should allow request with valid token and attach user', async () => {
+      let capturedUser: any;
+      
+      app.get('/api/v1/optional', optionalAuthMiddleware(authService), (req: OptionalAuthenticatedRequest, res) => {
+        capturedUser = req.user;
+        res.json({ ok: true });
+      });
+
+      const response = await request(app)
+        .get('/api/v1/optional')
+        .set('Authorization', `Bearer ${consumerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(capturedUser).toBeDefined();
+      expect(capturedUser.sub).toBeDefined();
+      expect(capturedUser.email).toBe('consumer@example.com');
+      expect(capturedUser.roles).toContain(PersonRole.CONSUMER);
+      expect(capturedUser.type).toBe('access');
+    });
+
+    it('should allow request with invalid token and set user to undefined', async () => {
+      let capturedUser: any;
+      
+      app.get('/api/v1/optional', optionalAuthMiddleware(authService), (req: OptionalAuthenticatedRequest, res) => {
+        capturedUser = req.user;
+        res.json({ ok: true });
+      });
+
+      const response = await request(app)
+        .get('/api/v1/optional')
+        .set('Authorization', 'Bearer invalid-token');
+
+      expect(response.status).toBe(200);
+      expect(capturedUser).toBeUndefined();
+    });
+
+    it('should allow request with expired token and set user to undefined', async () => {
+      const shortExpiryAuth = new AuthService(repo, 'test-secret-key', '1ms', '30d');
+      
+      await shortExpiryAuth.register({
+        name: 'Test User',
+        taxIdType: 'CNPJ',
+        taxIdValue: '11222333000343',
+        email: 'expired2@example.com',
+        password: testPassword,
+        role: PersonRole.CONSUMER
+      });
+
+      const loginResult = await shortExpiryAuth.login({
+        email: 'expired2@example.com',
+        password: testPassword
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      let capturedUser: any;
+      
+      app.get('/api/v1/optional', optionalAuthMiddleware(authService), (req: OptionalAuthenticatedRequest, res) => {
+        capturedUser = req.user;
+        res.json({ ok: true });
+      });
+
+      const response = await request(app)
+        .get('/api/v1/optional')
+        .set('Authorization', `Bearer ${loginResult.tokens.accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(capturedUser).toBeUndefined();
+    }, 15000);
+
+    it('should allow request with refresh token type and set user to undefined', async () => {
+      let capturedUser: any;
+      
+      app.get('/api/v1/optional', optionalAuthMiddleware(authService), (req: OptionalAuthenticatedRequest, res) => {
+        capturedUser = req.user;
+        res.json({ ok: true });
+      });
+
+      const loginResult = await authService.login({
+        email: 'consumer@example.com',
+        password: testPassword
+      });
+
+      const response = await request(app)
+        .get('/api/v1/optional')
+        .set('Authorization', `Bearer ${loginResult.tokens.refreshToken}`);
+
+      expect(response.status).toBe(200);
+      expect(capturedUser).toBeUndefined();
     });
   });
 });

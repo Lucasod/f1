@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { hashPassword, verifyPassword, CredentialError } from './credential.domain';
 
 describe('Credential Domain (Password Hashing)', () => {
-  const validPassword = 'SecurePass123!';
+  const validPassword = process.env.TEST_USER_PASSWORD!;
 
   describe('hashPassword', () => {
     it('should return a hashed password that is not the original', async () => {
@@ -25,21 +25,29 @@ describe('Credential Domain (Password Hashing)', () => {
       await expect(hashPassword('Short1!')).rejects.toThrow(CredentialError.PASSWORD_TOO_SHORT);
     });
 
-    it('should reject password without uppercase', async () => {
-      await expect(hashPassword('securepass123!')).rejects.toThrow(CredentialError.PASSWORD_WEAK);
-    });
+   it('should reject password without uppercase', async () => {
+  const invalidPassword = validPassword.toLowerCase();
+  await expect(hashPassword(invalidPassword))
+    .rejects.toThrow(CredentialError.PASSWORD_WEAK);
+});
 
-    it('should reject password without lowercase', async () => {
-      await expect(hashPassword('SECUREPASS123!')).rejects.toThrow(CredentialError.PASSWORD_WEAK);
-    });
+it('should reject password without lowercase', async () => {
+  const invalidPassword = validPassword.toUpperCase();
+  await expect(hashPassword(invalidPassword))
+    .rejects.toThrow(CredentialError.PASSWORD_WEAK);
+});
 
-    it('should reject password without number', async () => {
-      await expect(hashPassword('SecurePass!')).rejects.toThrow(CredentialError.PASSWORD_WEAK);
-    });
+it('should reject password without number', async () => {
+  const invalidPassword = validPassword.replace(/\d/g, '');
+  await expect(hashPassword(invalidPassword))
+    .rejects.toThrow(CredentialError.PASSWORD_WEAK);
+});
 
-    it('should reject password without special character', async () => {
-      await expect(hashPassword('SecurePass123')).rejects.toThrow(CredentialError.PASSWORD_WEAK);
-    });
+it('should reject password without special character', async () => {
+  const invalidPassword = validPassword.replace(/[^a-zA-Z0-9]/g, '');
+  await expect(hashPassword(invalidPassword))
+    .rejects.toThrow(CredentialError.PASSWORD_WEAK);
+});
   });
 
   describe('verifyPassword', () => {

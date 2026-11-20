@@ -106,7 +106,7 @@ docs/agent_runs/             # Run records directory
 - **Classification:** CONFIRMED
 
 #### CR-002: No real Kilo runtime adapter for agent delegation — orchestration is unconnected
-- **Location:** `kilo-orchestration/src/agent-orchestrator.ts` (OrchestrationAgentPort interface, lines 8, 14); run record `docs/agent_runs/orch-mvp-2026-10-24.md` lines 42-44
+- **Location:** `kilo-orchestration/src/agent-orchestrator.ts` (AgentDelegationPort (line 8) and FIPRState (line 14)); run record `docs/agent_runs/orch-mvp-2026-10-24.md` lines 42-44
 - **Evidence:** Run record explicitly states: "This session does not expose a Kilo `task` tool or a TypeScript-callable Kilo runtime adapter. The TypeScript dispatcher therefore has an injected port contract, not a connected Kilo implementation."
 - **Problem:** The entire autonomous execution flow (delegateToCode → reviewWithCodeReviewer) depends on an interface (`OrchestrationAgentPort`) that has no implementation connected to the real Kilo `task` tool. The orchestration cannot actually invoke the Code or Code Reviewer agents.
 - **Impact:** Autonomous execution is simulated, not real. No end-to-end delegation has been demonstrated. The run record acknowledges this as a known limitation blocking live integration.

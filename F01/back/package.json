@@ -7,33 +7,55 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run",
+    "test": "npm run test:checkout-duplicate && npm run test:payment-consumer-confirmation && vitest run",
+    "test:checkout-duplicate": "vitest run --config vitest.isolated.config.ts",
+    "test:payment-consumer-confirmation": "node --test src/modules/order/payment.consumer-confirmation.test.cjs",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "node -e \"if (!process.env.F01_CONNECT_TEST_URI) { console.error('ERRO: F01_CONNECT_TEST_URI não definida. Defina-a para executar o teste de integração seed-connect (ex: mongodb://127.0.0.1:27017/f01_seed_connect_test?directConnection=true).'); process.exit(1); }\" && npx vitest run src/scripts/seed.connect.mongo.test.ts",
+    "test:all": "npm test && npm run test:integration",
+    "seed": "tsx scripts/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1163.0",
+    "@aws-sdk/s3-request-presigner": "^3.1163.0",
+    "@types/pdfkit": "^0.17.7",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "helmet": "^8.0.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^6.9.0",
-    "zod": "^3.23.8"
+    "multer": "^1.4.5-lts.1",
+    "pdfkit": "^0.20.2",
+    "sharp": "^0.35.5",
+    "stripe": "^23.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^1.4.13",
     "@types/node": "^22.5.5",
-    "@vitest/coverage-v8": "^2.1.1",
+    "@types/sharp": "^0.31.1",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^4.1.12",
+    "ioredis-mock": "file:./deps/ioredis-mock-8.13.1.tgz",
     "supertest": "^7.0.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.1"
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true
   }
 }
