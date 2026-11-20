@@ -8,7 +8,6 @@ test.beforeAll(async ({ request }) => {
   console.log('beforeAll: about to login');
   const csrfResponse = await request.get(BASE_URL + '/auth/csrf/');
   const csrfBody = await csrfResponse.json();
-  console.log('beforeAll: csrf token', csrfBody.csrf_token);
   const loginResponse = await request.post(BASE_URL + '/auth/login/', {
     data: { username: 'alice', password: getValidCredentials().password },
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfBody.csrf_token },

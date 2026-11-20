@@ -23,7 +23,8 @@ export function ProjectList({
   onCreate,
 }: ProjectListProps = {}) {
   const navigate = useNavigate();
-  const { currentWorkspace } = useWorkspace();
+  const { workspaces } = useWorkspace();
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export function ProjectList({
     listProjects()
       .then((data) => {
         if (!mounted) return;
-        setProjects(Array.isArray(data) ? data : []);
+        setProjects(Array.isArray(data) ? data.filter((project) => project.workspace_id === workspaceId) : []);
       })
       .catch((err: any) => {
         if (!mounted) return;
@@ -87,6 +88,8 @@ export function ProjectList({
           icon="📁"
         />
       ) : (
+        <>
+        <button type="button" onClick={onCreate}>Create project</button>
         <ul className="project-list__list" role="list">
           {projects.map((project) => (
             <li key={project.id} className="project-list__item">
@@ -101,6 +104,7 @@ export function ProjectList({
             </li>
           ))}
         </ul>
+        </>
       )}
     </div>
   );

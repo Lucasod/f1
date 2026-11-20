@@ -1,3 +1,4 @@
+import "./index.css";
 /**
  * index.tsx — React application entry point.
  *
@@ -94,7 +95,7 @@ function WorkspacesRoute() {
   return (
     <div className="page workspaces-page">
       <h1>Workspaces</h1>
-      <WorkspaceList />
+      <WorkspaceList onCreate={() => setCreateOpen(true)} />
       <WorkspaceCreateModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -109,14 +110,16 @@ function WorkspacesRoute() {
 function ProjectsRoute() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [projectListVersion, setProjectListVersion] = React.useState(0);
   const id = workspaceId ? Number(workspaceId) : null;
   return (
     <div className="page projects-page">
       <h1>Projects</h1>
-      <ProjectList workspaceId={id} />
+      <ProjectList key={projectListVersion} workspaceId={id} onCreate={() => setCreateOpen(true)} />
       {id != null && (
         <ProjectCreateModal
           workspaceId={id}
+          onSave={() => setProjectListVersion((version) => version + 1)}
           isOpen={createOpen}
           onClose={() => setCreateOpen(false)}
         />
@@ -148,7 +151,7 @@ function NotificationsRoute() {
   return (
     <div className="page notifications-page">
       <h1>Notifications</h1>
-      {id != null ? <NotificationList /> : <div>Select a workspace.</div>}
+      {id != null ? <NotificationList key={id} /> : <div>Select a workspace.</div>}
     </div>
   );
 }
@@ -162,7 +165,7 @@ function ReportsRoute() {
   return (
     <div className="page reports-page">
       <h1>Reports</h1>
-      {id != null ? <ReportList /> : <div>Select a workspace.</div>}
+      {id != null ? <ReportList key={id} /> : <div>Select a workspace.</div>}
     </div>
   );
 }
@@ -176,7 +179,7 @@ function WebhooksRoute() {
   return (
     <div className="page webhooks-page">
       <h1>Webhooks</h1>
-      {id != null ? <WebhookList /> : <div>Select a workspace.</div>}
+      {id != null ? <WebhookList key={id} /> : <div>Select a workspace.</div>}
     </div>
   );
 }
@@ -188,9 +191,8 @@ function BillingRoute() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const id = workspaceId ? Number(workspaceId) : null;
   return (
-    <div className="page billing-page">
-      <h1>Billing</h1>
-      {id != null ? <BillingPage /> : <div>Select a workspace.</div>}
+    <div className="page">
+      {id != null && Number.isSafeInteger(id) && id > 0 ? <BillingPage key={id} workspaceId={id} /> : <div>Select a workspace.</div>}
     </div>
   );
 }

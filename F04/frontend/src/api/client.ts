@@ -40,9 +40,11 @@ export async function bootstrapCsrf(): Promise<string> {
     csrfToken = token;
     return token;
   })();
-  const token = await bootstrapPromise;
-  bootstrapPromise = null;
-  return token;
+  try {
+    return await bootstrapPromise;
+  } finally {
+    bootstrapPromise = null;
+  }
 }
 
 /** Return the currently held CSRF token (or null if not yet bootstrapped). */

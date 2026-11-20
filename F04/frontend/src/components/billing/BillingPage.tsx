@@ -7,7 +7,6 @@
  */
 
 import { useState, useEffect } from "react";
-import { useWorkspace } from "../../hooks/useWorkspace";
 import {
   getBillingSummary,
   createCheckout,
@@ -19,8 +18,7 @@ import {
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
 
-export function BillingPage() {
-  const { currentWorkspaceId } = useWorkspace();
+export function BillingPage({ workspaceId }: { workspaceId: number }) {
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,13 +27,13 @@ export function BillingPage() {
   const [canceling, setCanceling] = useState(false);
 
   const load = async () => {
-    if (!currentWorkspaceId) return;
+    if (!workspaceId) return;
     setLoading(true);
     setError(null);
     try {
       const [s, u] = await Promise.all([
-        getBillingSummary(currentWorkspaceId),
-        getWorkspaceUsage(currentWorkspaceId),
+        getBillingSummary(workspaceId),
+        getWorkspaceUsage(workspaceId),
       ]);
       setSummary(s);
       setUsage(u);
@@ -48,15 +46,15 @@ export function BillingPage() {
 
   useEffect(() => {
     load();
-  }, [currentWorkspaceId]);
+  }, [workspaceId]);
 
   const handleCheckout = async () => {
-    if (!currentWorkspaceId) return;
+    if (!workspaceId) return;
     setCreatingCheckout(true);
     setError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
-      const result = await createCheckout(currentWorkspaceId, "pro", idempotencyKey);
+      const result = await createCheckout(workspaceId, "pro", idempotencyKey);
       if (result.operation.checkout_url) {
         window.location.href = result.operation.checkout_url;
       }
@@ -68,13 +66,13 @@ export function BillingPage() {
   };
 
   const handleCancel = async () => {
-    if (!currentWorkspaceId) return;
+    if (!workspaceId) return;
     if (!confirm("Cancel your Pro subscription? Access will switch to Free after confirmation.")) return;
     setCanceling(true);
     setError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
-      await cancelSubscription(currentWorkspaceId, "period_end", idempotencyKey);
+      await cancelSubscription(workspaceId, "period_end", idempotencyKey);
       await load();
     } catch (err: any) {
       setError(err?.message ?? "Failed to cancel subscription");
@@ -88,7 +86,7 @@ export function BillingPage() {
   }
 
   if (!summary) {
-    return <EmptyState title="Billing unavailable" message="Unable to load billing information." icon="💳" />;
+    return <EmptyState title="Billing unavailable" message={error ?? "Unable to load billing information."} icon="💳" />;
   }
 
   const isPro = summary.plan === "pro";
@@ -105,7 +103,7 @@ export function BillingPage() {
         <p>
           <strong>Plan:</strong> {summary.plan.charAt(0).toUpperCase() + summary.plan.slice(1)}
         </p>
-        <p><strong>Status:</strong> {summary.subscription_status || "n/a"}</p>
+        <p><strong>Status:</strong> {summary.subscription_status || (summary.plan === "free" ? "No subscription" : "Unknown")}</p>
         {summary.cancel_at_period_end && (
           <p><strong>Cancellation scheduled:</strong> Yes (at period end)</p>
         )}

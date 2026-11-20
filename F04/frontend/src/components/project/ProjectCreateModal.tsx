@@ -54,7 +54,7 @@ export function ProjectCreateModal({
 
     setLoading(true);
     try {
-      const project = await createProject(name.trim(), trimmedKey);
+      const project = await createProject(name.trim(), trimmedKey, workspaceId);
       setName("");
       setKey("");
       setLoading(false);

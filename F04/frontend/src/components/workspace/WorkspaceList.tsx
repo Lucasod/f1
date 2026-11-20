@@ -5,7 +5,6 @@
  * to open that workspace's projects. Provides an "Add workspace" action.
  */
 
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "../../hooks/useWorkspace";
 import { EmptyState } from "../shared/EmptyState";
@@ -23,31 +22,10 @@ export function WorkspaceList({ onCreate }: WorkspaceListProps = {}) {
     currentWorkspace,
     loading,
     selectWorkspace,
-    createWorkspace,
   } = useWorkspace();
-  const [creating, setCreating] = useState(false);
-  const [createName, setCreateName] = useState("");
-
   const handleSelect = async (workspace: Workspace) => {
     await selectWorkspace(workspace.id);
     navigate(`/workspaces/${workspace.id}/projects`, { replace: true });
-  };
-
-  const handleCreateSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!createName.trim()) return;
-    setCreating(true);
-    try {
-      const ws = await createWorkspace(createName.trim());
-      setCreateName("");
-      await selectWorkspace(ws.id);
-      navigate(`/workspaces/${ws.id}/projects`, { replace: true });
-      if (onCreate) onCreate();
-    } catch {
-      // Error surfaced by the hook/UI; keep modal open.
-    } finally {
-      setCreating(false);
-    }
   };
 
   if (loading && workspaces.length === 0) {
@@ -61,11 +39,7 @@ export function WorkspaceList({ onCreate }: WorkspaceListProps = {}) {
           title="No workspaces yet"
           message="Create a workspace to get started."
           actionLabel="Create workspace"
-          onAction={() => {
-            document
-              .getElementById("workspace-create-name")
-              ?.focus();
-          }}
+          onAction={onCreate}
           icon="🏢"
         />
       </div>
@@ -97,55 +71,8 @@ export function WorkspaceList({ onCreate }: WorkspaceListProps = {}) {
         })}
       </ul>
       <div className="workspace-list__actions">
-        <button
-          className="workspace-list__add"
-          onClick={() => {
-            setCreating(true);
-            setTimeout(() => {
-              const el = document.getElementById("workspace-create-name");
-              el?.focus();
-            }, 50);
-          }}
-          type="button"
-          aria-expanded={creating}
-        >
-          + Create workspace
-        </button>
+        <button className="workspace-list__add" onClick={onCreate} type="button">+ Create workspace</button>
       </div>
-      {creating && (
-        <form
-          className="workspace-list__create-form"
-          onSubmit={handleCreateSubmit}
-          noValidate
-        >
-          <input
-            id="workspace-create-name"
-            name="name"
-            type="text"
-            placeholder="Workspace name"
-            autoFocus
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            required
-            maxLength={100}
-            disabled={creating}
-          />
-          <button
-            type="submit"
-            className="workspace-list__create-submit"
-            disabled={creating || !createName.trim()}
-          >
-            {creating ? "Creating…" : "Create"}
-          </button>
-          <button
-            type="button"
-            className="workspace-list__create-cancel"
-            onClick={() => setCreating(false)}
-          >
-            Cancel
-          </button>
-        </form>
-      )}
     </div>
   );
 }

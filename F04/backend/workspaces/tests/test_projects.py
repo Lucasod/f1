@@ -145,6 +145,14 @@ class ProjectTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(len(response.data.get("results", [])), 1)
 
+    def test_project_list_identifies_its_workspace(self):
+        workspace_id = self._create_workspace()
+        created = self._create_project("Scoped project", "SCP", workspace_id)
+        project_id = created.data["project"]["id"]
+        response = self.client.get("/api/v1/projects/", format="json")
+        project = next(item for item in response.data["results"] if item["id"] == project_id)
+        self.assertEqual(project["workspace_id"], workspace_id)
+
     def test_project_detail_accessible(self):
         """GET /api/v1/projects/{id}/ accessible to member."""
         ws_id = self._create_workspace()

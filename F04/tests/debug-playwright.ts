@@ -7,7 +7,6 @@ test('debug cookies', async ({ request }) => {
     // Fetch CSRF token
     const csrfResponse = await request.get(BASE_URL + '/auth/csrf/');
     const csrfBody = await csrfResponse.json();
-    console.log('CSRF token:', csrfBody.csrf_token);
     
     // Login
     const loginResp = await request.post(BASE_URL + '/auth/login/', {
@@ -18,7 +17,6 @@ test('debug cookies', async ({ request }) => {
       },
     });
     console.log('Login status:', loginResp.status());
-    console.log('Login headers:', JSON.stringify(loginResp.headers()));
     
     // Create workspace
     const createW = await request.post(BASE_URL + '/workspaces/create/', {

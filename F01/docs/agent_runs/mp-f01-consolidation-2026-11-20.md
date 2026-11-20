@@ -94,3 +94,96 @@
 - No repository in source (no `.git/` directory)
 - No commit made (agents do not commit automatically)
 - Source preserved unchanged
+
+## Addendum — Cópia com exclusões do .gitignore/.dockerignore aplicadas (2026-11-20)
+
+### Context
+Re-execução da cópia integral aplicando também as regras de exclusão dos arquivos `.gitignore` e `.dockerignore` da origem, conforme solicitado. O destino já existia da execução anterior; esta re-execução removeu itens pré-existentes que deveriam ser excluídos.
+
+### Exclusion Patterns Applied
+
+| Source | Patterns excluded |
+|--------|-------------------|
+| **Mandatory** | `.git/`, `.gitignore`, `.dockerignore`, `.env*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` |
+| **F01/.gitignore** | `/storage/uploads/products/vendor-*/` |
+| **back/.gitignore** | `scripts/*.js`, `scripts/*.d.ts`, `scripts/*.map`, `.env`, `.env.*`, `/storage/uploads/products/vendor-*/` |
+| **back/.dockerignore** | `.git/`, `.gitignore`, `node_modules/`, `npm-debug.log*`, `yarn-debug.log*`, `yarn-error.log*`, `dist/`, `build/`, `*.tsbuildinfo`, `.env`, `.env.local`, `.env.development.local`, `.env.test.local`, `.env.production.local`, `.idea/`, `.vscode/`, `*.swp`, `*.swo`, `.DS_Store`, `Thumbs.db`, `.stripe/`, `.stripe.json`, `logs/`, `*.log`, `coverage/`, `.nyc_output/` |
+| **.kilo/.gitignore** | `node_modules`, `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, `yarn.lock`, `.gitignore`, `agent-manager.json`, `agent-manager.json.*` |
+
+Exclude file: `/tmp/kilo/rsync-excludes.txt` (used with `--exclude-from`)
+
+### Commands executed
+
+**Phase 1 — Dry-run:**
+```
+rsync -av --dry-run --exclude-from=/tmp/kilo/rsync-excludes.txt /home/workstation/source/f1/F01/ /home/workstation/source/project/FS-01/
+```
+Exit code: 0. Result: 0 files to transfer (all non-excluded files already present).
+
+**Phase 2 — Definitive copy:**
+```
+rsync -av --exclude-from=/tmp/kilo/rsync-excludes.txt /home/workstation/source/f1/F01/ /home/workstation/source/project/FS-01/
+```
+Exit code: 0. Result: 0 files transferred by rsync (same reason).
+
+**Manual cleanup** (required because `--delete` was not used; excluded items pre-existed from prior run):
+
+| Removed from destination | Reason |
+|--------------------------|--------|
+| `node_modules/` (root, `back/`, `front/`) | Excluded per `.dockerignore` / `.kilo/.gitignore` |
+| `dist/` (`back/`, `front/`) | Excluded per `.dockerignore` |
+| `.vscode/` (root) | Excluded per `.dockerignore` |
+| `.kilo/agent-manager.json` | Excluded per `.kilo/.gitignore` |
+| `.kilo/agent-manager.json.*.tmp` | Excluded per `.kilo/.gitignore` |
+
+### Validation results
+
+| Check | Result |
+|-------|--------|
+| Key directories present (`back/`, `front/`, `docs/`, `.kilo/`) | **PASS** — all found |
+| No `node_modules/` in destination | **PASS** — count = 0 |
+| No `dist/` in destination | **PASS** — count = 0 |
+| No `.env*` files in destination | **PASS** — count = 0 |
+| No `.gitignore` files in destination | **PASS** — count = 0 |
+| No `.dockerignore` files in destination | **PASS** — count = 0 |
+| No `.git/` directories in destination | **PASS** — count = 0 |
+| `diff -r` source vs destination (with exclusions) | **PASS** — exit code 0 |
+| Source preserved (no modifications) | **PASS** — `.env` files and `node_modules/` still present in source |
+| Secret safety (no secrets exposed) | **PASS** — no credentials in destination |
+
+### File/Directory Counts
+
+| | Source | Destination (after cleanup) |
+|---|--------|------------------------------|
+| Files | 27,583 | 736 |
+| Directories | 3,249 | 232 |
+| Size | 516M | 35M |
+
+The large reduction is expected: `node_modules/` (~25K files), `dist/`, and other build/dependency artifacts were excluded.
+
+### Updated file/directory counts
+
+| Indicador | Resultado |
+|-----------|-----------|
+| Arquivos copiados (destino final) | 736 |
+| Diretórios copiados (destino final) | 232 |
+| Volume total (destino, `du -sh`) | 35M |
+| Arquivos excluídos | ~26.847 (incluindo node_modules, dist, .vscode, .env*, .gitignore, .dockerignore, .git/, etc.) |
+| Integridade | PASS |
+| Verificação de segredos | PASS |
+| Origem preservada | PASS |
+| Resultado final | PASS |
+
+### Conclusion
+
+**Mission MP-F01-Consolidation (with .gitignore/.dockerignore exclusions) — COMPLETED**
+
+- ✅ Cópia integral re-executada com exclusões do .gitignore/.dockerignore aplicadas
+- ✅ node_modules/, dist/, .vscode/, .env*, .gitignore, .dockerignore, .git/ excluídos do destino
+- ✅ Itens pré-existentes no destino removidos manualmente (--delete não usado)
+- ✅ Integridade verificada (`diff -r` exit 0)
+- ✅ Origem inalterada
+- ✅ Sem commits/push
+- ✅ Sem credenciais expostas
+
+**Next action:** None (run complete).

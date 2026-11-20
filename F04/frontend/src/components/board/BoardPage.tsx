@@ -2,7 +2,7 @@
  * BoardPage.tsx
  *
  * Main Kanban board view. Groups issues by workflow status (columns) and
- * supports drag-and-drop issue movement between columns via @dnd-kit.
+ * supports drag-and-drop issue movement via @dnd-kit.
  *
  * On drop, the issue is transitioned via POST /issues/{id}/transitions/.
  * The move is applied optimistically and rolled back if the API rejects it.
@@ -20,7 +20,8 @@ import {
   useSensors,
   DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext } from "@dnd-kit/sortable";
+import { SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { resolveDropTarget } from "./resolveDropTarget";
 import { useIssues } from "../../hooks/useIssues";
 import { listIssues } from "../../api/issues";
 import { Column } from "./Column";
@@ -50,7 +51,24 @@ export function BoardPage({ projectId }: BoardPageProps) {
 
   const sensors = useSensors(
     { sensor: PointerSensor, options: {} },
-    { sensor: KeyboardSensor, options: {} }
+    { sensor: KeyboardSensor, options: { coordinateGetter: sortableKeyboardCoordinates } }
+  );
+
+  // Group issues into columns whenever the issue list changes.
+  const groupIssues = useCallback(
+    (list: Issue[]) => {
+      const byKey = new Map(
+        COLUMNS.map((c) => [c.key, [] as Issue[]])
+      );
+      list.forEach((issue) => {
+        const bucket = byKey.get(issue.status);
+        if (bucket) bucket.push(issue);
+      });
+      setColumns((prev) =>
+        prev.map((c) => ({ ...c, issues: byKey.get(c.key) ?? [] }))
+      );
+    },
+    []
   );
 
   // Initialize the standard columns on mount.
@@ -85,22 +103,12 @@ export function BoardPage({ projectId }: BoardPageProps) {
     };
   }, [projectId]);
 
-  // Group issues into columns whenever the issue list changes.
-  const groupIssues = useCallback(
-    (list: Issue[]) => {
-      const byKey = new Map(
-        COLUMNS.map((c) => [c.key, [] as Issue[]])
-      );
-      list.forEach((issue) => {
-        const bucket = byKey.get(issue.status);
-        if (bucket) bucket.push(issue);
-      });
-      setColumns((prev) =>
-        prev.map((c) => ({ ...c, issues: byKey.get(c.key) ?? [] }))
-      );
-    },
-    []
-  );
+  const handleIssueUpdated = useCallback((updatedIssue: Issue) => {
+    setColumns((previous) => previous.map((column) => ({
+      ...column,
+      issues: column.issues.map((issue) => issue.id === updatedIssue.id ? updatedIssue : issue),
+    })));
+  }, []);
 
   // Re-group when issues arrive from fetchIssues (used after mutations).
   useEffect(() => {
@@ -113,7 +121,8 @@ export function BoardPage({ projectId }: BoardPageProps) {
       if (!over) return; // dropped outside a column -> no-op
 
       const activeId = active.id as string;
-      const targetKey = over.id as string;
+      const targetKey = resolveDropTarget(over.id, over.data.current?.columnKey, COLUMNS.map((column) => column.key));
+      if (!targetKey) return;
 
       const sourceColumn = columns.find((c) =>
         c.issues.some((i) => String(i.id) === activeId)
@@ -136,32 +145,27 @@ export function BoardPage({ projectId }: BoardPageProps) {
       );
 
       try {
-        await transitionIssue(issue.id, targetKey);
-        // Confirm against the server.
-        if (projectId) {
-          const refreshed = await listIssues({ project_id: String(projectId) });
-          groupIssues(refreshed);
-        }
+        const updated = await transitionIssue(issue.id, targetKey);
+        if (!updated) throw new Error("Failed to move issue. Change reverted.");
+        setColumns((previous) => previous.map((column) => ({
+          ...column,
+          issues: column.issues.map((item) => item.id === updated.id ? updated : item),
+        })));
       } catch (err: any) {
         // Roll back the optimistic move.
         setColumns((prev) =>
-          prev.map((c) =>
-            c.key === sourceColumn!.key
-              ? {
-                  ...c,
-                  issues: [...c.issues, issue].sort(
-                    (a, b) => a.number - b.number
-                  ),
-                }
-              : c.key === targetKey
-                ? {
-                    ...c,
-                    issues: c.issues.filter(
-                      (i) => String(i.id) !== activeId
-                    ),
-                  }
-                : c
-          )
+          prev.map((c) => {
+            if (c.key === sourceColumn!.key) {
+              return {
+                ...c,
+                issues: [...c.issues, issue].sort((a, b) => a.number - b.number),
+              };
+            }
+            if (c.key === targetKey) {
+              return { ...c, issues: c.issues.filter((i) => String(i.id) !== activeId) };
+            }
+            return c;
+          })
         );
         setBoardError(
           err?.message ?? "Failed to move issue. Change reverted."
@@ -187,18 +191,12 @@ export function BoardPage({ projectId }: BoardPageProps) {
     return <LoadingSpinner label="Loading board…" />;
   }
 
-  if (boardError) {
-    return (
-      <div className="board-page">
-        <div className="board-page__error" role="alert">{boardError}</div>
-      </div>
-    );
-  }
 
   const statuses = COLUMNS;
 
   return (
     <div className="board-page">
+      {boardError && <div className="board-page__error" role="alert">{boardError}</div>}
       <div className="board-page__header">
         <h2 className="board-page__title">Board</h2>
         <button
@@ -221,6 +219,7 @@ export function BoardPage({ projectId }: BoardPageProps) {
                 key={column.key}
                 column={column}
                 projectId={projectId!}
+                onIssueUpdated={handleIssueUpdated}
               />
             </SortableContext>
           ))}

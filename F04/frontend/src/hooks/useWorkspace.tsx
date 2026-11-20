@@ -21,6 +21,7 @@ import {
   createWorkspace,
 } from "../api/workspaces";
 import type { Workspace } from "../types/index";
+import { matchPath, useLocation } from "react-router-dom";
 
 const SELECTION_KEY = "f04_workspace_id";
 
@@ -41,6 +42,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(
 );
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(
     null
@@ -64,8 +66,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  const currentWorkspaceId = currentWorkspace?.id ?? null;
-  const currentWorkspaceRole = currentWorkspace?.role ?? null;
+  const routeWorkspace = matchPath("/workspaces/:workspaceId/*", location.pathname)?.params.workspaceId;
+  const activeWorkspace = routeWorkspace
+    ? workspaces.find((workspace) => workspace.id === Number(routeWorkspace)) ?? null
+    : currentWorkspace;
+  const currentWorkspaceId = activeWorkspace?.id ?? null;
+  const currentWorkspaceRole = activeWorkspace?.role ?? null;
 
   const selectWorkspace = useCallback(
     async (id: number): Promise<void> => {
@@ -120,6 +126,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     async (name: string): Promise<Workspace> => {
       const ws = await createWorkspace(name);
       setWorkspaces((prev) => [...prev, ws]);
+      setCurrentWorkspace(ws);
+      try { localStorage.setItem(SELECTION_KEY, String(ws.id)); } catch {}
       return ws;
     },
     []
@@ -134,7 +142,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const value: WorkspaceContextType = {
     workspaces,
-    currentWorkspace,
+    currentWorkspace: activeWorkspace,
     currentWorkspaceId,
     currentWorkspaceRole,
     loading,

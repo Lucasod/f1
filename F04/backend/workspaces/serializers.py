@@ -68,6 +68,7 @@ class MembershipCreateSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     """Serializer for project representation."""
 
+    workspace_id = serializers.ReadOnlyField()
     workspace_name = serializers.ReadOnlyField(source="workspace.name")
     board_exists = serializers.SerializerMethodField()
     board_id = serializers.SerializerMethodField()
@@ -77,7 +78,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            "id", "key", "name", "description", "workspace_name",
+            "id", "key", "name", "description", "workspace_id", "workspace_name",
             "membership_limit", "project_limit_per_plan",
             "next_issue_number", "board_exists", "board_id", "board", "role", "created_at",
         ]

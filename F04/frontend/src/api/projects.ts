@@ -19,10 +19,10 @@ import type { Project } from "../types/index";
  * Body: { name, key }. Key must match ^[A-Z][A-Z0-9]{1,9}$.
  * Returns the created project.
  */
-export async function createProject(name: string, key: string): Promise<Project> {
+export async function createProject(name: string, key: string, workspaceId: number): Promise<Project> {
   const data = await request<{ project: Project }>("/projects/create/", {
     method: "POST",
-    body: JSON.stringify({ name, key }),
+    body: JSON.stringify({ name, key, workspace_id: workspaceId }),
   });
   return data.project;
 }

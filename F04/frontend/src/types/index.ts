@@ -54,6 +54,7 @@ export interface Project {
   description?: string;
   // Populated by backend ProjectSerializer (serializers.py lines 71-72): workspace_name and board_exists
   // are derived/read-only fields not present in create/update payloads.
+  workspace_id: number;
   workspace_name?: string;
   board_exists?: boolean;
   role?: string;

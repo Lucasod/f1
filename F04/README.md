@@ -4,6 +4,87 @@ A Jira-like product where each company has an isolated workspace with projects, 
 
 **Deadline:** November 19, 2026. **Estimated effort in the brief:** 14 days. Execution is organized into steps rather than daily allocations. Complete each step as soon as its acceptance criteria and checks pass, preserving time for final preparation.
 
+## Docker Compose: build and run
+
+Run these commands from the `F04` directory. Install Docker Engine and the Docker Compose plugin first. The root `docker-compose.yml` defines `frontend`, `backend`, `postgres`, `redis`, `celery-worker`, `celery-beat`, and `stripe-cli`.
+
+### Configuration
+
+The backend and PostgreSQL read `backend/.env`. The Stripe CLI service separately reads `backend/.env.stripe-cli`. On a new installation, create the files from the examples **only if they do not already exist**, then fill in the required values locally:
+
+```bash
+[ -e backend/.env ] || cp backend/.env.example backend/.env
+[ -e backend/.env.stripe-cli ] || cp backend/.env.stripe-cli.example backend/.env.stripe-cli
+```
+
+Never commit or publish these files or print their contents. The Stripe CLI credentials are required only to use that service, but Compose may still require its env file to exist when parsing the root configuration. Stripe uses test-mode credentials for local development.
+
+### Build and start the full stack
+
+```bash
+docker compose build
+docker compose up -d
+docker compose exec backend python manage.py migrate
+docker compose ps
+```
+
+Alternatively, combine the first two commands with `docker compose up -d --build`. The frontend is at `http://localhost:3001`; the API is at `http://127.0.0.1:8000/api/v1/`. PostgreSQL is bound locally on port 5433. Run migrations when initializing the database or when the project adds migrations; do not run them against a database without first checking the environment and backups.
+
+### Build or start individual services with the root Compose file
+
+```bash
+# Build only the named images
+docker compose build frontend
+docker compose build backend celery-worker celery-beat
+docker compose build stripe-cli
+
+# Start the database and broker, then the backend and workers
+docker compose up -d postgres redis
+docker compose up -d --build backend celery-worker celery-beat
+docker compose exec backend python manage.py migrate
+
+# Start the frontend or Stripe CLI independently
+docker compose up -d --build frontend
+docker compose up -d --build stripe-cli
+
+# Inspect a service or follow its logs
+docker compose ps
+docker compose logs -f backend
+```
+
+Compose also starts declared dependencies when starting a service. Rebuilding or recreating a service interrupts that service; choose the commands appropriate for the running environment. Avoid logging configuration or secrets.
+
+### Standalone frontend and backend Compose files
+
+These files are alternatives to the root stack. They use separate Compose project names and may create different networks and database volumes. They also bind the same host ports, so do not run overlapping stacks at the same time.
+
+```bash
+# Backend, PostgreSQL, Redis, and Celery; no frontend or Stripe CLI
+docker compose -f backend/docker-compose.yml build
+docker compose -f backend/docker-compose.yml up -d
+docker compose -f backend/docker-compose.yml exec backend python manage.py migrate
+docker compose -f backend/docker-compose.yml ps
+
+# Only the frontend; it needs a reachable backend at the configured API URL
+docker compose -f frontend/docker-compose.yml build
+docker compose -f frontend/docker-compose.yml up -d
+docker compose -f frontend/docker-compose.yml ps
+```
+
+Add a service name to `build`, `up`, `logs`, or `stop` to operate on just that service. For example, `docker compose -f backend/docker-compose.yml up -d --build backend` starts its declared dependencies as needed.
+
+### Stop and restart without removing data
+
+```bash
+docker compose stop
+docker compose start
+# Or select services, for example:
+docker compose stop frontend
+docker compose start frontend
+```
+
+Use the same `-f` option used to start an alternative stack when managing it. The named PostgreSQL and Stripe CLI authentication volumes persist across ordinary stops and container recreation. Do not remove volumes when preserving data and credentials.
+
 ## Current status and scope
 
 ### MP-F04-013 — Test Infrastructure Stabilization (completed)

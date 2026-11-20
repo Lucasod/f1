@@ -6,23 +6,19 @@
  * KeyboardSensor enables arrow-key reordering.
  */
 
-import {
-  useDraggable,
-} from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
+import { useState } from "react";
 import type { Issue } from "../../types/index";
+import { IssueEditModal } from "./IssueEditModal";
 
 interface IssueCardProps {
   issue: Issue;
   projectId: number;
   columnKey: string;
+  onIssueUpdated?: (updatedIssue: Issue) => void;
 }
 
-export function IssueCard({ issue, projectId, columnKey }: IssueCardProps) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: String(issue.id),
-    data: { columnKey, projectId },
-  });
+export function IssueCard({ issue, columnKey, onIssueUpdated }: IssueCardProps) {
   const {
     attributes: sortableAttributes,
     listeners: sortableListeners,
@@ -33,15 +29,13 @@ export function IssueCard({ issue, projectId, columnKey }: IssueCardProps) {
     data: { columnKey },
   });
 
-  const combinedRef = (node: HTMLElement | null) => {
-    setNodeRef(node);
-    setSortableNodeRef(node);
-  };
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
-  const style = {
-    transform: transform
-      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
-      : undefined,
+  const handleEditOpen = () => setIsEditOpen(true);
+  const handleEditClose = () => setIsEditOpen(false);
+  const handleIssueUpdated = (updatedIssue: Issue) => {
+    setIsEditOpen(false);
+    onIssueUpdated?.(updatedIssue);
   };
 
   const sortableStyle = {
@@ -55,15 +49,12 @@ export function IssueCard({ issue, projectId, columnKey }: IssueCardProps) {
 
   return (
     <div
-      ref={combinedRef}
+      ref={setSortableNodeRef}
       className="issue-card"
       style={{
-        ...style,
         ...sortableStyle,
       }}
-      {...attributes}
       {...sortableAttributes}
-      {...listeners}
       {...sortableListeners}
       role="button"
       tabIndex={0}
@@ -73,6 +64,32 @@ export function IssueCard({ issue, projectId, columnKey }: IssueCardProps) {
       <div className="issue-card__drag-handle" aria-hidden="true">
         ⠇
       </div>
+      <button
+        type="button"
+        className="issue-card__edit"
+        style={{
+          position: "absolute",
+          top: "0.5rem",
+          right: "0.5rem",
+          display: "grid",
+          placeItems: "center",
+          width: "1.5rem",
+          height: "1.5rem",
+          background: "transparent",
+          border: "none",
+          color: "var(--muted)",
+          cursor: "pointer",
+          fontSize: "1.125rem",
+          lineHeight: 1,
+          padding: 0,
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onClick={handleEditOpen}
+        aria-label={`Edit issue ${issue.number}`}
+      >
+        ⋮
+      </button>
       <div className="issue-card__content">
         <span className="issue-card__number">#{issue.number}</span>
         <h4 className="issue-card__title">{issue.title}</h4>
@@ -94,6 +111,12 @@ export function IssueCard({ issue, projectId, columnKey }: IssueCardProps) {
         </span>
         </div>
       </div>
+      {isEditOpen && <IssueEditModal
+        issue={issue}
+        isOpen={isEditOpen}
+        onClose={handleEditClose}
+        onSave={handleIssueUpdated}
+      />}
     </div>
   );
 }

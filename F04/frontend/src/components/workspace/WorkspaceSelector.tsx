@@ -6,11 +6,12 @@
  */
 
 import { useWorkspace } from "../../hooks/useWorkspace";
-import { useNavigate } from "react-router-dom";
+import { matchPath, useLocation, useNavigate } from "react-router-dom";
 import type { Workspace } from "../../types/index";
 
 export function WorkspaceSelector() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     workspaces,
     currentWorkspace,
@@ -29,6 +30,9 @@ export function WorkspaceSelector() {
       </span>
     );
   }
+
+  const routeId = Number(matchPath("/workspaces/:workspaceId/*", location.pathname)?.params.workspaceId);
+  const selectedId = workspaces.some((workspace) => workspace.id === routeId) ? routeId : currentWorkspace?.id ?? "";
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const id = Number(event.target.value);
@@ -52,7 +56,7 @@ export function WorkspaceSelector() {
       <select
         id="workspace-selector"
         className="workspace-selector__select"
-        value={currentWorkspace?.id ?? ""}
+        value={selectedId}
         onChange={handleChange}
         aria-label="Select workspace"
       >

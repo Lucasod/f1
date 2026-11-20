@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectBoard - Accessibility Test Page</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; }
+
+    /* --- NFR-12: Visible keyboard focus (:focus-visible) --- */
+    a:focus-visible,
+    button:focus-visible,
+    [role="button"]:focus-visible,
+    [tabindex="0"]:focus-visible {
+      outline: 3px solid #2563eb;
+      outline-offset: 2px;
+    }
+
+    /* --- Top bar --- */
+    .top-bar { display: flex; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px; }
+    .top-bar__brand { text-decoration: none; font-weight: 700; font-size: 1.25rem; color: #111827; }
+    .top-bar__controls { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+    /* --- Board page --- */
+    .board-page { max-width: 1200px; }
+    .board-page__title { font-size: 1.5rem; font-weight: 700; margin: 0 0 16px 0; }
+    .board-page__header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .board-page__create { padding: 6px 12px; font-size: 0.95rem; cursor: pointer; }
+
+    /* --- Columns --- */
+    .board-page__columns { display: flex; gap: 16px; }
+    .board-column { flex: 1; min-width: 260px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; }
+    .board-column__header { padding: 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .board-column__title { font-size: 1rem; font-weight: 700; margin: 0; }
+    .board-column__count { font-size: 0.875rem; color: #6b7280; }
+    .board-column__body { padding: 12px; min-height: 200px; }
+
+    /* --- Issue cards --- */
+    .issue-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #ffffff; cursor: pointer; }
+    .issue-card__drag-handle { opacity: 0.5; user-select: none; }
+    .issue-card__content { margin-top: 6px; }
+    .issue-card__number { font-size: 0.875rem; color: #6b7280; }
+    .issue-card__title { font-size: 1rem; font-weight: 600; margin: 4px 0 0 0; }
+    .issue-card__description { font-size: 0.875rem; color: #4b5563; margin-top: 4px; }
+    .issue-card__meta { margin-top: 8px; display: flex; gap: 8px; font-size: 0.75rem; }
+    .issue-card__badge { padding: 2px 6px; border-radius: 4px; background: #e5e7eb; }
+
+    /* --- Loading spinner --- */
+    .loading-spinner { display: inline-flex; align-items: center; gap: 8px; padding: 12px; }
+    .loading-spinner svg { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+
+    /* --- Empty state --- */
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; text-align: center; color: #6b7280; }
+    .empty-state__icon { font-size: 2rem; margin-bottom: 8px; }
+    .empty-state__title { font-size: 1.125rem; font-weight: 600; margin: 0 0 8px 0; color: #111827; }
+    .empty-state__message { font-size: 0.875rem; margin: 0 0 16px 0; }
+    .empty-state__action { padding: 6px 12px; font-size: 0.875rem; cursor: pointer; }
+
+    /* --- Error boundary --- */
+    .error-boundary { padding: 24px; border: 1px solid #ef4444; border-radius: 6px; background: #fef2f2; color: #991b1b; }
+    .error-boundary h2 { margin: 0 0 8px 0; font-size: 1.125rem; }
+    .error-boundary p { margin: 0 0 16px 0; font-size: 0.95rem; }
+    .error-boundary__retry { padding: 6px 12px; font-size: 0.95rem; cursor: pointer; background: #dc2626; color: #ffffff; border: none; border-radius: 4px; }
+
+    /* --- Hidden states --- */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <header class="top-bar top-bar--guest">
+    <a href="/login" class="top-bar__brand">ProjectBoard</a>
+  </header>
+
+  <main class="app board-page" id="app">
+    <!-- Loading state (shown initially) -->
+    <div id="loading" class="loading-spinner" role="status" aria-label="Loading board…">
+      <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+      </svg>
+      <span class="sr-only">Loading board…</span>
+    </div>
+
+    <!-- Board content (hidden initially) -->
+    <div id="board" class="hidden">
+      <div class="board-page__header">
+        <h2 class="board-page__title">Board</h2>
+        <button class="board-page__create" type="button">+ Create issue</button>
+      </div>
+
+      <div class="board-page__columns">
+        <!-- Column: To do -->
+        <section class="board-column" aria-label="To do">
+          <div class="board-column__header">
+            <h3 class="board-column__title">To do</h3>
+            <span class="board-column__count">2</span>
+          </div>
+          <div class="board-column__body">
+            <div class="issue-card" role="button" tabindex="0" aria-grabbable="true" aria-label="Issue 101: Fix login validation">
+              <div class="issue-card__drag-handle" aria-hidden="true">⠇</div>
+              <div class="issue-card__content">
+                <span class="issue-card__number">#101</span>
+                <h4 class="issue-card__title">Fix login validation</h4>
+                <p class="issue-card__description">The login form should show an error when credentials are invalid.</p>
+                <div class="issue-card__meta">
+                  <span class="issue-card__badge issue-card__badge--priority" data-priority="high">High</span>
+                  <span class="issue-card__badge issue-card__badge--status">To do</span>
+                </div>
+              </div>
+            </div>
+            <div class="issue-card" role="button" tabindex="0" aria-grabbable="true" aria-label="Issue 102: Add workspace selector">
+              <div class="issue-card__drag-handle" aria-hidden="true">⠇</div>
+              <div class="issue-card__content">
+                <span class="issue-card__number">#102</span>
+                <h4 class="issue-card__title">Add workspace selector</h4>
+                <p class="issue-card__description">Allow users to switch between workspaces from the top bar.</p>
+                <div class="issue-card__meta">
+                  <span class="issue-card__badge issue-card__badge--priority" data-priority="medium">Medium</span>
+                  <span class="issue-card__badge issue-card__badge--status">To do</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Column: In progress -->
+        <section class="board-column" aria-label="In progress">
+          <div class="board-column__header">
+            <h3 class="board-column__title">In progress</h3>
+            <span class="board-column__count">1</span>
+          </div>
+          <div class="board-column__body">
+            <div class="issue-card" role="button" tabindex="0" aria-grabbable="true" aria-label="Issue 103: Implement issue transitions">
+              <div class="issue-card__drag-handle" aria-hidden="true">⠇</div>
+              <div class="issue-card__content">
+                <span class="issue-card__number">#103</span>
+                <h4 class="issue-card__title">Implement issue transitions</h4>
+                <p class="issue-card__description">Add API endpoints to transition issues between workflow statuses.</p>
+                <div class="issue-card__meta">
+                  <span class="issue-card__badge issue-card__badge--priority" data-priority="high">High</span>
+                  <span class="issue-card__badge issue-card__badge--status">In progress</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Column: Done -->
+        <section class="board-column" aria-label="Done">
+          <div class="board-column__header">
+            <h3 class="board-column__title">Done</h3>
+            <span class="board-column__count">0</span>
+          </div>
+          <div class="board-column__body">
+            <!-- Empty column -->
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Empty state (shown when no project selected) -->
+    <div id="empty" class="hidden empty-state">
+      <div class="empty-state__icon" aria-hidden="true">🗂️</div>
+      <h3 class="empty-state__title">Select a project</h3>
+      <p class="empty-state__message">Open a project from the project list to view its board.</p>
+    </div>
+
+    <!-- Error state (shown on error) -->
+    <div id="error" class="hidden error-boundary" role="alert">
+      <h2>Something went wrong</h2>
+      <p>Failed to load board. Please try again.</p>
+      <button class="error-boundary__retry" type="button">Retry</button>
+    </div>
+  </main>
+
+  <script>
+    // --- NFR-12: Keyboard-accessible issue movement without drag-and-drop ---
+    // Arrow keys move focus between issue cards within a column and between columns.
+    const cards = document.querySelectorAll('[role="button"][aria-grabbable="true"]');
+    let currentIndex = 0;
+
+    function focusCard(index) {
+      if (index < 0) index = cards.length - 1;
+      if (index >= cards.length) index = 0;
+      cards[index].focus();
+      currentIndex = index;
+    }
+
+    document.addEventListener('keydown', (event) => {
+      const active = document.activeElement;
+      if (!active || !active.matches('[role="button"][aria-grabbable="true"]')) return;
+
+      const currentIndex = Array.from(cards).indexOf(active);
+      if (currentIndex === -1) return;
+
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          event.preventDefault();
+          focusCard(currentIndex + 1);
+          break;
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          event.preventDefault();
+          focusCard(currentIndex - 1);
+          break;
+      }
+    });
+
+    // --- State control via URL query parameter ---
+    // ?state=loading | board | empty | error  (default: loading, auto-switch to board after 800ms)
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const state = params.get('state') || 'loading';
+
+      const loading = document.getElementById('loading');
+      const board = document.getElementById('board');
+      const empty = document.getElementById('empty');
+      const error = document.getElementById('error');
+
+      function show(id) {
+        loading.classList.add('hidden');
+        board.classList.add('hidden');
+        empty.classList.add('hidden');
+        error.classList.add('hidden');
+        document.getElementById(id).classList.remove('hidden');
+      }
+
+      if (state === 'loading') {
+        show('loading');
+        // Auto-transition to board after a short delay to demonstrate loading state
+        setTimeout(() => show('board'), 800);
+      } else if (state === 'board') {
+        show('board');
+      } else if (state === 'empty') {
+        show('empty');
+      } else if (state === 'error') {
+        show('error');
+      }
+    })();
+  </script>
+</body>
+</html>
