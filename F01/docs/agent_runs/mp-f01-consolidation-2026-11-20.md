@@ -272,3 +272,94 @@ The large reduction is expected: `node_modules/` (~25K files), `dist/`, and othe
 - ✅ Sem credenciais expostas
 
 **Next action:** None (run complete).
+
+## Addendum — Cópia com --delete (espelhamento completo) (2026-11-20)
+
+### Context
+Re-execução da cópia integral usando `--delete` para que o destino `/home/workstation/source/project/FS-01/` seja um espelho exato da origem `/home/workstation/source/f1/F01/` (menos as exclusões obrigatórias e dos .gitignore/.dockerignore).
+
+### Command executed
+
+**Dry-run:**
+```
+rsync -av --delete --dry-run \
+  --exclude='.git/' --exclude='.gitignore' --exclude='.dockerignore' \
+  --exclude='.env' --exclude='.env.*' \
+  --exclude='node_modules/' --exclude='dist/' --exclude='build/' --exclude='*.tsbuildinfo' \
+  --exclude='.vscode/' --exclude='.idea/' \
+  --exclude='scripts/*.js' --exclude='scripts/*.d.ts' --exclude='scripts/*.map' \
+  --exclude='.stripe/' --exclude='.stripe.json' \
+  --exclude='logs/' --exclude='*.log' \
+  --exclude='coverage/' --exclude='.nyc_output/' \
+  --exclude='storage/uploads/products/vendor-*/' \
+  --exclude='.kilo/agent-manager.json' --exclude='.kilo/agent-manager.json.*' \
+  --exclude='*.swp' --exclude='*.swo' --exclude='.DS_Store' --exclude='Thumbs.db' \
+  --exclude='npm-debug.log*' --exclude='yarn-debug.log*' --exclude='yarn-error.log*' \
+  /home/workstation/source/f1/F01/ \
+  /home/workstation/source/project/FS-01/
+```
+
+**Definitive copy (same command without --dry-run):** exit code 0.
+
+### Results
+
+| Metric | Value |
+|--------|-------|
+| Files copied | 551 |
+| Directories created | 99 |
+| Deleted from destination (--delete) | 1 — `docs/modeling/` |
+| Bytes sent | 19,124,024 |
+| Total size | 34,024,100 (~34 MB) |
+
+### Files excluded
+
+| Category | Patterns |
+|----------|----------|
+| Mandatory | `.git/`, `.gitignore`, `.dockerignore`, `.env*`, credentials |
+| Dependencies/build | `node_modules/`, `dist/`, `build/`, `*.tsbuildinfo` |
+| IDE | `.vscode/`, `.idea/` |
+| Build artifacts | `scripts/*.js`, `scripts/*.d.ts`, `scripts/*.map` |
+| Stripe CLI | `.stripe/`, `.stripe.json` |
+| Logs/coverage | `logs/`, `*.log`, `coverage/`, `.nyc_output/` |
+| Uploads | `storage/uploads/products/vendor-*` |
+| Agent state | `.kilo/agent-manager.json`, `.kilo/agent-manager.json.*` |
+| Temp/OS | `*.swp`, `*.swo`, `.DS_Store`, `Thumbs.db`, `npm-debug.log*`, `yarn-debug.log*`, `yarn-error.log*` |
+
+### Phase 3 — Validation (all PASS)
+
+| Check | Result |
+|-------|--------|
+| Key directories (`back/`, `front/`, `docs/`, `.kilo/`) | PASS — all present |
+| No `node_modules/` in destination | PASS |
+| No `dist/` in destination | PASS |
+| No `.env*` files | PASS |
+| No `.gitignore` files | PASS |
+| No `.dockerignore` files | PASS |
+| No `.git/` directories | PASS |
+| No `.vscode/` in destination | PASS |
+| `diff -r` source vs destination (with exclusions) | PASS — exit code 0 |
+| Source preserved | PASS — no modifications |
+| Secret safety | PASS — no secrets exposed |
+
+### File/Directory Counts (final)
+
+| | Source | Destination |
+|---|--------|-------------|
+| Files | 551 (non-excluded) | 551 |
+| Directories | 99 (non-excluded) | 99 |
+| Size | ~34 MB | ~34 MB |
+
+### Conclusion
+
+**Mission MP-F01-Consolidation (mirror with --delete) — COMPLETED**
+
+- ✅ Destino é espelho exato da origem menos exclusões
+- ✅ 551 arquivos, 99 diretórios, ~34 MB
+- ✅ 1 item deletado do destino (`docs/modeling/`) por `--delete`
+- ✅ Integridade verificada (`diff -r` exit 0)
+- ✅ Nenhum arquivo sensível no destino
+- ✅ Origem inalterada
+- ✅ Sem commits/push
+- ✅ Sem credenciais expostas
+
+**Next action:** None (run complete).
