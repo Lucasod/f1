@@ -26,6 +26,7 @@ interface PaymentDoc {
   acceptedHash?: string;
   acceptedSnapshot?: string;
   eventId?: string;
+  commissionSnapshot?: PaymentData['commissionSnapshot'];
 }
 
 export class MongoPaymentRepository implements PaymentRepository {
@@ -54,6 +55,7 @@ export class MongoPaymentRepository implements PaymentRepository {
       createdAt: payment.createdAt,
       updatedAt: now,
       checkoutUrl: payment.checkoutUrl,
+      commissionSnapshot: payment.commissionSnapshot,
       eventId: payment.eventId
     };
 
@@ -67,6 +69,7 @@ export class MongoPaymentRepository implements PaymentRepository {
       capturedAt: paymentDoc.capturedAt,
       failedAt: paymentDoc.failedAt,
       refundedAt: paymentDoc.refundedAt,
+      commissionSnapshot: paymentDoc.commissionSnapshot,
       updatedAt: now
     };
 
@@ -97,28 +100,25 @@ export class MongoPaymentRepository implements PaymentRepository {
     } as any);
   }
 
-  async insertForAttempt(paymentData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment> {
+  async insertForAttempt(paymentData: { attemptId: string; orderId: string; personId: string; amount: number; provider?: string }): Promise<Payment> {
     const attemptId = paymentData.attemptId;
     const fixedId = `attempt:${attemptId}`;
 
     // Check if a payment with this attemptId already exists
     const existing = await this.paymentsCollection.findOne({ _id: fixedId });
     if (existing) {
-      return Payment.reconstruct({
-        ...existing,
-        updatedAt: new Date()
-      } as any);
+      return this.mapToPayment(existing);
     }
 
     // Create the payment with the fixed ID based on attemptId
     const now = new Date();
-    const paymentId = fixedId;
 
     const paymentDoc: PaymentDoc = {
       _id: fixedId,
       orderId: paymentData.orderId,
       personId: paymentData.personId,
       amount: paymentData.amount,
+      provider: paymentData.provider,
       status: PaymentStatus.PENDING,
       createdAt: now,
       updatedAt: now,
@@ -134,27 +134,13 @@ export class MongoPaymentRepository implements PaymentRepository {
       if (error.code === 11000) {
         const dup = await this.paymentsCollection.findOne({ _id: fixedId });
         if (dup) {
-          return Payment.reconstruct({
-            ...dup,
-            updatedAt: new Date()
-          } as any);
+          return this.mapToPayment(dup);
         }
       }
       throw error;
     }
 
-    return Payment.reconstruct({
-      id: fixedId,
-      orderId: paymentData.orderId,
-      personId: paymentData.personId,
-      amount: paymentData.amount,
-      status: PaymentStatus.PENDING,
-      createdAt: now,
-      updatedAt: now,
-      attemptId: attemptId,
-      acceptedHash: undefined,
-      acceptedSnapshot: undefined
-    } as any);
+    return this.mapToPayment(paymentDoc);
   }
 
   async findById(id: string): Promise<Payment | null> {
@@ -194,9 +180,20 @@ export class MongoPaymentRepository implements PaymentRepository {
     return payments.map(doc => this.mapToPayment(doc));
   }
 
-  async update(payment: Payment): Promise<Payment> {
-    // Reuse save logic which handles upserts
-    return this.save(payment);
+  async findByProviderTransactionId(providerTransactionId: string): Promise<Payment | null> {
+    if (!providerTransactionId || providerTransactionId.trim().length === 0) {
+      return null;
+    }
+    const doc = await this.paymentsCollection.findOne({ providerTransactionId });
+    return doc ? this.mapToPayment(doc) : null;
+  }
+
+  async update(payment: Payment, session?: any): Promise<Payment> {
+    const filter = { _id: payment.id };
+    const updateDoc = { $set: (payment as any).toMongo ? (payment as any).toMongo() : payment };
+    const options = session ? { session } : {};
+    await this.paymentsCollection.updateOne(filter, updateDoc, options);
+    return payment;
   }
 
   async delete(id: string): Promise<void> {
@@ -219,6 +216,7 @@ export class MongoPaymentRepository implements PaymentRepository {
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
       checkoutUrl: doc.checkoutUrl,
+      commissionSnapshot: doc.commissionSnapshot,
       eventId: doc.eventId
     };
 

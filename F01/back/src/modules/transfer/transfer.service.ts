@@ -68,7 +68,7 @@ export class TransferService {
     orderVendorGroupId: string,
     ovgTotal: number,
     commissionPct: number,
-    chargeId: string,
+    sourceTransactionId: string,
     attempt: number = 1
   ): Promise<{ transfer: Stripe.Transfer; entity: Transfer }> {
     const idempotencyKey = `${orderId}:${orderVendorGroupId}:${attempt}`;
@@ -91,6 +91,15 @@ export class TransferService {
     if (!destinationAccountId) throw new Error('TRANSFER_DESTINATION_UNAVAILABLE');
     const account = await this.stripe.accounts.retrieve(destinationAccountId);
     if (account.capabilities?.transfers !== 'active') throw new Error('TRANSFER_CAPABILITY_INACTIVE');
+
+    let chargeId = sourceTransactionId;
+    if (sourceTransactionId.startsWith('pi_')) {
+      const intent = await this.stripe.paymentIntents.retrieve(sourceTransactionId);
+      chargeId = typeof intent.latest_charge === 'string'
+        ? intent.latest_charge
+        : intent.latest_charge?.id ?? '';
+      if (!chargeId) throw new Error('TRANSFER_SOURCE_CHARGE_UNAVAILABLE');
+    }
 
     // Calculate vendor net amount: ovgTotal × (1 - commission_pct/100)
     const vendorNet = ovgTotal * (1 - commissionPct / 100);
@@ -203,11 +212,20 @@ export class TransferService {
   }
 
   /**
+   * Looks up a transfer by its Stripe transfer ID. Used by the webhook handler
+   * to obtain the transfer entity for traceability (orderId, orderVendorGroupId,
+   * amount) before creating a linked payout.
+   */
+  async findByStripeTransferId(stripeTransferId: string): Promise<Transfer | null> {
+    return this.transferRepo.findByStripeTransferId(stripeTransferId);
+  }
+
+  /**
    * Resolves the vendorId for a transfer by looking up the order's vendor group
    * that matches orderVendorGroupId. Returns undefined when the order or vendor
    * group cannot be found.
    */
-  private async resolveVendorId(
+  public async resolveVendorId(
     orderId: string,
     orderVendorGroupId: string,
   ): Promise<string | undefined> {

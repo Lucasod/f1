@@ -67,6 +67,74 @@ export class PayoutService {
     return payout;
   }
 
+  /**
+   * Creates a Payout linked to a completed Transfer, populating payout.reference
+   * with the transfer id. Idempotent: if a payout with the same reference already
+   * exists, returns it without creating a duplicate.
+   *
+   * Resolves vendorId from the order's vendor group and personId from the vendor.
+   */
+  async createPayoutFromTransfer(
+    transferId: string,
+    amount: number,
+    orderId: string,
+    orderVendorGroupId: string,
+  ): Promise<Payout | null> {
+    if (!transferId || transferId.trim().length === 0) {
+      throw new Error(PayoutError.INVALID_AMOUNT);
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error(PayoutError.INVALID_AMOUNT);
+    }
+    if (!orderId || orderId.trim().length === 0) {
+      throw new Error(PayoutError.INVALID_AMOUNT);
+    }
+    if (!orderVendorGroupId || orderVendorGroupId.trim().length === 0) {
+      throw new Error(PayoutError.INVALID_AMOUNT);
+    }
+
+    // Idempotency: payout already linked to this transfer
+    const existing = await this.payoutRepo.findByReference(transferId);
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    if (!this.orderRepo) {
+      throw new Error('OrderRepository not available for transfer-to-payout linkage');
+    }
+
+    // Resolve vendorId from order's vendor group
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      return null;
+    }
+    const vendorGroup = order.vendorGroups.find(
+      vg => vg.id === orderVendorGroupId,
+    );
+    if (!vendorGroup) {
+      return null;
+    }
+    const vendorId = vendorGroup.vendorId;
+
+    // Resolve personId from vendor
+    const vendor = await this.vendorRepo.findById(vendorId);
+    if (!vendor) {
+      return null;
+    }
+    const personId = vendor.personId;
+
+    const payout = Payout.create({
+      vendorId: vendorId.trim(),
+      personId: personId.trim(),
+      amount,
+      reference: transferId.trim(),
+    });
+
+    await this.payoutRepo.save(payout);
+    await this.recordPayoutLedger(payout, MovementType.VENDOR_PAYOUT, EventType.PAYOUT_REQUESTED);
+    return payout;
+  }
+
   async getPayoutById(id: string, personId: string, isAdmin: boolean): Promise<Payout | null> {
     if (typeof id !== 'string' || id.trim().length === 0) {
       return null;
@@ -104,6 +172,13 @@ export class PayoutService {
       return [];
     }
     return this.payoutRepo.findByVendorId(vendor.id);
+  }
+
+  async findPayoutsByReference(reference: string): Promise<Payout[]> {
+    if (!reference || reference.trim().length === 0) {
+      return [];
+    }
+    return this.payoutRepo.findByReference(reference.trim());
   }
 
   async approvePayout(id: string, adminPersonId?: string, isAdmin?: boolean): Promise<Payout> {

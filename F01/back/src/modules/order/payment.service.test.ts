@@ -1,21 +1,30 @@
+import { mockPaymentMongo } from '../../tests/mock-payment-mongo';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PaymentService, PaymentError } from './payment.service';
 import { Payment, PaymentStatus, InMemoryPaymentRepository, Order, OrderStatus, OrderError, FinancialStatus, InMemoryOrderRepository, OrderVendorGroupStatus } from './order.domain';
 import { Person, PersonRole, InMemoryPersonRepository } from '../person/person.domain';
 import { Product, InMemoryProductRepository } from '../product/product.domain';
 import { config } from '../../config';
+import { TransferStatus, Transfer } from '../transfer/transfer.domain';
+import { Vendor, VendorStatus, InMemoryVendorRepository } from '../vendor/vendor.domain';
 
 vi.mock('stripe', () => {
   const retrieve = vi.fn();
+  const transfersCreate = vi.fn();
+  const accountsRetrieve = vi.fn();
   return {
     default: class StripeMock {
       checkout = { sessions: { retrieve } };
+      transfers = { create: transfersCreate };
+      accounts = { retrieve: accountsRetrieve };
     },
-    __retrieve: retrieve
+    __retrieve: retrieve,
+    __transfersCreate: transfersCreate,
+    __accountsRetrieve: accountsRetrieve,
   };
 });
 
-import { __retrieve as mockRetrieve } from 'stripe';
+import { __retrieve as mockRetrieve, __transfersCreate as mockTransfersCreate, __accountsRetrieve as mockAccountsRetrieve } from 'stripe';
 
 describe('Payment Service', () => {
   let paymentRepo: InMemoryPaymentRepository;
@@ -30,7 +39,7 @@ describe('Payment Service', () => {
     paymentRepo = new InMemoryPaymentRepository();
     orderRepo = new InMemoryOrderRepository();
     personRepo = new InMemoryPersonRepository();
-    paymentService = new PaymentService(paymentRepo, orderRepo);
+    paymentService = new PaymentService(paymentRepo, orderRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, mockPaymentMongo);
 
     // Create a test person (consumer)
     testPerson = Person.create({
@@ -225,6 +234,23 @@ describe('Payment Service', () => {
 
       expect(payment2.id).not.toBe(payment1.id);
       expect(payment2.status).toBe(PaymentStatus.PENDING);
+    });
+
+    it('reuses the same new attempt for concurrent retries after a failed payment', async () => {
+      const previous = await createTestPayment();
+      await paymentService.failPayment(previous.id);
+      let timestamp = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockImplementation(() => timestamp++);
+      try {
+        const retry = () => paymentService.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+        const [first, second] = await Promise.all([retry(), retry()]);
+
+        expect(first.id).not.toBe(previous.id);
+        expect(second.id).toBe(first.id);
+        expect(await paymentRepo.findByOrderId(testOrder.id)).toHaveLength(2);
+      } finally {
+        clock.mockRestore();
+      }
     });
 
     it('should create new payment if existing one is refunded', async () => {
@@ -528,6 +554,146 @@ describe('Payment Service', () => {
     });
   });
 
+  describe('R-05: Commission adjustment on refund', () => {
+    it('adjusts commission proportionally on full refund (CD-048/CD-065)', async () => {
+      const movements: any[] = [];
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+      const eventRepo = { save: async () => { } };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo, undefined, mockPaymentMongo
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_r05_1');
+      await svc.capturePayment(payment.id);
+
+      // Verify commission snapshot was captured at capture time
+      const capturedPayment = await svc.getPaymentById(payment.id);
+      expect(capturedPayment!.commissionSnapshot).toHaveLength(1);
+      expect(capturedPayment!.commissionSnapshot![0].commissionPct).toBe(config.commissionPct);
+      expect(capturedPayment!.commissionSnapshot![0].commissionAmount).toBe(10); // 100 * 10%
+
+      await svc.refundPayment(payment.id);
+
+      const refundMovements = movements.filter((m: any) => m.data.movementType === 'refund');
+      const commissionMovements = movements.filter((m: any) => m.data.movementType === 'commission');
+
+      expect(refundMovements).toHaveLength(1);
+      expect(refundMovements[0].data.amount).toBe(100); // full subtotal
+      expect(refundMovements[0].data.vendorId).toBe('vendor-1');
+
+      expect(commissionMovements).toHaveLength(1);
+      expect(commissionMovements[0].data.amount).toBe(-10); // commission reversal
+      expect(commissionMovements[0].data.vendorId).toBe('vendor-1');
+    });
+
+    it('partial refund prorates commission adjustment; repeat is idempotent (no duplicate debit)', async () => {
+      const movements: any[] = [];
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+      const eventRepo = { save: async () => { } };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo, undefined, mockPaymentMongo
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_r05_2');
+      await svc.capturePayment(payment.id);
+
+      // Partial refund of 50 (half of 100)
+      await svc.refundPayment(payment.id, 50);
+
+      const refundMovements = movements.filter((m: any) => m.data.movementType === 'refund');
+      const commissionMovements = movements.filter((m: any) => m.data.movementType === 'commission');
+
+      expect(refundMovements).toHaveLength(1);
+      expect(refundMovements[0].data.amount).toBe(50); // prorated refund
+
+      expect(commissionMovements).toHaveLength(1);
+      expect(commissionMovements[0].data.amount).toBe(-5); // prorated commission reversal
+
+      // Repeat refund on already-REFUNDED payment — idempotent, no new movements
+      const movementsBefore = movements.length;
+      const refundedAgain = await svc.refundPayment(payment.id);
+      const movementsAfter = movements.length;
+
+      expect(refundedAgain.status).toBe(PaymentStatus.REFUNDED);
+      expect(movementsAfter).toBe(movementsBefore); // no duplicate debit
+    });
+
+    it('repeated refund is idempotent (returns as-is, no new movements)', async () => {
+      const movements: any[] = [];
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+      const eventRepo = { save: async () => { } };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo, undefined, mockPaymentMongo
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_r05_3');
+      await svc.capturePayment(payment.id);
+
+      const movementsBefore = movements.length;
+      await svc.refundPayment(payment.id);
+      const movementsAfterFirst = movements.length;
+
+      // Second refund should be idempotent — no new ledger movements
+      const refundedAgain = await svc.refundPayment(payment.id);
+      const movementsAfterSecond = movements.length;
+
+      expect(refundedAgain.status).toBe(PaymentStatus.REFUNDED);
+      expect(movementsAfterSecond).toBe(movementsAfterFirst);
+      expect(movementsAfterFirst).toBeGreaterThan(movementsBefore);
+    });
+
+    it('uses historical commission rate from snapshot, not current OVG rate, when OVG modified after payment (CD-048)', async () => {
+      const movements: any[] = [];
+      const movementRepo = { save: async (m: any) => movements.push(m) };
+      const eventRepo = { save: async () => { } };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, undefined, undefined,
+        movementRepo, eventRepo, undefined, mockPaymentMongo
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_test_r05_4');
+      await svc.capturePayment(payment.id);
+
+      // Verify snapshot captured commissionPct = 10 (config default)
+      const capturedPayment = await svc.getPaymentById(payment.id);
+      expect(capturedPayment!.commissionSnapshot![0].commissionPct).toBe(10);
+      expect(capturedPayment!.commissionSnapshot![0].commissionAmount).toBe(10);
+
+      // Simulate OVG commission changed after payment (de-15 scenario — R-05)
+      const order = await orderRepo.findById(testOrder.id);
+      order!.vendorGroups[0].commissionPct = 20;
+      order!.vendorGroups[0].recalculateTotals();
+      await orderRepo.update(order!);
+
+      // Confirm current OVG now uses 20% commission
+      const currentOrder = await orderRepo.findById(testOrder.id);
+      expect(currentOrder!.vendorGroups[0].commissionPct).toBe(20);
+      expect(currentOrder!.vendorGroups[0].commissionAmount).toBe(20); // 100 * 20%
+
+      // Refund must use snapshot (10%), not current rate (20%)
+      await svc.refundPayment(payment.id);
+
+      const commissionMovements = movements.filter((m: any) => m.data.movementType === 'commission');
+      expect(commissionMovements).toHaveLength(1);
+      expect(commissionMovements[0].data.amount).toBe(-10); // snapshot rate, not -20
+    });
+  });
+
   describe('getPaymentById', () => {
     it('should return payment by ID', async () => {
       const payment = await createTestPayment();
@@ -585,12 +751,19 @@ describe('Payment Service', () => {
     });
 
     it('should return payments sorted by createdAt descending', async () => {
-      const payment1 = await createTestPayment();
-      await paymentService.failPayment(payment1.id);
-      const payment2 = await paymentService.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+        const payment1 = await createTestPayment();
+        vi.setSystemTime(new Date('2026-01-01T00:00:01Z'));
+        await paymentService.failPayment(payment1.id);
+        const payment2 = await paymentService.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
 
-      const payments = await paymentService.getPaymentsByOrderId(testOrder.id);
-      expect(payments[0].createdAt.getTime()).toBeGreaterThanOrEqual(payments[1].createdAt.getTime());
+        const payments = await paymentService.getPaymentsByOrderId(testOrder.id);
+        expect(payments.map(payment => payment.id)).toEqual([payment2.id, payment1.id]);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -685,7 +858,7 @@ describe('Payment Service', () => {
       product.id = 'product-1';
       await productRepo.save(product);
 
-      const svc = new PaymentService(paymentRepo, orderRepo, productRepo);
+      const svc = new PaymentService(paymentRepo, orderRepo, productRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, mockPaymentMongo);
       const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
       await svc.failPayment(payment.id);
 
@@ -706,7 +879,7 @@ describe('Payment Service', () => {
       product.id = 'product-1';
       await productRepo.save(product);
 
-      const svc = new PaymentService(paymentRepo, orderRepo, productRepo);
+      const svc = new PaymentService(paymentRepo, orderRepo, productRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, mockPaymentMongo);
       vi.spyOn(productRepo, 'incrementStock').mockRejectedValueOnce(new Error('boom'));
 
       const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
@@ -829,7 +1002,7 @@ describe('Payment Service', () => {
       const svc = new PaymentService(
         paymentRepo, orderRepo,
         undefined, undefined, undefined, undefined, undefined,
-        movementRepo, eventRepo
+        movementRepo, eventRepo, undefined, mockPaymentMongo
       );
 
       const multiOrder = Order.create({
@@ -888,7 +1061,7 @@ describe('Payment Service', () => {
       const svc = new PaymentService(
         paymentRepo, orderRepo,
         undefined, undefined, undefined, undefined, undefined,
-        movementRepo, eventRepo
+        movementRepo, eventRepo, undefined, mockPaymentMongo
       );
 
       const multiOrder = Order.create({
@@ -956,7 +1129,7 @@ describe('Payment Service', () => {
         paymentRepo, orderRepo,
         undefined, undefined, undefined, undefined, undefined,
         undefined, undefined,
-        undefined, undefined,
+        undefined, mockPaymentMongo,
         mockTransferService
       );
 
@@ -1008,6 +1181,253 @@ describe('Payment Service', () => {
       expect(transferCalls[1][0]).toBe(multiOrder.id);
       const ovgIds = transferCalls.map((c: any[]) => c[1]);
       expect(ovgIds).toHaveLength(2);
+    });
+  });
+
+  describe('createTransfer (R-04: Stripe Connect destination)', () => {
+    beforeEach(() => {
+      mockTransfersCreate.mockReset();
+      mockAccountsRetrieve.mockReset();
+      mockAccountsRetrieve.mockResolvedValue({ capabilities: { transfers: 'active' } });
+    });
+
+    it('vendor enabled: creates transfer with vendor Stripe account as destination', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      await vendorRepo.save(
+        Vendor.reconstruct({
+          id: 'vendor-1',
+          personId: 'person-1',
+          storeName: 'Test Vendor',
+          slug: 'test-vendor',
+          status: VendorStatus.ACTIVE,
+          commissionPct: 10,
+          stripeAccountId: 'acct_test_vendor',
+        })
+      );
+
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      mockTransfersCreate.mockResolvedValue({ id: 'tr_stripe_123' } as any);
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      const vendorId = testOrder.vendorGroups[0].vendorId;
+      const ovgId = testOrder.vendorGroups[0].id;
+      const result = await svc.createTransfer(payment.id, vendorId);
+
+      expect(mockAccountsRetrieve).toHaveBeenCalledWith('acct_test_vendor');
+      expect(mockTransfersCreate).toHaveBeenCalledWith(
+        {
+          amount: 9000,
+          currency: 'brl',
+          destination: 'acct_test_vendor',
+          source_transaction: 'txn_1',
+          transfer_group: testOrder.id,
+        },
+        { idempotencyKey: `${testOrder.id}:${vendorId}:1` }
+      );
+      expect(result.entity.status).toBe(TransferStatus.PROCESSING);
+      expect(result.entity.stripeTransferId).toBe('tr_stripe_123');
+    });
+
+    it('vendor not enabled (no stripeAccountId): rejects with TRANSFER_DESTINATION_UNAVAILABLE, transfer not created', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      await vendorRepo.save(
+        Vendor.reconstruct({
+          id: 'vendor-1',
+          personId: 'person-1',
+          storeName: 'Test Vendor',
+          slug: 'test-vendor',
+          status: VendorStatus.ACTIVE,
+          commissionPct: 10,
+        })
+      );
+
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      const vendorId = testOrder.vendorGroups[0].vendorId;
+      await expect(svc.createTransfer(payment.id, vendorId))
+        .rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
+      expect(mockTransfersCreate).not.toHaveBeenCalled();
+      expect(transferRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('account missing (vendor not found): rejects with TRANSFER_DESTINATION_UNAVAILABLE, transfer not created', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      const vendorId = testOrder.vendorGroups[0].vendorId;
+      await expect(svc.createTransfer(payment.id, vendorId))
+        .rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
+      expect(mockTransfersCreate).not.toHaveBeenCalled();
+      expect(transferRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('capability inactive: rejects with TRANSFER_CAPABILITY_INACTIVE, transfer not created', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      await vendorRepo.save(
+        Vendor.reconstruct({
+          id: 'vendor-1',
+          personId: 'person-1',
+          storeName: 'Test Vendor',
+          slug: 'test-vendor',
+          status: VendorStatus.ACTIVE,
+          commissionPct: 10,
+          stripeAccountId: 'acct_inactive',
+        })
+      );
+
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      mockAccountsRetrieve.mockResolvedValue({ capabilities: { transfers: 'inactive' } });
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      const vendorId = testOrder.vendorGroups[0].vendorId;
+      await expect(svc.createTransfer(payment.id, vendorId))
+        .rejects.toThrow('TRANSFER_CAPABILITY_INACTIVE');
+      expect(mockTransfersCreate).not.toHaveBeenCalled();
+      expect(transferRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('Stripe API failure: explicit error, transfer not completed', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      await vendorRepo.save(
+        Vendor.reconstruct({
+          id: 'vendor-1',
+          personId: 'person-1',
+          storeName: 'Test Vendor',
+          slug: 'test-vendor',
+          status: VendorStatus.ACTIVE,
+          commissionPct: 10,
+          stripeAccountId: 'acct_vendor',
+        })
+      );
+
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      mockAccountsRetrieve.mockResolvedValue({ capabilities: { transfers: 'active' } });
+      mockTransfersCreate.mockRejectedValue(new Error('STRIPE_CONNECTION_ERROR'));
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      const vendorId = testOrder.vendorGroups[0].vendorId;
+      await expect(svc.createTransfer(payment.id, vendorId))
+        .rejects.toThrow('STRIPE_CONNECTION_ERROR');
+      expect(mockTransfersCreate).toHaveBeenCalled();
+      // Transfer entity saved as PENDING but never marked COMPLETED
+      expect(transferRepo.save).toHaveBeenCalled();
+      const savedCalls = transferRepo.save.mock.calls;
+      const lastSaved = savedCalls[savedCalls.length - 1][0];
+      expect(lastSaved.status).not.toBe(TransferStatus.COMPLETED);
+    });
+
+    it('rejects createTransfer when payment is not CAPTURED', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await expect(svc.createTransfer(payment.id, testOrder.vendorGroups[0].vendorId))
+        .rejects.toThrow(PaymentError.PAYMENT_NOT_CAPTURABLE);
+      expect(mockTransfersCreate).not.toHaveBeenCalled();
+    });
+
+    it('rejects createTransfer when vendor group does not exist', async () => {
+      const vendorRepo = new InMemoryVendorRepository();
+      const transferRepo = {
+        save: vi.fn().mockResolvedValue(undefined),
+        findLastByOrderVendorGroupId: vi.fn().mockResolvedValue(null),
+      };
+
+      const svc = new PaymentService(
+        paymentRepo, orderRepo,
+        undefined, undefined, undefined, transferRepo as any,
+        undefined, undefined, undefined,
+        vendorRepo, mockPaymentMongo, undefined
+      );
+
+      const payment = await svc.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
+      await svc.authorizePayment(payment.id, 'txn_1');
+      await svc.capturePayment(payment.id);
+
+      await expect(svc.createTransfer(payment.id, 'non-existent-vendor'))
+        .rejects.toThrow(OrderError.VENDOR_NOT_FOUND);
+      expect(mockTransfersCreate).not.toHaveBeenCalled();
     });
   });
 
@@ -1079,7 +1499,7 @@ describe('Payment Service', () => {
       product.id = 'product-1';
       await productRepo.save(product);
       const createTransferWithDetails = vi.fn();
-      const service = new PaymentService(paymentRepo, orderRepo, productRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { createTransferWithDetails } as any);
+      const service = new PaymentService(paymentRepo, orderRepo, productRepo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, mockPaymentMongo, { createTransferWithDetails } as any);
       const payment = await service.createPayment(testOrder.id, testPerson.id, testOrder.totalAmount);
       await setPendingPaymentWithSession(payment, 'cs_test_456');
       const failSpy = vi.spyOn(service, 'failPayment');

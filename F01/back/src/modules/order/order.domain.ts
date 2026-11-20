@@ -1,3 +1,4 @@
+import type { ClientSession } from 'mongodb';
 export enum OrderStatus {
   PENDING_PAYMENT = 'pending_payment',
   PAID = 'paid',
@@ -173,6 +174,15 @@ export interface OrderData {
   acceptedHash?: string;
 }
 
+export interface CommissionSnapshot {
+  ovgId: string;
+  vendorId: string;
+  subtotal: number;
+  commissionPct: number;
+  commissionAmount: number;
+  vendorNet: number;
+}
+
 export interface PaymentData {
   id: string;
   orderId: string;
@@ -193,6 +203,7 @@ export interface PaymentData {
   eventSource?: string;
   eventTimestamp?: Date;
   checkoutUrl?: string;
+  commissionSnapshot?: CommissionSnapshot[];
 }
 
 function generateId(): string {
@@ -867,6 +878,7 @@ export class Payment {
   public readonly eventSource?: string;
   public readonly eventTimestamp?: Date;
   public checkoutUrl?: string;
+  public commissionSnapshot: CommissionSnapshot[];
 
   private constructor(data: PaymentData) {
     this.id = data.id;
@@ -888,6 +900,7 @@ export class Payment {
     this.eventSource = data.eventSource;
     this.eventTimestamp = data.eventTimestamp;
     this.checkoutUrl = data.checkoutUrl;
+    this.commissionSnapshot = data.commissionSnapshot ?? [];
   }
 
   static create(data: {
@@ -895,6 +908,7 @@ export class Payment {
     personId: string;
     amount: number;
     provider?: string;
+    commissionSnapshot?: CommissionSnapshot[];
   }): Payment {
     if (!data.orderId || data.orderId.trim().length === 0) {
       throw new Error(OrderError.ORDER_NOT_FOUND);
@@ -922,7 +936,8 @@ export class Payment {
       originalEventId: undefined,
       eventType: undefined,
       eventSource: "internal",
-      eventTimestamp: now
+      eventTimestamp: now,
+      commissionSnapshot: data.commissionSnapshot ?? []
     });
   }
 
@@ -1000,19 +1015,20 @@ export class Payment {
       eventType: this.eventType,
       eventSource: this.eventSource,
       eventTimestamp: this.eventTimestamp,
-      checkoutUrl: this.checkoutUrl
+      checkoutUrl: this.checkoutUrl,
+      commissionSnapshot: this.commissionSnapshot
     };
   }
 }
 
 export interface OrderRepository {
   save(order: Order): Promise<Order>;
-  findById(id: string): Promise<Order | null>;
+  findById(id: string, session?: ClientSession): Promise<Order | null>;
   findByPersonId(personId: string): Promise<Order[]>;
   findByStatus(status: OrderStatus): Promise<Order[]>;
   findAll(): Promise<Order[]>;
   findByCommentedBy?(personId: string): Promise<Order[]>;
-  update(order: Order): Promise<Order>;
+  update(order: Order, session?: any): Promise<Order>;
   delete(id: string): Promise<void>;
   insertForAttempt(insertData: { attemptId: string; personId: string; vendorGroups: any; shippingAddress: any; totalAmount: number; financialStatus: FinancialStatus }): Promise<Order>;
 }
@@ -1096,7 +1112,7 @@ export class InMemoryOrderRepository implements OrderRepository {
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
-  async update(order: Order): Promise<Order> {
+  async update(order: Order, session?: any): Promise<Order> {
     const existing = this.orders.get(order.id);
     if (!existing) {
       throw new Error(OrderError.ORDER_NOT_FOUND);
@@ -1159,10 +1175,11 @@ export interface PaymentRepository {
   findById(id: string): Promise<Payment | null>;
   findByOrderId(orderId: string): Promise<Payment[]>;
   findByPersonId(personId: string): Promise<Payment[]>;
+  findByProviderTransactionId(providerTransactionId: string): Promise<Payment | null>;
   findByStatus(status: PaymentStatus): Promise<Payment[]>;
-  update(payment: Payment): Promise<Payment>;
+  update(payment: Payment, session?: any): Promise<Payment>;
   delete(id: string): Promise<void>;
-  insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment>;
+  insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number; provider?: string }): Promise<Payment>;
 }
 
 export class InMemoryPaymentRepository implements PaymentRepository {
@@ -1170,12 +1187,15 @@ export class InMemoryPaymentRepository implements PaymentRepository {
   private orderIndex: Map<string, Set<string>> = new Map();
   private personIndex: Map<string, Set<string>> = new Map();
 
-  async insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number }): Promise<Payment> {
-    const { attemptId, orderId, personId, amount } = insertData;
-    const fixedId = `attempt:${attemptId}`;
+  async insertForAttempt(insertData: { attemptId: string; orderId: string; personId: string; amount: number; provider?: string }): Promise<Payment> {
+    const { attemptId, orderId, personId, amount, provider } = insertData;
+    const fixedId = attemptId;
     const existing = this.payments.get(fixedId);
     if (existing) {
-      return existing;
+      if (existing.status === PaymentStatus.PENDING || existing.status === PaymentStatus.AUTHORIZED) {
+        return existing;
+      }
+      // Terminal state (FAILED/REFUNDED): permite nova tentativa
     }
     const now = new Date();
     const payment = Payment.reconstruct({
@@ -1183,11 +1203,21 @@ export class InMemoryPaymentRepository implements PaymentRepository {
       orderId,
       personId,
       amount,
+      provider: provider ?? 'stripe',
       status: PaymentStatus.PENDING,
       createdAt: now,
       updatedAt: now
     } as PaymentData);
     this.payments.set(fixedId, payment);
+
+    const orderPayments = this.orderIndex.get(orderId) || new Set();
+    orderPayments.add(fixedId);
+    this.orderIndex.set(orderId, orderPayments);
+
+    const personPayments = this.personIndex.get(personId) || new Set();
+    personPayments.add(fixedId);
+    this.personIndex.set(personId, personPayments);
+
     return payment;
   }
 
@@ -1216,7 +1246,19 @@ export class InMemoryPaymentRepository implements PaymentRepository {
       const payment = this.payments.get(id);
       if (payment) payments.push(payment);
     }
-    return payments.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    return payments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async findByProviderTransactionId(providerTransactionId: string): Promise<Payment | null> {
+    if (!providerTransactionId || providerTransactionId.trim().length === 0) {
+      return null;
+    }
+    for (const payment of this.payments.values()) {
+      if (payment.providerTransactionId === providerTransactionId) {
+        return payment;
+      }
+    }
+    return null;
   }
 
   async findByOriginalEventId(originalEventId: string): Promise<Payment[]> {
@@ -1249,7 +1291,7 @@ export class InMemoryPaymentRepository implements PaymentRepository {
     return payments.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 
-  async update(payment: Payment): Promise<Payment> {
+  async update(payment: Payment, session?: any): Promise<Payment> {
     const existing = this.payments.get(payment.id);
     if (!existing) {
       throw new Error(OrderError.ORDER_NOT_FOUND);

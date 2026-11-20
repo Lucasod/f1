@@ -295,6 +295,7 @@ export interface PayoutRepository {
   findById(id: string): Promise<Payout | null>;
   findByVendorId(vendorId: string): Promise<Payout[]>;
   findByPersonId(personId: string): Promise<Payout[]>;
+  findByReference(reference: string): Promise<Payout[]>;
   findAll(): Promise<Payout[]>;
   update(payout: Payout): Promise<Payout>;
 }
@@ -335,6 +336,16 @@ export class InMemoryPayoutRepository implements PayoutRepository {
     return [...ids]
       .map(id => this.payouts.get(id))
       .filter((p): p is Payout => Boolean(p));
+  }
+
+  async findByReference(reference: string): Promise<Payout[]> {
+    const result: Payout[] = [];
+    for (const payout of this.payouts.values()) {
+      if (payout.reference === reference) {
+        result.push(payout);
+      }
+    }
+    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async findAll(): Promise<Payout[]> {

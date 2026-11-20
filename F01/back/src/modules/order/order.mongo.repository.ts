@@ -1,4 +1,4 @@
-import { Db, Collection } from 'mongodb';
+import { ClientSession, Db, Collection } from 'mongodb';
 import { 
   Order, 
   OrderData, 
@@ -70,7 +70,7 @@ export class MongoOrderRepository implements OrderRepository {
     this.ordersCollection = db.collection<OrderDoc>('orders');
   }
 
-  async save(order: Order): Promise<Order> {
+  async save(order: Order, session?: ClientSession): Promise<Order> {
     const orderId = order.id;
     const now = new Date();
 
@@ -157,20 +157,20 @@ export class MongoOrderRepository implements OrderRepository {
           createdAt: order.createdAt
         }
       },
-      { upsert: !isPaidTransition && !isPendingWrite }
+      { upsert: !isPaidTransition && !isPendingWrite, ...(session && { session }) }
     );
 
     if (isPendingWrite && result.matchedCount === 0) {
-      const existing = await this.ordersCollection.findOne({ _id: orderId });
+      const existing = await this.ordersCollection.findOne({ _id: orderId }, session ? { session } : {});
       if (existing) {
         throw new Error(OrderError.INVALID_STATUS_TRANSITION);
       }
       try {
-        await this.ordersCollection.insertOne(orderDoc);
+        await this.ordersCollection.insertOne(orderDoc, session ? { session } : {});
       } catch (error) {
         // A concurrent insert must never turn the conditional write into an upsert.
         if ((error as { code?: number }).code === 11000 &&
-            await this.ordersCollection.findOne({ _id: orderId })) {
+            await this.ordersCollection.findOne({ _id: orderId }, session ? { session } : {})) {
           throw new Error(OrderError.INVALID_STATUS_TRANSITION);
         }
         throw error;
@@ -189,8 +189,8 @@ export class MongoOrderRepository implements OrderRepository {
     } as any);
   }
 
-  async findById(id: string): Promise<Order | null> {
-    const orderDoc = await this.ordersCollection.findOne({ _id: id });
+  async findById(id: string, session?: ClientSession): Promise<Order | null> {
+    const orderDoc = await this.ordersCollection.findOne({ _id: id }, session ? { session } : {});
 
     if (!orderDoc) {
       return null;
@@ -235,9 +235,8 @@ export class MongoOrderRepository implements OrderRepository {
     return orders.map(doc => this.mapToOrder(doc));
   }
 
-  async update(order: Order): Promise<Order> {
-    // Reuse save logic which handles upserts
-    return this.save(order);
+  async update(order: Order, session?: ClientSession): Promise<Order> {
+    return this.save(order, session);
   }
 
   async delete(id: string): Promise<void> {

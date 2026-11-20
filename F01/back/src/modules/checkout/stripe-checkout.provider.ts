@@ -45,6 +45,7 @@ export class StripeCheckoutProvider implements CheckoutPaymentProvider {
       }))),
       phone_number_collection: { enabled: true },
       metadata: { orderId: order.id, paymentId: payment.id },
+      payment_intent_data: { metadata: { orderId: order.id, paymentId: payment.id } },
       success_url: `${this.frontendUrl}/orders?checkout=success`,
       cancel_url: `${this.frontendUrl}/checkout?checkout=cancelled`,
     });

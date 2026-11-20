@@ -6,14 +6,17 @@ import { CartError } from '../cart/cart.domain';
 import { TransferService } from '../transfer/transfer.service';
 import { Transfer } from '../transfer/transfer.domain';
 import { MongoTransferRepository } from '../transfer/transfer.mongo.repository';
+import { PaymentStatus } from '../order/order.domain';
+import { PayoutService } from '../payout/payout.service';
+import { PayoutStatus } from '../payout/payout.domain';
 
 export function createStripeWebhookHandler(
   stripe: Pick<Stripe, 'webhooks'>,
   paymentService: PaymentService,
   cartService: CartService,
-  transferService: TransferService
+  transferService: TransferService,
+  payoutService: PayoutService
 ): RequestHandler {
-  const processedEventIds = new Set<string>();
   return async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {
@@ -32,33 +35,113 @@ export function createStripeWebhookHandler(
       return res.status(400).json({ error: 'INVALID_STRIPE_SIGNATURE' });
     }
 
-    const session = event.data.object as Stripe.Checkout.Session;
-    if (!event.type.startsWith('checkout.session.')) {
-      // Handle Stripe Connect transfer webhook events
-      if (event.type.startsWith('transfer.')) {
-        // At this point, event.type is narrowed to transfer.* types
-        const transferType = event.type as
-          | 'transfer.paid'
-          | 'transfer.failed'
-          | 'transfer.reversed';
-        if (transferType === 'transfer.paid' || transferType === 'transfer.failed') {
-          const stripeTransferId = (event.data as { object: any }).object.id;
-          if (!stripeTransferId) {
-            return res.status(200).json({ received: true });
-          }
-          // completeTransfer / failTransfer internally call transferRepo.findByStripeTransferId()
-          // and handle the not-found case gracefully (return null without throwing).
-          if (transferType === 'transfer.paid') {
-            await transferService.completeTransfer(stripeTransferId);
-          } else if (transferType === 'transfer.failed') {
-            await transferService.failTransfer(stripeTransferId);
-          }
-          return res.status(200).json({ received: true });
-        }
+    const stripeEventId = event.id;
+
+    // Handle Stripe Connect transfer webhook events
+    if (event.type.startsWith('transfer.')) {
+      // At this point, event.type is narrowed to transfer.* types
+      const transferType = event.type as
+        | 'transfer.paid'
+        | 'transfer.failed'
+        | 'transfer.reversed';
+      const stripeTransferId = (event.data as { object: any }).object.id;
+      if (!stripeTransferId) {
         return res.status(200).json({ received: true });
+      }
+      // Look up the transfer entity for traceability and idempotent handling.
+      const entity = await transferService.findByStripeTransferId(stripeTransferId);
+      if (!entity) {
+        return res.status(200).json({ received: true });
+      }
+
+      if (transferType === 'transfer.paid') {
+        // completeTransfer internally handles idempotency (no-op if already COMPLETED)
+        await transferService.completeTransfer(stripeTransferId);
+        // Create Payout linked to the transfer, populating payout.reference with the transfer id.
+        // createPayoutFromTransfer is idempotent: returns existing payout if reference already present.
+        try {
+          await payoutService.createPayoutFromTransfer(
+            entity.id,
+            entity.amount,
+            entity.orderId,
+            entity.orderVendorGroupId,
+          );
+        } catch {
+          // Payout creation failure is not fatal: Stripe will redeliver the webhook.
+          // createPayoutFromTransfer is idempotent via payout.reference, so redelivery is safe.
+          return res.status(500).json({ error: 'PAYOUT_CREATION_FAILED' });
+        }
+      } else if (transferType === 'transfer.failed') {
+        await transferService.failTransfer(stripeTransferId);
+      } else if (transferType === 'transfer.reversed') {
+        await transferService.reverseTransfer(stripeTransferId);
+        // Cancel any payout linked to this transfer that is still cancellable
+        const linkedPayouts = await payoutService.findPayoutsByReference(entity.id);
+        for (const payout of linkedPayouts) {
+          if (payout.status === PayoutStatus.PENDING || payout.status === PayoutStatus.APPROVED) {
+            try {
+              await payoutService.cancelPayout(payout.id, 'system', true);
+            } catch {
+              // Best-effort: payout may have already been processed or cancelled
+            }
+          }
+        }
       }
       return res.status(200).json({ received: true });
     }
+
+    if (event.type === 'payment_intent.succeeded' || event.type === 'payment_intent.payment_failed') {
+      const intent = event.data.object as Stripe.PaymentIntent;
+      const succeeded = event.type === 'payment_intent.succeeded';
+      if (!intent.id) {
+        return res.status(200).json({ received: true });
+      }
+
+      try {
+        let payment = await paymentService.getPaymentByProviderTransactionId(intent.id);
+        // Checkout can deliver the successful intent before its session event.
+        // A failed, unbound intent may still be retried within the Checkout session.
+        if (!payment && succeeded && intent.metadata?.paymentId && intent.metadata.orderId) {
+          const candidate = await paymentService.getPaymentById(intent.metadata.paymentId);
+          if (candidate?.provider === 'stripe' && candidate.orderId === intent.metadata.orderId &&
+              (!candidate.providerTransactionId || candidate.providerTransactionId.startsWith('cs_'))) {
+            payment = candidate;
+          }
+        }
+        if (!payment || payment.status === PaymentStatus.FAILED || payment.status === PaymentStatus.REFUNDED ||
+            (payment.status === PaymentStatus.CAPTURED &&
+              (!succeeded || await paymentService.isPaymentFullyFinalized(payment.id)))) {
+          return res.status(200).json({ received: true });
+        }
+
+        if (succeeded) {
+          if (intent.currency?.toLowerCase() !== 'brl') {
+            return res.status(400).json({ error: 'STRIPE_CURRENCY_MISMATCH' });
+          }
+          if (!Number.isInteger(intent.amount)) {
+            return res.status(400).json({ error: 'STRIPE_PAYMENT_INTENT_AMOUNT_INVALID' });
+          }
+          await paymentService.completeCheckoutPayment(payment.id, intent.id, intent.amount);
+        } else {
+          await paymentService.failPayment(payment.id);
+        }
+        if (stripeEventId) {
+          await paymentService.setPaymentEventId(payment.id, stripeEventId);
+        }
+        return res.status(200).json({ received: true });
+      } catch (err) {
+        if (err instanceof Error && err.message === PaymentError.PAYMENT_NOT_AUTHORIZABLE) {
+          return res.status(200).json({ received: true });
+        }
+        return res.status(500).json({ error: 'STRIPE_WEBHOOK_PROCESSING_FAILED' });
+      }
+    }
+
+    if (!event.type.startsWith('checkout.session.')) {
+      return res.status(200).json({ received: true });
+    }
+
+    const session = event.data.object as Stripe.Checkout.Session;
     if (session.currency?.toLowerCase() !== 'brl') {
       return res.status(400).json({ error: 'STRIPE_CURRENCY_MISMATCH' });
     }
@@ -67,29 +150,16 @@ export function createStripeWebhookHandler(
     if (!paymentId) {
       return res.status(200).json({ received: true });
     }
-    const stripeEventId = event.id;
 
     // Webhook event correlation / idempotency check:
-    // If this Stripe event ID has already been processed for this payment,
-    // skip re-processing immediately. This protects against duplicate webhook
-    // deliveries and enables retry/recovery.
-    // Uses an in-memory Set for same-process duplicate detection, and also
-    // checks the payment's stored eventId for persistence-enabled correlation.
-    if (paymentId && stripeEventId) {
-      // In-memory Set fast path for duplicate deliveries within same process
-      if (processedEventIds.has(stripeEventId)) {
-        return res.status(200).json({ received: true });
-      }
-      // Check if the payment already has this eventId stored (persistent correlate)
-      const existingPayment = await paymentService.getPaymentById(paymentId);
-      if (existingPayment && existingPayment.eventId === stripeEventId) {
-        // Mark as processed in-memory so subsequent deliveries in this session are also caught
-        processedEventIds.add(stripeEventId);
-        return res.status(200).json({ received: true });
-      }
-    }
-
     try {
+      if (stripeEventId) {
+        const existing = await paymentService.getPaymentById(paymentId);
+        if (existing?.eventId === stripeEventId) {
+          return res.status(200).json({ received: true });
+        }
+      }
+
       if (
         (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') &&
         session.payment_status === 'paid'
@@ -102,8 +172,7 @@ export function createStripeWebhookHandler(
         }
         const payment = await paymentService.completeCheckoutPayment(paymentId, paymentIntentId, session.amount_total);
         // Remove only the items effectively purchased from the cart,
-        // preserving non-purchased items. The webhook event correlation check
-        // above (lines 76-96) provides idempotency against duplicate deliveries.
+        // preserving non-purchased items.
         const order = await paymentService.getOrderByPaymentId(paymentId);
         if (order) {
           // Aggregate purchased quantities per product so reconciliation removes
@@ -129,18 +198,6 @@ export function createStripeWebhookHandler(
             }
           }
         }
-        // Persist the Stripe event ID on the payment for webhook event correlation / retry/recovery
-        // Best-effort: update the payment's eventId field if not already set
-        try {
-          const existingEventId = await paymentService.getPaymentEventId(paymentId);
-          if (existingEventId !== event.id && event.id) {
-            await paymentService.setPaymentEventId(paymentId, event.id);
-          }
-        } catch {
-          /* Best-effort; do not fail the webhook delivery if saving fails. */
-        }
-        // After successful payment capture, create the transfer for each vendor group
-        // Note: transfer creation is triggered separately; this is just the payment confirmation
       } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
         try {
           await paymentService.failPayment(paymentId);
@@ -152,7 +209,9 @@ export function createStripeWebhookHandler(
         }
       }
 
-      if (stripeEventId) processedEventIds.add(stripeEventId);
+      if (stripeEventId) {
+        await paymentService.setPaymentEventId(paymentId, stripeEventId);
+      }
       return res.status(200).json({ received: true });
     } catch {
       return res.status(500).json({ error: 'STRIPE_WEBHOOK_PROCESSING_FAILED' });

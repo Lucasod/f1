@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mockPaymentMongo } from '../../tests/mock-payment-mongo';
 import type Stripe from 'stripe';
 import type { Request, Response } from 'express';
 import { PaymentService, PaymentError } from '../order/payment.service';
@@ -32,7 +33,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
+      { completeCheckoutPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false), orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [] }) }, getPaymentEventId: vi.fn().mockResolvedValue(null), setPaymentEventId: vi.fn().mockResolvedValue(undefined), getOrderByPaymentId: vi.fn().mockResolvedValue(null) } as unknown as PaymentService,
       { clearCart: vi.fn(), removeItem: vi.fn() } as any,
       { findByStripeTransferId: vi.fn().mockResolvedValue(null), completeTransfer: vi.fn(), failTransfer: vi.fn() } as any
     );
@@ -126,7 +127,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_NOT_AUTHORIZABLE'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { failPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -185,7 +186,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_NOT_AUTHORIZABLE'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { failPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -210,7 +211,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { failPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -238,7 +239,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockRejectedValue(new Error('PAYMENT_AMOUNT_MISMATCH'));
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { completeCheckoutPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -265,7 +266,7 @@ describe('Stripe webhook handler', () => {
     const failPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, failPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { completeCheckoutPayment, failPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -291,7 +292,7 @@ describe('Stripe webhook handler', () => {
     const completeCheckoutPayment = vi.fn().mockResolvedValue(undefined);
     const handler = createStripeWebhookHandler(
       { webhooks: { constructEvent } } as never,
-      { completeCheckoutPayment, isPaymentFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
+      { completeCheckoutPayment, isPaymentFullyFinalized: vi.fn().mockResolvedValue(false) } as unknown as PaymentService
     );
     const req = { body: Buffer.from('{}'), headers: { 'stripe-signature': 'sig_test' } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
@@ -312,7 +313,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',
@@ -370,7 +374,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',
@@ -440,7 +447,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',
@@ -514,7 +524,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',
@@ -588,20 +601,20 @@ describe('Stripe webhook handler', () => {
       } as unknown as Stripe.Event;
       const constructEvent = vi.fn().mockReturnValue(event);
       const mockPayment = { id: 'payment-1', personId: 'consumer-1', status: 'pending', orderId: 'order-1', amount: 10000, provider: 'stripe' };
-      const isPaymentFinalized = vi.fn();
-      isPaymentFinalized.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      let persistedEventId: string | undefined;
       const completeCheckoutPayment = vi.fn().mockResolvedValue(mockPayment as any);
       const removeItemQuantity = vi.fn().mockResolvedValue({} as any);
 
-      const handler = createStripeWebhookHandler(
+      const makeHandler = () => createStripeWebhookHandler(
         { webhooks: { constructEvent } } as never,
         {
           completeCheckoutPayment,
-          isPaymentFinalized,
-          getPaymentById: vi.fn().mockResolvedValue(null),
+          getPaymentById: vi.fn(async () => ({ ...mockPayment, eventId: persistedEventId })),
           orderRepo: { findById: vi.fn().mockResolvedValue({ vendorGroups: [{ items: [{ productId: 'product-a', quantity: 2 }] }] }) },
           getPaymentEventId: vi.fn().mockResolvedValue(null),
-          setPaymentEventId: vi.fn().mockResolvedValue(undefined),
+          setPaymentEventId: vi.fn(async (_paymentId: string, eventId: string) => {
+            persistedEventId = eventId;
+          }),
           getOrderByPaymentId: vi.fn().mockResolvedValue({ vendorGroups: [{ items: [{ productId: 'product-a', quantity: 2 }] }] }),
         } as unknown as PaymentService,
         { removeItemQuantity } as any,
@@ -611,8 +624,8 @@ describe('Stripe webhook handler', () => {
       const res1 = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
       const res2 = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
 
-      await handler(req, res1, vi.fn());
-      await handler(req, res2, vi.fn());
+      await makeHandler()(req, res1, vi.fn());
+      await makeHandler()(req, res2, vi.fn());
 
       expect(completeCheckoutPayment).toHaveBeenCalledTimes(1);
       expect(removeItemQuantity).toHaveBeenCalledTimes(1);
@@ -630,7 +643,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',
@@ -684,7 +700,10 @@ describe('Stripe webhook handler', () => {
 
       const paymentRepo = new InMemoryPaymentRepository();
       const orderRepo = new InMemoryOrderRepository();
-      const paymentService = new PaymentService(paymentRepo, orderRepo);
+      const paymentService = new PaymentService(
+        paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined, mockPaymentMongo
+      );
 
       const order = Order.create({
         personId: 'consumer-1',

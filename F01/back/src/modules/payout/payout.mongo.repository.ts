@@ -85,6 +85,15 @@ export class MongoPayoutRepository implements PayoutRepository {
     return payouts.map(doc => this.mapToPayout(doc));
   }
 
+  async findByReference(reference: string): Promise<Payout[]> {
+    const payouts = await this.payoutsCollection
+      .find({ reference })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return payouts.map(doc => this.mapToPayout(doc));
+  }
+
   async findAll(): Promise<Payout[]> {
     const payouts = await this.payoutsCollection
       .find({})

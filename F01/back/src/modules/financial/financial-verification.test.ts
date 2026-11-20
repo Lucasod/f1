@@ -1,3 +1,4 @@
+import { mockPaymentMongo } from '../../tests/mock-payment-mongo';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AuthService } from '../auth/auth.service';
 import { InMemoryPersonRepository, Person, PersonRole } from '../person/person.domain';
@@ -191,7 +192,8 @@ describe('Phase G — Financial Verification: Vendor A buys from Vendor B', () =
       undefined,
       movementRepository,
       eventRepository,
-      vendorRepository
+      vendorRepository,
+      mockPaymentMongo
     );
   });
 

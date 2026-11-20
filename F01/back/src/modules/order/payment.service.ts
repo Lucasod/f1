@@ -45,7 +45,7 @@ import type { ProductRepository } from '../product/product.domain';
 import { ElasticsearchProductIndex } from '../search/elasticsearch-product-index';
 import { WalletService } from '../wallet/wallet.service';
 import type { FinancialService } from '../financial/financial.service';
-import type { Db } from 'mongodb';
+import type { Db, ClientSession } from 'mongodb';
 import { MongoClient } from 'mongodb';
 import { FinancialLedger } from '../financial/financial.ledger';
 import { MovementType as DomainMovementType } from '../financial/financial.movement';
@@ -107,7 +107,9 @@ export class PaymentService {
     vendorId: string | undefined,
     movementType: MovementType,
     eventType: EventType,
-    amount?: number
+    amount?: number,
+    ovgId?: string,
+    session?: ClientSession
   ): Promise<void> {
     const now = new Date();
 
@@ -121,11 +123,12 @@ export class PaymentService {
         orderId: payment.orderId,
         paymentId: payment.id,
         vendorId,
+        ovgId,
         effectiveAt: now,
         recordedAt: now,
-        idempotencyKey: `payment:${payment.id}:${movementType}`,
+        idempotencyKey: `payment:${payment.id}:${movementType}:${ovgId ?? 'none'}`,
       });
-      await this.movementRepo.save(movement);
+      await (this.movementRepo as any).save(movement, session);
     }
 
     if (this.eventRepo) {
@@ -136,8 +139,9 @@ export class PaymentService {
         orderId: payment.orderId,
         paymentId: payment.id,
         vendorId,
+        ovgId,
       });
-      await this.eventRepo.save(event);
+      await (this.eventRepo as any).save(event, session);
     }
   }
 
@@ -187,14 +191,13 @@ export class PaymentService {
       return pendingOrAuthorizedPayment;
     }
 
-    const payment = Payment.create({
-      orderId,
-      personId,
-      amount,
-      provider: provider ?? 'stripe'
-    });
+    // Derive the next attempt from the persisted history so concurrent retries share a key.
+    const firstAttemptId = `attempt:${orderId}:${personId}:${amount}`;
+    const attemptId = existingPayments.length === 0
+      ? firstAttemptId
+      : `${firstAttemptId}:retry:${existingPayments.length}`;
 
-    return this.paymentRepo.save(payment);
+    return this.paymentRepo.insertForAttempt({ attemptId, orderId, personId, amount, provider: provider ?? 'stripe' });
   }
 
   async authorizePayment(
@@ -328,7 +331,39 @@ export class PaymentService {
     captured.status && (payment.status = captured.status);
     captured.capturedAt && (payment.capturedAt = captured.capturedAt);
     captured.providerTransactionId && (payment.providerTransactionId = captured.providerTransactionId);
-    await this.paymentRepo.update(payment);
+
+    // CD-048 / CD-065: Snapshot commission per OVG at capture time so refunds
+    // use the commission rate that was in effect when payment was captured,
+    // not a possibly-changed current rate (R-05: defasado percentual de comissão).
+    const commissionSnapshot = order.vendorGroups.map(vg => ({
+      ovgId: vg.id,
+      vendorId: vg.vendorId,
+      subtotal: vg.subtotal,
+      commissionPct: vg.commissionPct,
+      commissionAmount: vg.commissionAmount,
+      vendorNet: vg.vendorNet
+    }));
+    payment.commissionSnapshot = commissionSnapshot;
+
+    if (!this.mongodb) {
+      throw new Error('PAYMENT_CAPTURE_REQUIRES_TRANSACTIONAL_DEPS');
+    }
+
+    if (this.mongodb) {
+      const client = this.mongodb.client;
+      const session = client.startSession();
+      try {
+        await session.withTransaction(async (session) => {
+          // Atualiza pagamento com commissionSnapshot
+          await this.paymentRepo.update(payment, session);
+
+          // Atualiza ordem para PAID e define vendor groups como PENDING
+          await this.markCapturedOrderPaid(payment.orderId, session);
+        });
+      } finally {
+        await session.endSession();
+      }
+    }
 
     // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
     // Pass each vendor's subtotal so they only see their portion of the payment
@@ -341,8 +376,6 @@ export class PaymentService {
         vg.subtotal
       );
     }
-
-    await this.markCapturedOrderPaid(payment.orderId);
 
     // FIND-A02-P0-002: Trigger transfer creation per OVG after order is PAID.
     // Transfer creation is a side effect; failures must not block the core
@@ -376,9 +409,9 @@ export class PaymentService {
     return payment;
   }
 
-  private async markCapturedOrderPaid(orderId: string): Promise<void> {
+  private async markCapturedOrderPaid(orderId: string, session?: ClientSession): Promise<void> {
     // Reload after capture persistence; never regress advanced or terminal orders.
-    const order = await this.orderRepo.findById(orderId);
+    const order = await this.orderRepo.findById(orderId, session);
     if (!order) {
       throw new Error(PaymentError.ORDER_NOT_FOUND);
     }
@@ -386,12 +419,13 @@ export class PaymentService {
     if (order.status === OrderStatus.PENDING_PAYMENT) {
       order.transitionTo(OrderStatus.PAID);
       try {
-        const result = await this.orderRepo.update(order);
+        const result = await this.orderRepo.update(order, session);
         // If repository refused (returned unchanged non-PAID), treat as no-op.
         if (result && result.status !== OrderStatus.PAID) {
           return;
         }
       } catch (err) {
+        if (session) throw err;
         try { console.error('markCapturedOrderPaid: conditional update failed for order', orderId, err); } catch { /* blocked in isolated test env */ }
         // Re-throw unexpected errors (not conditional-update failures)
         if (err == null || (typeof err !== 'object' && typeof err !== 'function') ||
@@ -399,7 +433,7 @@ export class PaymentService {
           throw err;
         }
         // Conditional update failed; re-read persisted state.
-        const persisted = await this.orderRepo.findById(orderId);
+        const persisted = await this.orderRepo.findById(orderId, session);
         if (persisted && persisted.status === OrderStatus.PAID) {
           return; // idempotent success
         }
@@ -412,7 +446,7 @@ export class PaymentService {
       for (const vg of order.vendorGroups) {
         vg.updateStatus(OrderVendorGroupStatus.PENDING);
       }
-      await this.orderRepo.update(order);
+      await this.orderRepo.update(order, session);
     }
   }
 
@@ -671,7 +705,7 @@ export class PaymentService {
     return { recovered, failed };
   }
 
-  async refundPayment(paymentId: string): Promise<Payment> {
+  async refundPayment(paymentId: string, refundAmount?: number): Promise<Payment> {
     if (!paymentId || paymentId.trim().length === 0) {
       throw new Error(PaymentError.PAYMENT_NOT_FOUND);
     }
@@ -690,29 +724,93 @@ export class PaymentService {
       throw new Error(PaymentError.PAYMENT_NOT_REFUNDABLE);
     }
 
+    // Validate partial refund amount if provided
+    const amountToRefund = refundAmount ?? payment.amount;
+    if (!Number.isFinite(amountToRefund) || amountToRefund <= 0) {
+      throw new Error(PaymentError.INVALID_PAYMENT_AMOUNT);
+    }
+    if (amountToRefund > payment.amount) {
+      throw new Error(PaymentError.INVALID_PAYMENT_AMOUNT);
+    }
+
     const refunded = payment.refund();
     refunded.status && (payment.status = refunded.status);
     refunded.providerTransactionId && (payment.providerTransactionId = refunded.providerTransactionId);
     refunded.refundedAt && (payment.refundedAt = refunded.refundedAt);
-    await this.paymentRepo.update(payment);
 
-    const order = await this.orderRepo.findById(payment.orderId);
-    if (!order) {
-      throw new Error(PaymentError.ORDER_NOT_FOUND);
+    if (!this.mongodb) {
+      throw new Error('PAYMENT_REFUND_REQUIRES_TRANSACTIONAL_DEPS');
     }
-    // FIND-A02-P0-003: record ledger for every vendor group, not just vendorGroups[0]
-    // Pass each vendor's subtotal so they only see their portion of the payment
-    for (const vg of order.vendorGroups) {
-      await this.recordPaymentLedger(
-        payment,
-        vg.vendorId,
-        MovementType.REFUND,
-        EventType.PAYMENT_REFUNDED,
-        vg.subtotal
-      );
+
+    const client = this.mongodb!.client;
+    const session = client.startSession();
+    try {
+      await session.withTransaction(async (session) => {
+        await this.paymentRepo.update(payment, session);
+
+        const order = await this.orderRepo.findById(payment.orderId, session);
+        if (!order) {
+          throw new Error(PaymentError.ORDER_NOT_FOUND);
+        }
+
+        // Refund ratio for proportional distribution across vendor groups
+        const refundRatio = payment.amount > 0 ? amountToRefund / payment.amount : 1;
+
+        // CD-048 / CD-065: Use commission snapshot from payment capture time,
+        // not current OVG values (which may have been modified after payment,
+        // causing defasado percentual de comissão — R-05).
+        // Record REFUND movement + COMMISSION adjustment (negative) per OVG.
+        const snapshots = payment.commissionSnapshot ?? [];
+        for (const snapshot of snapshots) {
+          const refundAmountForOVG = snapshot.subtotal * refundRatio;
+          await this.recordPaymentLedger(
+            payment,
+            snapshot.vendorId,
+            MovementType.REFUND,
+            EventType.PAYMENT_REFUNDED,
+            refundAmountForOVG,
+            snapshot.ovgId,
+            session
+          );
+
+          // Commission adjustment: reverse commission proportionally (negative amount)
+          const commissionAdjustment = -(snapshot.commissionAmount * refundRatio);
+          await this.recordPaymentLedger(
+            payment,
+            snapshot.vendorId,
+            MovementType.COMMISSION,
+            EventType.PAYMENT_REFUNDED,
+            commissionAdjustment,
+            snapshot.ovgId,
+            session
+          );
+        }
+
+        // Fallback for payments captured before snapshot was introduced:
+        // record REFUND movements using current OVG values (no commission adjustment
+        // possible without a snapshot).
+        if (snapshots.length === 0) {
+          for (const vg of order.vendorGroups) {
+            const refundAmountForOVG = vg.subtotal * refundRatio;
+            await this.recordPaymentLedger(
+              payment,
+              vg.vendorId,
+              MovementType.REFUND,
+              EventType.PAYMENT_REFUNDED,
+              refundAmountForOVG,
+              vg.id,
+              session
+            );
+          }
+        }
+
+        const isFullRefund = !refundAmount || amountToRefund >= payment.amount;
+        order.refund(isFullRefund);
+        await this.orderRepo.update(order, session);
+      });
+    } finally {
+      await session.endSession();
     }
-    order.refund(true);
-    await this.orderRepo.update(order);
 
     return payment;
   }
@@ -722,6 +820,13 @@ export class PaymentService {
       return null;
     }
     return this.paymentRepo.findById(id);
+  }
+
+  async getPaymentByProviderTransactionId(providerTransactionId: string): Promise<Payment | null> {
+    if (!providerTransactionId || providerTransactionId.trim().length === 0) {
+      return null;
+    }
+    return this.paymentRepo.findByProviderTransactionId(providerTransactionId);
   }
 
   async getPaymentsByOrderId(orderId: string): Promise<Payment[]> {
@@ -747,7 +852,7 @@ export class PaymentService {
     const existing = await this.paymentRepo.findById(paymentId);
     if (existing) {
       existing.eventId = eventId;
-      await this.paymentRepo.save(existing).catch(() => void 0);
+      await this.paymentRepo.save(existing);
     }
   }
 
@@ -758,10 +863,23 @@ export class PaymentService {
   }
 
   /**
-   * Check whether duplicate delivery can skip processing. A captured payment
-   * whose order is still pending must retry the order update, not capture again.
+   * Indica se o processamento do pagamento está completamente finalizado.
+   *
+   * Semântica efetiva (documentada para evitar interpretação equivocada do nome):
+   *  - Pagamento não encontrado -> false.
+   *  - Pagamento CAPTURED: considerado finalizado somente quando a ordem associada
+   *    já saiu de PENDING_PAYMENT (i.e., a ordem foi atualizada para PAID ou estado
+   *    mais avançado). Se a ordem ainda está PENDING_PAYMENT, o pagamento foi
+   *    capturado duravelmente mas a reparação da ordem ainda não ocorreu, portanto
+   *    o processamento não está completo (retorna false para permitir retry/repair).
+   *  - Pagamento FAILED ou REFUNDED: verdadeiro (estados terminais do pagamento).
+   *  - Qualquer outro estado (PENDING, AUTHORIZED): false.
+   *
+   * Este método é usado como guarda de idempotência do webhook: um retorno false
+   * indica que o evento pode ser reprocessado (ex: reparar ordem após captura
+   * durável sem recapturar o pagamento).
    */
-  async isPaymentFinalized(paymentId: string): Promise<boolean> {
+  async isPaymentFullyFinalized(paymentId: string): Promise<boolean> {
     const payment = await this.paymentRepo.findById(paymentId);
     if (!payment) return false;
     if (payment.status === PaymentStatus.CAPTURED) {
@@ -817,8 +935,23 @@ export class PaymentService {
     if (vendorId && this.vendorRepo) {
       const vendor = await this.vendorRepo.findById(vendorId);
       if (vendor && vendor.stripeAccountId) {
-        destinationAccountId = vendor.stripeAccountId;
+        destinationAccountId = vendor.stripeAccountId.trim();
       }
+    }
+    // Reject transfers with absent destination before any Stripe call or persistence
+    if (!destinationAccountId) {
+      throw new Error('TRANSFER_DESTINATION_UNAVAILABLE');
+    }
+
+    // Create Stripe client for account validation and transfer creation
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
+      apiVersion: '2026-10-28.endive',
+    });
+
+    // Verify the connected account can receive transfers before creating the transfer
+    const account = await stripe.accounts.retrieve(destinationAccountId);
+    if (account.capabilities?.transfers !== 'active') {
+      throw new Error('TRANSFER_CAPABILITY_INACTIVE');
     }
 
     // Create idempotency key: order_id:ovg_id:attempt
@@ -829,11 +962,8 @@ export class PaymentService {
     if (existingTransfer && existingTransfer.status === TransferStatus.COMPLETED) {
       // Return existing completed transfer
       // We need the Stripe object; if we have the stripeTransferId, retrieve it
-      if (existingTransfer.stripeTransferId && this.transferRepo) {
+      if (existingTransfer.stripeTransferId) {
         try {
-          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
-apiVersion: '2026-10-28.endive',
-          });
           const stripeTransfer = await stripe.transfers.retrieve(
             existingTransfer.stripeTransferId
           );
@@ -871,10 +1001,6 @@ apiVersion: '2026-10-28.endive',
     }
 
     // Create Stripe Transfer
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim() || 'sk_test_test', {
-      apiVersion: '2026-10-28.endive',
-    });
-
     const stripeTransfer = await stripe.transfers.create(
       {
         amount: Math.round(transferAmount * 100), // Stripe expects amount in cents

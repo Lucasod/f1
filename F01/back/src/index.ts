@@ -1,3 +1,4 @@
+import type { Db } from 'mongodb';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -142,7 +143,7 @@ cartRepo = new RedisCartRepository();
 // Transfer repository and service
 let transferRepo: MongoTransferRepository;
 
-function initializeServices(): void {
+function initializeServices(db?: Db): void {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
   const isPlaceholderKey = stripeSecretKey === 'sk_test_replace_me' || stripeSecretKey === '';
   const isTestKey = stripeSecretKey.startsWith('sk_test_') || stripeSecretKey.startsWith('rk_test_');
@@ -204,9 +205,9 @@ financialService = new FinancialService(financialRepo);
     payoutRepo
   );
   if (transferRepo) {
-    transferService = new TransferService(transferRepo, financialService, process.env.STRIPE_SECRET_KEY?.trim() || '', orderRepo, movementRepo, eventRepo);
+    transferService = new TransferService(transferRepo, financialService, stripeSecretKey, orderRepo, movementRepo, eventRepo, vendorRepo);
   }
-  paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo, undefined, undefined, transferService);
+  paymentService = new PaymentService(paymentRepo, orderRepo, productRepo, walletService, financialService, undefined, searchIndex, movementRepo, eventRepo, vendorRepo, db, transferService);
 payoutService = new PayoutService(payoutRepo, vendorRepo, orderRepo, walletService, movementRepo, eventRepo);
 }
 
@@ -327,12 +328,7 @@ eventRepo = new MongoFinancialEventRepository(db);
       searchSync.start();
 
       // Initialize services with MongoDB repositories
-      initializeServices();
-      // Belt-and-suspenders wiring: transferService is injected via constructor
-      // inside initializeServices(); set the property explicitly as documented.
-      // `transferService` is private readonly on PaymentService, so use a type
-      // assertion to assign it here (compile-time only; runtime assignment works).
-      (paymentService as any).transferService = transferService;
+      initializeServices(db);
       console.log('✅ MongoDB repositories initialized');
 
       // Automatic recovery remains disabled until payment, ledger and cart effects
@@ -369,7 +365,8 @@ eventRepo = new MongoFinancialEventRepository(db);
         createStripeClientFromEnvironment(),
         paymentService,
         cartService,
-        transferService
+        transferService,
+        payoutService
       ));
 
       // Order routes
@@ -486,7 +483,8 @@ eventRepo = new InMemoryFinancialEventRepository();
             createStripeClientFromEnvironment(),
             paymentService,
             cartService,
-            transferService
+            transferService,
+            payoutService
           ));
         } catch {
           // Stripe not configured in dev fallback; skip

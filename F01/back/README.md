@@ -62,6 +62,8 @@ npm run start        # Run production build (node dist/index.js)
 npm run test         # Run all tests once (vitest run)
 npm run test:watch   # Watch mode for tests
 npm run test:coverage # Run tests with coverage report
+npm run test:integration # Run the seed-connect MongoDB integration test (requires F01_CONNECT_TEST_URI)
+npm run test:all     # Run unit suite plus seed-connect integration test (requires F01_CONNECT_TEST_URI)
 npm run seed         # Seed MongoDB with development demo data
 ```
 
@@ -98,6 +100,7 @@ Defined in `src/config/index.ts`. All have development defaults; **required in p
 | `JWT_EXPIRES_IN` | `24h` | Access token TTL |
 | `CORS_ORIGIN` | (empty) | Comma-separated allowed origins |
 | `COMMISSION_PCT` | `10` | Platform commission % |
+| `F01_CONNECT_TEST_URI` | (obrigatório para integração) | URI do MongoDB exclusivo para testes de seed-connect |
 
 **Production validation** (`validateConfig()`): throws if any required var uses its dev default.
 
@@ -162,6 +165,10 @@ Base path: `/api/v1`
 - **Structure:** Unit tests alongside source (`*.test.ts`), integration tests in `src/tests/`
 - **Coverage:** `npm run test:coverage` (v8 provider)
 - **Run all:** `npm run test`
+- **Integration (seed-connect + MongoDB):** `npm run test:integration` (requires `F01_CONNECT_TEST_URI`)
+- **Unit + integration:** `npm run test:all` (requires `F01_CONNECT_TEST_URI`)
+
+The seed-connect integration test (`src/scripts/seed.connect.mongo.test.ts`) validates the Stripe Connect seed flow against a test MongoDB database named `fs01_connect_seed_test_<timestamp>`. It never touches production or development databases. `test:integration` and `test:all` fail clearly when `F01_CONNECT_TEST_URI` is not set; direct `vitest run` invocations skip gracefully via `describe.skipIf(!uri)`.
 
 ### Example Test Command
 ```bash

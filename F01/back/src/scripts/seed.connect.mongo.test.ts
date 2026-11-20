@@ -13,14 +13,14 @@ describe.skipIf(!uri)('Connect seed Mongo integration', () => {
       await db.collection('vendors').insertMany(vendors.map(v => ({ _id: v.id as never, personId: v.personId })));
       const store = new MongoSeedConnectStore(db);
       const accounts = new Map<string, any>();
-      const stripe = { accounts: {
-        retrieveCurrent: async () => ({ id: 'acct_platform' }),
+      const v2CoreAccounts = {
         create: async (params: any, opts: any) => {
           if (!accounts.has(opts.idempotencyKey)) accounts.set(opts.idempotencyKey, { id: `acct_${accounts.size}`, metadata: params.metadata, capabilities: { transfers: 'inactive' } });
           return accounts.get(opts.idempotencyKey);
         },
         retrieve: async (id: string) => [...accounts.values()].find(a => a.id === id),
-      }};
+      };
+      const stripe = { accounts: { retrieveCurrent: async () => ({ id: 'acct_platform' }) }, v2: { core: { accounts: v2CoreAccounts } } };
       const env = { NODE_ENV: 'test', STRIPE_SECRET_KEY: ['rk', 'test', 'dummy'].join('_'), SEED_STRIPE_ACCOUNT_ID: 'acct_platform' };
       const originalCommit = store.commit.bind(store);
       let fail = true;

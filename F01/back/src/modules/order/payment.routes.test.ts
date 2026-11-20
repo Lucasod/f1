@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import request from 'supertest';
+import { requestInProcess } from '../../tests/request-in-process';
 import express from 'express';
 import { InMemoryPersonRepository, Person } from '../person/person.domain';
 import { InMemoryOrderRepository, InMemoryPaymentRepository, Order, OrderStatus, PaymentStatus } from '../order/order.domain';
@@ -10,6 +10,7 @@ import { createAuthRoutes } from '../auth/auth.routes';
 import { hashPassword } from '../auth/credential.domain';
 import { PersonRole } from '../person/person.domain';
 import { config } from '../../config';
+import { mockPaymentMongo } from '../../tests/mock-payment-mongo';
 import { Vendor, InMemoryVendorRepository } from '../vendor/vendor.domain';
 import { Product, ProductStatus, InMemoryProductRepository } from '../product/product.domain';
 import { PaymentError } from './payment.service';
@@ -38,7 +39,10 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     vendorRepo = new InMemoryVendorRepository();
 
     authService = new AuthService(personRepo, 'test-secret-key', '24h', '30d');
-    paymentService = new PaymentService(paymentRepo, orderRepo);
+    paymentService = new PaymentService(
+      paymentRepo, orderRepo, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, mockPaymentMongo
+    );
 
     app = express();
     app.use(express.json());
@@ -54,11 +58,9 @@ describe('Payment Routes (T-1004 Refund API)', () => {
     adminPerson.setCredential(await hashPassword(testPassword));
     await personRepo.save(adminPerson);
 
-    const adminLogin = await request(app).post('/api/v1/auth/login').send({ email: 'admin@example.com', password: testPassword });
+    const adminLogin = await requestInProcess(app, 'POST', '/api/v1/auth/login', { body: { email: 'admin@example.com', password: testPassword } });
 
-    const consumerRegister = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ name: 'Consumer', taxIdType: 'CPF', taxIdValue: VALID_CPF_1, email: 'c@example.com', password: testPassword, role: PersonRole.CONSUMER });
+    const consumerRegister = await requestInProcess(app, 'POST', '/api/v1/auth/register', { body: { name: 'Consumer', taxIdType: 'CPF', taxIdValue: VALID_CPF_1, email: 'c@example.com', password: testPassword, role: PersonRole.CONSUMER } });
     consumerToken = consumerRegister.body.tokens.accessToken;
     const consumerId = consumerRegister.body.person.id;
 
@@ -91,13 +93,13 @@ describe('Payment Routes (T-1004 Refund API)', () => {
   });
   describe('POST /payments - Create payment', () => {
     it('should create a payment for an order', async () => {
-      const res = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const res = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       expect(res.status).toBe(201);
       expect(res.body.payment.amount).toBe(100);
       expect(res.body.payment.status).toBe(PaymentStatus.PENDING);
     });
     it('should return 404 for non-existent order', async () => {
-      const res = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId: 'x', amount: 100, provider: 'stripe' });
+      const res = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId: 'x', amount: 100, provider: 'stripe' } });
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('ORDER_NOT_FOUND');
     });
@@ -105,9 +107,9 @@ describe('Payment Routes (T-1004 Refund API)', () => {
 
   describe('POST /payments/:id/authorize', () => {
     it('should reject public authorize with 403 PROVIDER_CONFIRMATION_REQUIRED', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      const res = await request(app).post(`/api/v1/payments/${pid}/authorize`).set('Authorization', `Bearer ${consumerToken}`).send({ providerTransactionId: 'pi_123' });
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/authorize`, { token: consumerToken, body: { providerTransactionId: 'pi_123' } });
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('PROVIDER_CONFIRMATION_REQUIRED');
     });
@@ -115,9 +117,9 @@ describe('Payment Routes (T-1004 Refund API)', () => {
 
   describe('POST /payments/:id/capture', () => {
     it('should reject public capture with 403 PROVIDER_CONFIRMATION_REQUIRED', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      const res = await request(app).post(`/api/v1/payments/${pid}/capture`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/capture`, { token: consumerToken });
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('PROVIDER_CONFIRMATION_REQUIRED');
     });
@@ -125,34 +127,34 @@ describe('Payment Routes (T-1004 Refund API)', () => {
 
   describe('POST /payments/:id/refund (T-1004)', () => {
     it('should refund a captured payment', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
       await paymentService.authorizePayment(pid, 'pi_123');
       await paymentService.capturePayment(pid);
-      const res = await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/refund`, { token: consumerToken });
       expect(res.status).toBe(200);
       expect(res.body.payment.status).toBe(PaymentStatus.REFUNDED);
       expect(res.body.payment.refundedAt).toBeDefined();
     });
     it('should return 409 when not capturable', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      const res = await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/refund`, { token: consumerToken });
       expect(res.status).toBe(409);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_REFUNDABLE);
     });
     it('should return 409 when already refunded', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
       await paymentService.authorizePayment(pid, 'pi_123');
       await paymentService.capturePayment(pid);
-      await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
-      const res = await request(app).post(`/api/v1/payments/${pid}/refund`).set('Authorization', `Bearer ${consumerToken}`);
+      await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/refund`, { token: consumerToken });
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/refund`, { token: consumerToken });
       expect(res.status).toBe(409);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_REFUNDABLE);
     });
     it('should return 404 for non-existent payment', async () => {
-      const res = await request(app).post('/api/v1/payments/x/refund').set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', '/api/v1/payments/x/refund', { token: consumerToken });
       expect(res.status).toBe(404);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_FOUND);
     });
@@ -160,39 +162,39 @@ describe('Payment Routes (T-1004 Refund API)', () => {
 
   describe('POST /payments/:id/fail (T-1001)', () => {
     it('should fail a pending payment', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/fail`, { token: consumerToken });
       expect(res.status).toBe(200);
       expect(res.body.payment.status).toBe(PaymentStatus.FAILED);
     });
     it('should be idempotent for an already failed payment', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
-      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/fail`, { token: consumerToken });
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/fail`, { token: consumerToken });
       expect(res.status).toBe(200);
       expect(res.body.payment.status).toBe(PaymentStatus.FAILED);
     });
     it('should return 409 when payment is captured', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
       await paymentService.authorizePayment(pid, 'pi_123');
       await paymentService.capturePayment(pid);
-      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/fail`, { token: consumerToken });
       expect(res.status).toBe(409);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_AUTHORIZABLE);
     });
     it('should return 404 for non-owner', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
       const pid = cr.body.payment.id;
-      const other = await request(app).post('/api/v1/auth/register').send({ name: 'Other', taxIdType: 'CPF', taxIdValue: '12345678909', email: 'other-fail@example.com', password: testPassword, role: PersonRole.CONSUMER });
+      const other = await requestInProcess(app, 'POST', '/api/v1/auth/register', { body: { name: 'Other', taxIdType: 'CPF', taxIdValue: '12345678909', email: 'other-fail@example.com', password: testPassword, role: PersonRole.CONSUMER } });
       const otherToken = other.body.tokens.accessToken;
-      const res = await request(app).post(`/api/v1/payments/${pid}/fail`).set('Authorization', `Bearer ${otherToken}`);
+      const res = await requestInProcess(app, 'POST', `/api/v1/payments/${pid}/fail`, { token: otherToken });
       expect(res.status).toBe(404);
     });
     it('should return 404 for non-existent payment', async () => {
-      const res = await request(app).post('/api/v1/payments/x/fail').set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'POST', '/api/v1/payments/x/fail', { token: consumerToken });
       expect(res.status).toBe(404);
       expect(res.body.error).toBe(PaymentError.PAYMENT_NOT_FOUND);
     });
@@ -200,21 +202,21 @@ describe('Payment Routes (T-1004 Refund API)', () => {
 
   describe('GET /payments/:id', () => {
     it('should return a payment by ID', async () => {
-      const cr = await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
-      const res = await request(app).get(`/api/v1/payments/${cr.body.payment.id}`).set('Authorization', `Bearer ${consumerToken}`);
+      const cr = await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
+      const res = await requestInProcess(app, 'GET', `/api/v1/payments/${cr.body.payment.id}`, { token: consumerToken });
       expect(res.status).toBe(200);
       expect(res.body.payment.id).toBe(cr.body.payment.id);
     });
     it('should return 404 for non-existent payment', async () => {
-      const res = await request(app).get('/api/v1/payments/x').set('Authorization', `Bearer ${consumerToken}`);
+      const res = await requestInProcess(app, 'GET', '/api/v1/payments/x', { token: consumerToken });
       expect(res.status).toBe(404);
     });
   });
 
   describe('GET /payments/order/:orderId', () => {
     it('should return payments for an order', async () => {
-      await request(app).post('/api/v1/payments').set('Authorization', `Bearer ${consumerToken}`).send({ orderId, amount: 100, provider: 'stripe' });
-      const res = await request(app).get(`/api/v1/payments/order/${orderId}`).set('Authorization', `Bearer ${consumerToken}`);
+      await requestInProcess(app, 'POST', '/api/v1/payments', { token: consumerToken, body: { orderId, amount: 100, provider: 'stripe' } });
+      const res = await requestInProcess(app, 'GET', `/api/v1/payments/order/${orderId}`, { token: consumerToken });
       expect(res.status).toBe(200);
       expect(res.body.payments).toHaveLength(1);
     });

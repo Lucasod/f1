@@ -22,6 +22,7 @@ import {
 import Stripe from 'stripe';
 
 // Define mocks before vi.mock (which is hoisted)
+const mockStripeIntents = { retrieve: vi.fn() };
 const mockStripeAccounts = { retrieve: vi.fn() };
 const mockStripeTransfers = {
   create: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('stripe', () => {
     default: vi.fn().mockImplementation(function () {
       this.transfers = mockStripeTransfers;
       this.accounts = mockStripeAccounts;
+      this.paymentIntents = mockStripeIntents;
     }),
   };
 });
@@ -142,6 +144,7 @@ describe('Transfer Service', () => {
         })
       );
 
+      mockStripeIntents.retrieve.mockResolvedValue({ latest_charge: 'ch_stripe_456' });
       mockStripeTransfers.create.mockResolvedValue({ id: 'tr_stripe_123' } as any);
 
       const result = await service.createTransferWithDetails(
@@ -149,7 +152,7 @@ describe('Transfer Service', () => {
         'ovg-1',
         100,
         10,
-        'ch_stripe_456',
+        'pi_stripe_456',
         1
       );
 
@@ -171,6 +174,35 @@ describe('Transfer Service', () => {
       await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_stripe_456')).rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
       expect(transferRepo.save).not.toHaveBeenCalled();
       expect(mockStripeTransfers.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects vendor with empty stripeAccountId (not enabled) without calling Stripe', async () => {
+      mockVendorRepo.findById.mockResolvedValue({ stripeAccountId: undefined });
+      await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_stripe_456')).rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
+      expect(transferRepo.save).not.toHaveBeenCalled();
+      expect(mockStripeTransfers.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects vendor with blank stripeAccountId (not enabled) without calling Stripe', async () => {
+      mockVendorRepo.findById.mockResolvedValue({ stripeAccountId: '   ' });
+      await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_stripe_456')).rejects.toThrow('TRANSFER_DESTINATION_UNAVAILABLE');
+      expect(transferRepo.save).not.toHaveBeenCalled();
+      expect(mockStripeTransfers.create).not.toHaveBeenCalled();
+    });
+
+    it('reports explicit error when Stripe transfers.create fails, transfer not completed', async () => {
+      mockVendorRepo.findById.mockResolvedValue({ stripeAccountId: 'acct_vendor' });
+      mockStripeAccounts.retrieve.mockResolvedValue({ capabilities: { transfers: 'active' } });
+      mockStripeTransfers.create.mockRejectedValue(new Error('STRIPE_CONNECTION_ERROR'));
+
+      await expect(service.createTransferWithDetails('order-1', 'ovg-1', 100, 10, 'ch_stripe_456'))
+        .rejects.toThrow('STRIPE_CONNECTION_ERROR');
+      expect(mockStripeTransfers.create).toHaveBeenCalled();
+      // Entity should be marked failed, not completed
+      expect(transferRepo.save).toHaveBeenCalled();
+      const savedCalls = transferRepo.save.mock.calls;
+      const savedEntity = savedCalls[savedCalls.length - 1][0];
+      expect(savedEntity.status).toBe(TransferStatus.FAILED);
     });
 
     it('is idempotent: returns existing completed transfer', async () => {

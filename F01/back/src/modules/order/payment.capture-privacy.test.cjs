@@ -153,7 +153,7 @@ test('authorization alone stays pending; rejected capture can retry and complete
   assert.equal(duplicate.capturedAt.getTime(), captured.capturedAt.getTime());
   assert.equal(duplicate.providerTransactionId, 'synthetic-provider-reference');
   assert.deepEqual(h.writes, writes, 'Duplicate capture must not persist payment or order again');
-  assert.equal(await h.service.isPaymentFinalized(h.paymentId), true);
+  assert.equal(await h.service.isPaymentFullyFinalized(h.paymentId), true);
 });
 
 test('completion retries repair a failed order write after durable capture without recapturing', async () => {
@@ -166,13 +166,13 @@ test('completion retries repair a failed order write after durable capture witho
   const captured = await h.paymentRepo.findById(h.paymentId);
   assert.equal(captured.status, PaymentStatus.CAPTURED);
   assert.equal((await h.orderRepo.findById(h.orderId)).status, OrderStatus.PENDING_PAYMENT);
-  assert.equal(await h.service.isPaymentFinalized(h.paymentId), false,
+  assert.equal(await h.service.isPaymentFullyFinalized(h.paymentId), false,
     'Webhook finalization guard must allow pending order repair');
   const retried = await h.service.completeCheckoutPayment(h.paymentId, 'synthetic-provider-reference', 10000);
   assert.equal((await h.orderRepo.findById(h.orderId)).status, OrderStatus.PAID);
   assert.equal(retried.capturedAt.getTime(), captured.capturedAt.getTime());
   assert.equal(h.writes.filter(value => value === `payment:${PaymentStatus.CAPTURED}`).length, 1);
-  assert.equal(await h.service.isPaymentFinalized(h.paymentId), true);
+  assert.equal(await h.service.isPaymentFullyFinalized(h.paymentId), true);
   const writes = [...h.writes];
   await h.service.completeCheckoutPayment(h.paymentId, 'synthetic-provider-reference', 10000);
   assert.deepEqual(h.writes, writes);
@@ -220,6 +220,6 @@ test('checkout amount validation remains enforced before any persistence', async
     );
   }
   assert.deepEqual(h.writes, []);
-  assert.equal(await h.service.isPaymentFinalized(h.paymentId), false);
-  assert.equal(await h.service.isPaymentFinalized('synthetic-missing-payment'), false);
+  assert.equal(await h.service.isPaymentFullyFinalized(h.paymentId), false);
+  assert.equal(await h.service.isPaymentFullyFinalized('synthetic-missing-payment'), false);
 });

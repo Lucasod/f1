@@ -12,6 +12,8 @@
     "test:payment-consumer-confirmation": "node --test src/modules/order/payment.consumer-confirmation.test.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "node -e \"if (!process.env.F01_CONNECT_TEST_URI) { console.error('ERRO: F01_CONNECT_TEST_URI não definida. Defina-a para executar o teste de integração seed-connect (ex: mongodb://127.0.0.1:27017/f01_seed_connect_test?directConnection=true).'); process.exit(1); }\" && npx vitest run src/scripts/seed.connect.mongo.test.ts",
+    "test:all": "npm test && npm run test:integration",
     "seed": "tsx scripts/seed.ts"
   },
   "keywords": [],
