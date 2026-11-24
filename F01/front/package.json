@@ -9,7 +9,7 @@
     "test": "npm run test:e2e",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "cd /home/workstation/source/f1/F01/back && npx tsx scripts/seed.ts && cd /home/workstation/source/f1/F01/front && playwright test"
+    "test:e2e": "cd /home/workstation/source/f1/F01/back && npx tsx scripts/seed.ts && export TEST_USER_PASSWORD=$(grep '^TEST_USER_PASSWORD' /home/workstation/source/f1/F01/back/.env | cut -d= -f2-) && cd /home/workstation/source/f1/F01/front && playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.105.0",

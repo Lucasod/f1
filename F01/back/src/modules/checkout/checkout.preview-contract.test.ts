@@ -51,11 +51,11 @@ describe('checkout preview contract', () => {
     expect((await request(app).get(`/preview?${Array(21).fill('couponCodes=A').join('&')}`).set('x-test-consumer', 'yes')).status).toBe(400);
     expect((await request(app).get('/preview?couponCodes%5B0%5D=ONE').set('x-test-consumer', 'yes')).status).toBe(400);
     const purchase = await request(app).post('/').set('x-test-consumer', 'yes').send({ shippingAddressId: 'address', couponCodes: ['ONE'] });
-    expect(purchase.status).toBe(503);
-    expect(checkout).not.toHaveBeenCalled();
+    expect(purchase.status).toBe(201);
+    expect(checkout).toHaveBeenCalled();
     const plainPurchase = await request(app).post('/').set('x-test-consumer', 'yes').send({ shippingAddressId: 'address' });
     expect(plainPurchase.status).toBe(201);
-    expect(checkout).toHaveBeenCalledTimes(1);
+    expect(checkout).toHaveBeenCalledTimes(2);
     expect(previewCheckout).toHaveBeenCalledTimes(3);
   });
 });

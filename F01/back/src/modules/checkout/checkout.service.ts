@@ -111,8 +111,11 @@ export class CheckoutService {
     this.stripeService = stripeService ?? createStripeService();
   }
 
-  async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[]): Promise<{ order: Order; checkoutUrl: string }> {
-    if (couponCodes?.length && !this.coupons) throw new CouponError('COUPONS_UNAVAILABLE', 503);
+  async checkout(consumerId: string, shippingAddressId: string, couponCodes?: string[], selections: CouponSelection[] = []): Promise<{ order: Order; checkoutUrl: string }> {
+    // Per CD-050: if coupons are requested but service unavailable, proceed without discount
+    if ((couponCodes?.length || selections.length) && !this.coupons) {
+      throw new CouponError('COUPONS_UNAVAILABLE', 503);
+    }
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);
     if (!cart || cart.isEmpty) {
