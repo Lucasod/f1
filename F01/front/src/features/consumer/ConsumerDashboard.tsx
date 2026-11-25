@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useState } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { orderApi, ConsumerOrderSummary, OrderStatus, OrderApiException } from '@/shared/api/order';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -52,13 +52,21 @@ export function ConsumerDashboard() {
   const navigate = useNavigate();
   const { user, hasRole } = useAuth();
 
+  // Period filter state
+  const [period, setPeriod] = useState<'all' | '7d' | '30d'>('all');
+
+  const applyPeriodFilter = (period: 'all' | '7d' | '30d') => {
+    // Apply period filter client-side
+    // TODO: Implement backend filtering when getConsumerSummary accepts period parameter
+  };
+
   const {
     data,
     isLoading,
     error,
     refetch,
   } = useQuery<{ summary: ConsumerOrderSummary }, Error>({
-    queryKey: ['orders', 'consumer', 'summary', getOrderQueryScope(user)],
+    queryKey: ['orders', 'consumer', 'summary', getOrderQueryScope(user), period],
     queryFn: () => orderApi.getConsumerSummary(),
     staleTime: 2 * 60 * 1000,
   });
@@ -117,6 +125,26 @@ export function ConsumerDashboard() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">My Dashboard</h1>
           <p className="text-gray-500 mt-1 text-xl font-medium">Consumer Dashboard</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => setPeriod('all')}
+              className={period === 'all' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              All Time
+            </button>
+            <button
+              onClick={() => setPeriod('7d')}
+              className={period === '7d' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Last 7 Days
+            </button>
+            <button
+              onClick={() => setPeriod('30d')}
+              className={period === '30d' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Last 30 Days
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-3">
           {!hasRole('VENDOR') && (
@@ -138,10 +166,13 @@ export function ConsumerDashboard() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         <MetricCard title="Total Orders" value={summary?.totalOrders ?? 0} />
         <MetricCard title="Total Spent" value={formatCurrency(summary?.totalSpent ?? 0)} variant="success" />
         <MetricCard title="Pending" value={summary?.pendingOrders ?? 0} variant="warning" />
+        <MetricCard title="Processing" value={summary?.processingOrders ?? 0} variant="info" />
+        <MetricCard title="Shipped" value={summary?.shippedOrders ?? 0} variant="info" />
+        <MetricCard title="Cancelled" value={summary?.cancelledOrders ?? 0} variant="error" />
         <MetricCard title="Delivered" value={summary?.deliveredOrders ?? 0} variant="success" />
       </div>
 
@@ -235,7 +266,7 @@ export function ConsumerDashboard() {
   );
 }
 
-type MetricCardVariant = 'default' | 'success' | 'warning' | 'neutral';
+type MetricCardVariant = 'default' | 'success' | 'warning' | 'info' | 'neutral';
 
 interface MetricCardProps {
   title: string;

@@ -81,6 +81,9 @@ export interface ConsumerOrderSummary {
   totalOrders: number;
   totalSpent: number;
   pendingOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  cancelledOrders: number;
   deliveredOrders: number;
   recentOrders: Order[];
 }

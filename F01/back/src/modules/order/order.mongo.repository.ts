@@ -36,6 +36,7 @@ interface OrderVendorGroupDoc {
   commissionPct: number;
   commissionAmount: number;
   vendorNet: number;
+  grossMinor: number;
   transferId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +99,7 @@ export class MongoOrderRepository implements OrderRepository {
         commissionPct: vg.commissionPct,
         commissionAmount: vg.commissionAmount,
         vendorNet: vg.vendorNet,
+        grossMinor: vg.grossMinor,
         transferId: vg.transferId,
         createdAt: vg.createdAt,
         updatedAt: vg.updatedAt
@@ -335,6 +337,7 @@ export class MongoOrderRepository implements OrderRepository {
         commissionPct: vg.commissionPct,
         commissionAmount: vg.commissionAmount,
         vendorNet: vg.vendorNet,
+        grossMinor: vg.grossMinor,
         transferId: vg.transferId,
         createdAt: vg.createdAt,
         updatedAt: vg.updatedAt

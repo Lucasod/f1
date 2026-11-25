@@ -116,7 +116,9 @@ export class VendorFinancialDashboardService {
       // Sum vendor group subtotals for this vendor in this order
       const vendorVgs = order.vendorGroups.filter((vg) => vg.vendorId === vendorId);
       for (const vg of vendorVgs) {
-        grossSales += vg.subtotal;
+        // grossSales uses grossMinor (always gross, even when coupons applied)
+        // netExpectedAmount uses vendorNet (vendor's share after commission)
+        grossSales += (vg.grossMinor ?? vg.subtotal * 100) / 100;
         netExpectedAmount += vg.vendorNet;
       }
     }

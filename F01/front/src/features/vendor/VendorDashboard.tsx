@@ -342,6 +342,18 @@ export function VendorDashboard() {
   const financialValue = (value: number | undefined) =>
     value === undefined ? (financialError ? 'Unavailable' : 'Loading...') : formatCurrency(value);
 
+  // Derived financial metrics from MP-F01-008 item 8
+  const discountAmount = financialData
+    ? financialData.grossSales - financialData.netExpectedAmount
+    : undefined;
+  const netSales = financialData?.netExpectedAmount;
+  const commissionsFromHistory = financialTransactionsData.find(
+    entry => entry.name === 'Commissions'
+  )?.value;
+  const refundsFromHistory = financialTransactionsData.find(
+    entry => entry.name === 'Refunds'
+  )?.value;
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
       {/* Header */}
@@ -371,8 +383,8 @@ export function VendorDashboard() {
         </div>
       </div>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Metrics Cards }}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         <MetricCard title="Total Products" value={totalProducts} />
         <MetricCard title="Active" value={activeProducts} variant="success" />
         <MetricCard title="Out of Stock" value={outOfStockProducts} variant="warning" />
@@ -381,6 +393,12 @@ export function VendorDashboard() {
         <MetricCard title="Net Expected" value={financialValue(financialData?.netExpectedAmount)} variant="default" />
         <MetricCard title="Received" value={financialValue(financialData?.receivedInStripe ?? undefined)} variant="default" />
         <MetricCard title="Pending Distribution" value={financialValue(financialData?.pendingDistribution ?? undefined)} variant="warning" />
+        <MetricCard title="Discounts" value={financialValue(discountAmount ?? undefined)} variant="default" />
+        <MetricCard title="Net Sales" value={financialValue(netSales ?? undefined)} variant="default" />
+        <MetricCard title="Commissions" value={financialValue(commissionsFromHistory ?? undefined)} variant="default" />
+        <MetricCard title="Refunds" value={financialValue(refundsFromHistory ?? undefined)} variant="default" />
+        <MetricCard title="Available Balance" value={financialValue(financialData?.bankPayout ?? undefined)} variant="default" />
+        <MetricCard title="Pending Balance" value={financialValue(financialData?.pendingDistribution ?? undefined)} variant="warning" />
       </div>
       <p className="text-sm text-gray-600 mb-6">Distribution totals are unavailable until transfer reconciliation is verified.</p>
 

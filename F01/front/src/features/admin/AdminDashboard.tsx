@@ -87,6 +87,15 @@ export function AdminDashboard() {
   const queryClient = useQueryClient();
   const [moderationError, setModerationError] = useState<{ reviewId: string; message: string } | null>(null);
 
+  // Period filter state
+  const [period, setPeriod] = useState<'today' | 'last-7' | 'last-30' | 'this-month' | 'custom'>('today');
+
+  const applyPeriodFilter = (period: 'today' | 'last-7' | 'last-30' | 'this-month' | 'custom') => {
+    // Apply period filter to chart data
+    // TODO: Implement filtering logic based on period
+    // This function adjusts the data chart based on the selected period
+  };
+
   const {
     data: reviewsData,
     isLoading: reviewsLoading,
@@ -128,8 +137,45 @@ export function AdminDashboard() {
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Admin Dashboard
+            <span className="ml-4 text-gray-500 text-sm" id="period-display">
+              {period}
+            </span>
+          </h1>
           <p className="mt-1 text-gray-600">Marketplace overview and recent orders</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => setPeriod('today')}
+              className={period === 'today' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setPeriod('last-7')}
+              className={period === 'last-7' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Last 7 Days
+            </button>
+            <button
+              onClick={() => setPeriod('last-30')}
+              className={period === 'last-30' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Last 30 Days
+            </button>
+            <button
+              onClick={() => setPeriod('this-month')}
+              className={period === 'this-month' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setPeriod('custom')}
+              className={period === 'custom' ? 'bg-blue-600 text-white px-3 py-1 rounded' : 'text-gray-600 px-3 py-1 rounded hover:bg-gray-100'}
+            >
+              Custom Range
+            </button>
+          </div>
         </header>
 
         <section aria-label="Registered totals" className="mb-8">

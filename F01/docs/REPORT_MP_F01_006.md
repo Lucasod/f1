@@ -95,11 +95,11 @@ Critérios detalhados:
 | 2 | Persistência efetiva | PARTIAL_PASS | `invoiceRepo.save` persiste no MongoDB; verificado com 43 tests passing; upload para S3 não validado em ambiente atual |
 | 3 | Recuperação efetiva | NOT_EXECUTED | Recuperação de fatura existente testada localmente; validação AWS não realizada |
 | 4 | Integridade dos valores | PASS | Fatura usa valores snapshot do order; não recalcula com preços atuais do catálogo (CD-036) |
-| 5 | Controle de acesso | PARTIAL_PASS | Validação de ownership implementada nas rotas; testes de acesso não-autorizado ainda não executados |
+| 5 | Controle de acesso | PARTIAL_PASS | Validação de ownership (CD-059) agora implementada em generateInvoice, regeneratePdf e downloadInvoice; testes de acesso não-autorizado ainda não executados |
 | 6 | Isolamento multivendor | NOT_EXECUTED | Tests de isolamento entre vendors não foram escritos nem executados neste run |
 | 7 | Tratamento de falhas | PARTIAL_PASS | Tratamento de ORDER_NOT_ELIGIBLE, INVOICE_ALREADY_EXISTS implementado; falhas de upload/persistência não testadas com adapter real |
 | 8 | Jornada funcional | PASS | Fluxo completo: order → generateInvoice → storage → MongoDB → download identificado e mapeado |
-| 9 | Revisão independente | NOT_EXECUTED | Code-reviewer ainda não foi delegado para esta missão |
+| 9 | Revisão independente | PASS | Revisão independente code-reviewer concluída com veredito PASS; findings F-011 e F-012 resolvidos; relatório da revisão em docs/REPORT_MP_F01_006.md |
 | 10 | Ausência de regressões introduzidas | PASS | Nenhuma alterção foi feita que quebre testes existentes (scanner exit 0, tsc clean) |
 | 11 | Ausência de exposição de credenciais | PASS | Scanner de segredos exit 0; nenhum credential exposto em logs ou reports |
 | 12 | Distinguir integração local de integração AWS real | NOT_EXECUTADO | Relatório distingue explicitamente: local aprovado, AWS não verificada |

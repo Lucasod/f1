@@ -41,6 +41,9 @@ export interface ConsumerOrderSummary {
   totalOrders: number;
   totalSpent: number;
   pendingOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  cancelledOrders: number;
   deliveredOrders: number;
   recentOrders: Order[];
 }
@@ -158,25 +161,23 @@ export class OrderService {
 
   async getConsumerSummary(personId: string): Promise<ConsumerOrderSummary> {
     const orders = await this.orderRepo.findByPersonId(personId);
-    const newestFirst = [...orders].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
 
     return {
       totalOrders: orders.length,
+      pendingOrders: orders.filter(order => order.status === OrderStatus.PENDING_PAYMENT).length,
+      processingOrders: orders.filter(order => order.status === OrderStatus.PROCESSING).length,
+      shippedOrders: orders.filter(order => order.status === OrderStatus.SHIPPED).length,
+      cancelledOrders: orders.filter(order => order.status === OrderStatus.CANCELLED).length,
+      deliveredOrders: orders.filter(order => order.status === OrderStatus.DELIVERED).length,
       totalSpent: orders
         .filter(order =>
-          [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status)
+          [OrderStatus.PAID, OrderStatus.DELIVERED].includes(order.status)
           && order.financialStatus === FinancialStatus.PAID
         )
         .reduce((total, order) => total + order.totalAmount, 0),
-      pendingOrders: orders.filter(order =>
-        order.status === OrderStatus.PENDING_PAYMENT
-        || order.status === OrderStatus.PAID
-        || order.status === OrderStatus.PROCESSING
-      ).length,
-      deliveredOrders: orders.filter(order => order.status === OrderStatus.DELIVERED).length,
-      recentOrders: newestFirst.slice(0, 5),
+      recentOrders: orders
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5),
     };
   }
 

@@ -10,7 +10,7 @@ export class InvoiceService {
     private readonly storageAdapter?: StorageAdapter,
   ) {}
 
-  async generateInvoice(orderId: string, vendorId?: string): Promise<Invoice> {
+  async generateInvoice(orderId: string, vendorId?: string, currentPersonId?: string): Promise<Invoice> {
     if (typeof orderId !== 'string' || orderId.trim().length === 0) {
       throw new Error(InvoiceError.ORDER_NOT_FOUND);
     }
@@ -18,6 +18,10 @@ export class InvoiceService {
     const order = await this.orderRepo.findById(orderId.trim());
     if (!order) {
       throw new Error(InvoiceError.ORDER_NOT_FOUND);
+    }
+
+    if (currentPersonId && order.personId !== currentPersonId) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
     }
 
     if (order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.PAID) {
@@ -55,11 +59,14 @@ export class InvoiceService {
     // Generate PDF buffer using historical order values
     const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
     // Persist PDF to storage
-    const storageResult = await this.storageAdapter!.save(pdfBuffer, key, 'application/pdf');
-    // Update invoice record with storage results and set status to GENERATED
-    invoice.pdfPath = storageResult.key;
-    invoice.pdfUrl = storageResult.url;
-    invoice.status = InvoiceStatus.GENERATED;
+    if (this.storageAdapter) {
+      const storageResult = await this.storageAdapter.save(pdfBuffer, key, 'application/pdf');
+      invoice.pdfPath = storageResult.key;
+      invoice.pdfUrl = storageResult.url;
+      invoice.status = InvoiceStatus.GENERATED;
+    } else {
+      invoice.status = InvoiceStatus.PENDING;
+    }
     invoice.updatedAt = new Date();
 
     return this.invoiceRepo.save(invoice);
@@ -98,7 +105,7 @@ export class InvoiceService {
     return { invoices: slice, items: slice, total, page, limit };
   }
 
-  async regeneratePdf(invoiceId: string): Promise<Invoice> {
+  async regeneratePdf(invoiceId: string, currentPersonId?: string): Promise<Invoice> {
     if (typeof invoiceId !== 'string' || invoiceId.trim().length === 0) {
       throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     }
@@ -115,13 +122,19 @@ export class InvoiceService {
     if (!order) {
       throw new Error(InvoiceError.ORDER_NOT_FOUND);
     }
+    if (currentPersonId && order.personId !== currentPersonId) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
     const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
     // Persist PDF to storage
-    const storageResult = await this.storageAdapter!.save(pdfBuffer, key, 'application/pdf');
-    // Update invoice record with storage results and set status to GENERATED
-    invoice.pdfPath = storageResult.key;
-    invoice.pdfUrl = storageResult.url;
-    invoice.status = InvoiceStatus.GENERATED;
+    if (this.storageAdapter) {
+      const storageResult = await this.storageAdapter.save(pdfBuffer, key, 'application/pdf');
+      invoice.pdfPath = storageResult.key;
+      invoice.pdfUrl = storageResult.url;
+      invoice.status = InvoiceStatus.GENERATED;
+    } else {
+      invoice.status = InvoiceStatus.PENDING;
+    }
     invoice.updatedAt = new Date();
     await this.invoiceRepo.save(invoice);
 
@@ -185,11 +198,14 @@ export class InvoiceService {
     return this.generatePdfForInvoice(invoice, order);
   }
 
-  async downloadInvoice(invoiceId: string): Promise<Buffer> {
+  async downloadInvoice(invoiceId: string, currentPersonId?: string): Promise<Buffer> {
     const invoice = await this.invoiceRepo.findById(invoiceId.trim());
     if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     const order = await this.orderRepo.findById(invoice.orderId);
     if (!order) throw new Error(InvoiceError.ORDER_NOT_FOUND);
+    if (currentPersonId && order.personId !== currentPersonId) {
+      throw new Error(InvoiceError.INVALID_INVOICE);
+    }
     const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
     // Persist PDF to storage if adapter available
     if (this.storageAdapter) {

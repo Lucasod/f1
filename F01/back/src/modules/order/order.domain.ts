@@ -152,6 +152,7 @@ export interface OrderVendorGroupData {
   commissionPct: number;
   commissionAmount: number;
   vendorNet: number;
+  grossMinor: number;
   transferId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -462,6 +463,7 @@ export class OrderVendorGroup {
   public commissionPct: number;
   public commissionAmount: number;
   public vendorNet: number;
+  public grossMinor: number;
   public transferId?: string;
   public readonly createdAt: Date;
   public updatedAt: Date;
@@ -476,6 +478,7 @@ export class OrderVendorGroup {
     this.commissionPct = data.commissionPct;
     this.commissionAmount = data.commissionAmount;
     this.vendorNet = data.vendorNet;
+    this.grossMinor = data.grossMinor;
     this.transferId = data.transferId;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
@@ -516,6 +519,7 @@ export class OrderVendorGroup {
       commissionPct: data.commissionPct,
       commissionAmount,
       vendorNet,
+      grossMinor: subtotal,
       createdAt: now,
       updatedAt: now
     });
@@ -602,6 +606,7 @@ export class OrderVendorGroup {
       commissionPct: this.commissionPct,
       commissionAmount: this.commissionAmount,
       vendorNet: this.vendorNet,
+      grossMinor: this.grossMinor,
       transferId: this.transferId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
