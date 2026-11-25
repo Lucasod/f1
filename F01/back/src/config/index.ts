@@ -72,7 +72,7 @@ validateCorsOrigins(corsOrigins);
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  mongoUri: validateRequiredInProduction(process.env.MONGO_URI, 'MONGO_URI') || 'mongodb://localhost:27017/fs01_marketplace',
+  mongoUri: validateRequiredInProduction(process.env.MONGO_URI, 'MONGO_URI') || 'mongodb://localhost:27017/fs01_marketplace?directConnection=true',
   mongoDbName: process.env.MONGO_DB_NAME || 'fs01_marketplace',
   redisUrl: validateRequiredInProduction(process.env.REDIS_URL, 'REDIS_URL') || 'redis://localhost:6379',
   elasticsearchUrl: validateRequiredInProduction(process.env.ELASTICSEARCH_URL, 'ELASTICSEARCH_URL') || 'http://localhost:9200',

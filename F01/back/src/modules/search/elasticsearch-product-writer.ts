@@ -45,7 +45,11 @@ export class ElasticsearchProductWriter {
       if (!item || item._id !== id || item.error !== undefined) throw new Error();
       if ((item.status === 201 && item.result === 'created')
         || (item.status === 200 && ['updated', 'noop'].includes(item.result))) return;
-    } catch {
+    } catch (error) {
+      // Classify error for diagnostics without exposing secrets.
+      const classification = this.classifyError(error as Error, 'putVersioned');
+      // Log structured information (sanitized - no secrets, no credential data, no request bodies).
+      console.error(`[ElasticsearchProductWriter] ${classification.kind} error in putVersioned: operation failed`);
       // Never expose response bodies or transport errors to callers/loggers.
     }
     throw new Error('ELASTICSEARCH_WRITE_FAILED');
@@ -76,9 +80,46 @@ export class ElasticsearchProductWriter {
       const item = entry.index;
       if (!item || item._id !== id || item.error !== undefined) throw new Error();
       if ((item.status === 200 && item.result === 'updated') || (item.status === 201 && item.result === 'created')) return;
-    } catch {
+    } catch (error) {
+      // Classify error for diagnostics without exposing secrets.
+      const classification = this.classifyError(error as Error, 'write');
+      // Log structured information (sanitized - no secrets, no credential data, no request bodies).
+      console.error(`[ElasticsearchProductWriter] ${classification.kind} error in write: operation failed`);
       // Do not propagate provider errors that may contain credentials or request data.
+      // Add transient flag for retry logic in indexProduct()
+      const writeError = new Error('ELASTICSEARCH_WRITE_FAILED');
+      writeError.transient = classification.kind === 'transient';
+      throw writeError;
     }
-    throw new Error('ELASTICSEARCH_WRITE_FAILED');
+  }
+
+  /** Classify an error as transient or permanent, returning sanitized context. */
+  private classifyError(error: Error, operation: string): { kind: 'transient' | 'permanent'; operation: string } {
+    // Transient errors: network timeouts, connection refused, ETIMEDOUT, abort signals
+    const transientIndicators = ['timeout', 'econrefused', 'etimedout', 'abort'];
+    const lowerMessage = error.message.toLowerCase();
+    if (transientIndicators.some((ind) => lowerMessage.includes(ind))) {
+      return { kind: 'transient', operation };
+    }
+    // Permanent errors: client errors, validation, configuration (fail-closed default)
+    return { kind: 'permanent', operation };
+  }
+
+  /** Classify an HTTP response error based on status code. */
+  private classifyErrorResponse(status: number | undefined): 'transient' | 'permanent' {
+    if (status === undefined || status === 0) {
+      // Network-level failure or no response - treat as transient
+      return 'transient';
+    }
+    if (status >= 500) {
+      // ES cluster issues (5xx) - transient
+      return 'transient';
+    }
+    if (status >= 400 && status < 500) {
+      // Client errors (4xx) - permanent
+      return 'permanent';
+    }
+    // Default to permanent for unknown status codes (fail-closed)
+    return 'permanent';
   }
 }

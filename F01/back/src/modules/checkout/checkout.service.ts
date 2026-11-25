@@ -195,6 +195,67 @@ export class CheckoutService {
     // Validate and prepare vendor groups
     const vendorGroupsData = await this.prepareVendorGroups(cart);
 
+    // Resolve coupon terms for vendor IDs in the cart (only when coupons are provided)
+    const hasCoupons = !!couponCodes?.length || selections.length > 0;
+    if (hasCoupons && !this.coupons) throw new CouponError('COUPONS_UNAVAILABLE', 503);
+    const chosen = hasCoupons ? this.coupons!.resolve(
+      vendorGroupsData.map(vg => vg.vendorId),
+      couponCodes,
+      selections
+    ) : new Map<string, CouponTerms>();
+    const hierarchy = hasCoupons ? this.coupons!.hierarchy() : new Map<string, string | null>();
+
+    // Pre-fetch product categories for eligible checks
+    const productCategories = new Map<string, string>();
+    for (const vg of vendorGroupsData) {
+      for (const item of vg.items) {
+        if (!productCategories.has(item.productId)) {
+          const product = await this.productRepo.findById(item.productId);
+          if (product && product.categoryId) {
+            productCategories.set(item.productId, product.categoryId);
+          }
+        }
+      }
+    }
+
+    // For each vendor group, calculate eligible lines, discount amount, and allocate
+    for (const vg of vendorGroupsData) {
+      const terms = chosen.get(vg.vendorId);
+      // Calculate grossMinor (total of all items)
+      const grossMinorItems = vg.items.map(line => priceToMinor(Number(line.unitPrice) * line.quantity));
+      const grossMinor = sumMinor(grossMinorItems);
+      // Calculate eligible per line
+      const eligible = vg.items.map(line => {
+        const categoryId = productCategories.get(line.productId) || undefined;
+        return hasCoupons && terms && this.coupons!.eligible(terms, line.productId, categoryId, hierarchy)
+          ? priceToMinor(Number(line.unitPrice) * line.quantity)
+          : 0;
+      });
+      const eligibleMinor = sumMinor(eligible);
+      if (hasCoupons && terms && (!eligibleMinor || eligibleMinor < (terms.minimumEligibleMinor ?? 0))) {
+        throw new CouponError('COUPON_MINIMUM_NOT_MET');
+      }
+      const discountMinor = !terms ? 0 : terms.discountType === 'fixedMinorBRL'
+        ? Math.min(terms.value, eligibleMinor)
+        : safeMinor(Number((BigInt(eligibleMinor) * BigInt(terms.value) + 5000n) / 10000n));
+      const allocated = allocateMinorDiscount(discountMinor, vg.items.map((line, i) => ({
+        key: JSON.stringify([vg.vendorId, line.productId]),
+        weight: eligible[i]
+      })));
+      const netMinor = grossMinor - discountMinor;
+
+      vg.discountMinor = discountMinor;
+      vg.eligibleMinor = eligibleMinor;
+      vg.netMinor = netMinor;
+      vg.subtotal = netMinor / 100;
+
+      // Update item-level discount and net minor
+      vg.items.forEach((line, i) => {
+        line.discountMinor = allocated[i] / 100;
+        line.netMinor = (grossMinorItems[i] - allocated[i]) / 100;
+      });
+    }
+
     // Compensation state declared before try
     const decremented: { productId: string; amount: number }[] = [];
     let orderSaved = false;
@@ -309,10 +370,9 @@ export class CheckoutService {
       } catch (compensationError) {
         throw new Error(OrderError.STOCK_ROLLBACK_FAILED, { cause: compensationError });
       }
-      throw error;
+throw error;
     }
   }
-
   async previewCheckout(consumerId: string, couponCodes?: string[], selections: CouponSelection[] = []): Promise<CheckoutPreviewResponse> {
     // Get cart
     const cart = await this.cartRepo.findById(consumerId);

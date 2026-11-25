@@ -138,7 +138,7 @@ export class ElasticsearchProductIndex {
     if (this.sync) return this.sync.publish(product.id);
     await this.ensureIndex();
     const writer = new ElasticsearchProductWriter(this.baseUrl, this.fetcher);
-    await writer.put(product.id, toDocument(product));
+    await withRetry(() => writer.put(product.id, toDocument(product)));
   }
 
   get durable(): boolean { return this.sync !== undefined; }
@@ -335,4 +335,53 @@ function fromDocument(source: any, id: string): Product {
     createdAt: source?.created_at ? new Date(source.created_at) : new Date(),
     updatedAt: source?.updated_at ? new Date(source.updated_at) : new Date(),
   } as any);
+}
+
+/**
+ * Retry helper with exponential backoff and jitter.
+ * Retries only on transient errors; permanently fails immediately.
+ *
+ * @param callback - async function to execute
+ * @param maxAttempts - maximum number of attempts (default 3)
+ * @param baseDelayMs - base delay in ms for exponential backoff (default 100ms)
+ * @returns the successful result from callback
+ * @throws the last error if all attempts exhausted
+ */
+async function withRetry<T>(
+  callback: () => Promise<T>,
+  maxAttempts: number = 3,
+  baseDelayMs: number = 100
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await callback();
+    } catch (error) {
+      lastError = error as Error;
+
+      // Check if the error is transient (retryable) via the writer's classification
+      const writeError = error as Error;
+      if (!writeError.transient) {
+        // Permanent error (4xx, invalid IDs, configuration) - immediately throw
+        throw error;
+      }
+
+      if (attempt < maxAttempts) {
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+        // ±25% jitter to avoid thundering herd
+        const jitterFactor = 0.75 + Math.random() * 0.5; // random in [0.75, 1.25]
+        const finalDelayMs = Math.round(delayMs * jitterFactor);
+
+        console.log(
+          `[ElasticsearchProductIndex] Retry attempt ${attempt}/${maxAttempts} after ${finalDelayMs}ms`
+        );
+
+        await new Promise(resolve => setTimeout(resolve, finalDelayMs));
+      }
+    }
+  }
+
+  throw lastError;
 }

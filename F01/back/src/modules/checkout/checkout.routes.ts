@@ -166,6 +166,8 @@ export function createCheckoutRoutes({ authService, checkoutService, personRepo 
             return res.status(400).json({ error: OrderError.INVALID_COUPON, message: 'Invalid coupon' });
           case OrderError.PERSON_ID_REQUIRED:
             return res.status(400).json({ error: OrderError.PERSON_ID_REQUIRED, message: 'Person ID is required' });
+          case 'COUPON_MINIMUM_NOT_MET':
+            return res.status(503).json({ error: 'COUPON_MINIMUM_NOT_MET', message: 'Coupon minimum not met' });
         }
       }
       next(error);
