@@ -42,10 +42,6 @@ export class InvoiceService {
 
     const now = new Date();
     const key = generateInvoiceKey(order.id, now.getFullYear(), now.getMonth() + 1);
-    // Key generated but not stored per MP-29; PDF generation is on-demand and
-    // streamed directly for download. The invoice remains PENDING until on-demand
-    // PDF bytes are generated and streamed.
-    key;
 
     const invoice = Invoice.create({
       orderId: order.id,
@@ -55,6 +51,16 @@ export class InvoiceService {
       pdfPath: '',
       status: InvoiceStatus.PENDING,
     });
+
+    // Generate PDF buffer using historical order values
+    const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
+    // Persist PDF to storage
+    const storageResult = await this.storageAdapter!.save(pdfBuffer, key, 'application/pdf');
+    // Update invoice record with storage results and set status to GENERATED
+    invoice.pdfPath = storageResult.key;
+    invoice.pdfUrl = storageResult.url;
+    invoice.status = InvoiceStatus.GENERATED;
+    invoice.updatedAt = new Date();
 
     return this.invoiceRepo.save(invoice);
   }
@@ -104,11 +110,20 @@ export class InvoiceService {
 
     const now = new Date();
     const key = generateInvoiceKey(invoice.id, now.getFullYear(), now.getMonth() + 1);
-    invoice.pdfPath = key;
-    invoice.pdfUrl = `https://cdn.example.com/${key}`;
+    // Generate PDF buffer using historical order values
+    const order = await this.orderRepo.findById(invoice.orderId);
+    if (!order) {
+      throw new Error(InvoiceError.ORDER_NOT_FOUND);
+    }
+    const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
+    // Persist PDF to storage
+    const storageResult = await this.storageAdapter!.save(pdfBuffer, key, 'application/pdf');
+    // Update invoice record with storage results and set status to GENERATED
+    invoice.pdfPath = storageResult.key;
+    invoice.pdfUrl = storageResult.url;
     invoice.status = InvoiceStatus.GENERATED;
     invoice.updatedAt = new Date();
-    await this.invoiceRepo.update(invoice);
+    await this.invoiceRepo.save(invoice);
 
     return invoice;
   }
@@ -175,7 +190,19 @@ export class InvoiceService {
     if (!invoice) throw new Error(InvoiceError.INVOICE_NOT_FOUND);
     const order = await this.orderRepo.findById(invoice.orderId);
     if (!order) throw new Error(InvoiceError.ORDER_NOT_FOUND);
-    return this.generatePdfForInvoice(invoice, order);
+    const pdfBuffer = await this.generatePdfForInvoice(invoice, order);
+    // Persist PDF to storage if adapter available
+    if (this.storageAdapter) {
+      const now = new Date();
+      const key = generateInvoiceKey(invoice.orderId, now.getFullYear(), now.getMonth() + 1);
+      const storageResult = await this.storageAdapter.save(pdfBuffer, key, 'application/pdf');
+      invoice.pdfPath = storageResult.key;
+      invoice.pdfUrl = storageResult.url;
+      invoice.status = InvoiceStatus.GENERATED;
+      invoice.updatedAt = new Date();
+      await this.invoiceRepo.update(invoice);
+    }
+    return pdfBuffer;
   }
 
   async markGenerated(invoiceId: string, pdfUrl: string, pdfPath: string): Promise<Invoice> {

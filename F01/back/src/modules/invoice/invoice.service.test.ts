@@ -51,17 +51,22 @@ describe('Invoice Service (T-1103)', () => {
     it('generates invoice for eligible delivered order', async () => {
       const order = await createOrder(OrderStatus.DELIVERED);
       const invoice = await service.generateInvoice(order.id, 'vendor-1');
-      expect(invoice.status).toBe(InvoiceStatus.PENDING);
+      expect(invoice.status).toBe(InvoiceStatus.GENERATED);
       expect(invoice.orderId).toBe(order.id);
-      expect(invoice.pdfUrl).toBe('');
-      expect(storageAdapter.save).not.toHaveBeenCalled();
+      expect(invoice.pdfUrl).not.toBe('');
+      expect(invoice.pdfPath).not.toBe('');
+      expect(storageAdapter.save).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.stringMatching(/invoices\/\d{4}\/\d{2}\//),
+        'application/pdf'
+      );
       expect(await invoiceRepo.findByOrderId(order.id)).not.toBeNull();
     });
 
     it('generates invoice for paid order', async () => {
       const order = await createOrder(OrderStatus.PAID);
       const invoice = await service.generateInvoice(order.id);
-      expect(invoice.status).toBe(InvoiceStatus.PENDING);
+      expect(invoice.status).toBe(InvoiceStatus.GENERATED);
       expect(invoice.vendorId).toBe('vendor-1');
     });
 
